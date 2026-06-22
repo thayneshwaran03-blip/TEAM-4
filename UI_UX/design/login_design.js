@@ -143,17 +143,17 @@ export function createLoginPage() {
     container.appendChild(flexWrapper);
 
     // ========================================
-    // 4. ADD VALIDATION (Design only)
+    // 4. ADD VALIDATION (Connects to backend)
     // ========================================
-    setupLoginValidation(form, emailInput, passwordWrapper);
+    setupLoginValidation(form, emailInput, passwordWrapper, loginBtn);
 
     return container;
 }
 
 // ========================================
-// VALIDATION (Design only - visual feedback)
+// VALIDATION & API CONNECTIVITY
 // ========================================
-function setupLoginValidation(form, emailInput, passwordWrapper) {
+function setupLoginValidation(form, emailInput, passwordWrapper, loginBtn) {
     const { colors } = DesignSystem;
 
     // Get actual input from password wrapper
@@ -181,17 +181,55 @@ function setupLoginValidation(form, emailInput, passwordWrapper) {
         }
     });
 
-    // Form submit - design only
-    form.addEventListener('submit', function(e) {
+    // Form submit - connects to backend
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const isEmailValid = validateEmail(emailInput);
         const isPasswordValid = validatePassword(passwordInput);
 
-        if (isEmailValid && isPasswordValid) {
-            Toast('✅ Form validation passed!', 'success');
-        } else {
+        if (!isEmailValid || !isPasswordValid) {
             Toast('❌ Please fix the errors above', 'error');
+            return;
+        }
+
+        // Show loading state
+        const originalBtnText = loginBtn.innerHTML;
+        loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+        loginBtn.disabled = true;
+
+        try {
+            const response = await fetch('http://localhost:5000/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: emailInput.value.trim(),
+                    password: passwordInput.value.trim()
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                Toast('✅ ' + data.message, 'success');
+                
+                // Store authentication credentials
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+
+                // Dispatch authChange event to reload views
+                window.dispatchEvent(new Event('authChange'));
+            } else {
+                Toast('❌ ' + (data.message || 'Login failed'), 'error');
+            }
+        } catch (error) {
+            console.error('Login Error:', error);
+            Toast('❌ Connection error to backend server.', 'error');
+        } finally {
+            loginBtn.innerHTML = originalBtnText;
+            loginBtn.disabled = false;
         }
     });
 
