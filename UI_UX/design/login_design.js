@@ -1,6 +1,6 @@
 /**
  * ========================================
- * HOSTELHUB - LOGIN PAGE DESIGN
+ * HOSTELHUB - LOGIN PAGE DESIGN (FIXED)
  * ========================================
  * Author: Thayaneshwaran S (UI/UX Designer)
  * Description: Login page created with JavaScript only
@@ -18,7 +18,8 @@ import {
     Button,
     AuthLink,
     Footer,
-    Toast
+    Toast,
+    addResponsiveStyles
 } from './components.js';
 
 // ========================================
@@ -26,6 +27,9 @@ import {
 // ========================================
 export function createLoginPage() {
     const { colors, typography, spacing } = DesignSystem;
+
+    // Add responsive styles
+    addResponsiveStyles();
 
     // ========================================
     // 1. LEFT SIDE - BRANDING
@@ -56,6 +60,7 @@ export function createLoginPage() {
     form.style.cssText = `
         margin: 0;
         padding: 0;
+        width: 100%;
     `;
 
     // Email field
@@ -84,6 +89,7 @@ export function createLoginPage() {
     const btnWrapper = document.createElement('div');
     btnWrapper.style.cssText = `
         margin-top: ${spacing.sm};
+        width: 100%;
     `;
     btnWrapper.appendChild(loginBtn);
     form.appendChild(btnWrapper);
@@ -94,6 +100,13 @@ export function createLoginPage() {
         'Sign Up',
         () => {
             console.log('Navigate to Sign Up');
+            // Toggle to signup page
+            const loginContainer = document.getElementById('loginContainer');
+            const signupContainer = document.getElementById('signupContainer');
+            if (loginContainer && signupContainer) {
+                loginContainer.style.display = 'none';
+                signupContainer.style.display = 'flex';
+            }
         }
     );
 
@@ -108,8 +121,10 @@ export function createLoginPage() {
 
     // Add auth link and footer inside card
     const cardContent = formCard.querySelector('.auth-card-content');
-    cardContent.appendChild(authLink);
-    cardContent.appendChild(footer);
+    if (cardContent) {
+        cardContent.appendChild(authLink);
+        cardContent.appendChild(footer);
+    }
 
     // ========================================
     // 3. MAIN CONTAINER
@@ -188,8 +203,10 @@ function setupLoginValidation(form, emailInput, passwordWrapper) {
         if (!value) {
             input.style.borderColor = colors.danger;
             input.style.boxShadow = '0 0 0 4px rgba(229, 57, 53, 0.1)';
-            errorEl.textContent = '⚠️ Email address is required';
-            errorEl.style.display = 'block';
+            if (errorEl) {
+                errorEl.textContent = '⚠️ Email address is required';
+                errorEl.style.display = 'block';
+            }
             input.dataset.error = 'true';
             return false;
         }
@@ -197,16 +214,20 @@ function setupLoginValidation(form, emailInput, passwordWrapper) {
         if (!emailRegex.test(value)) {
             input.style.borderColor = colors.danger;
             input.style.boxShadow = '0 0 0 4px rgba(229, 57, 53, 0.1)';
-            errorEl.textContent = '⚠️ Please enter a valid email address';
-            errorEl.style.display = 'block';
+            if (errorEl) {
+                errorEl.textContent = '⚠️ Please enter a valid email address';
+                errorEl.style.display = 'block';
+            }
             input.dataset.error = 'true';
             return false;
         }
 
         input.style.borderColor = colors.success;
         input.style.boxShadow = '0 0 0 4px rgba(67, 160, 71, 0.1)';
-        errorEl.textContent = '';
-        errorEl.style.display = 'none';
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
         delete input.dataset.error;
         return true;
     }
@@ -218,8 +239,10 @@ function setupLoginValidation(form, emailInput, passwordWrapper) {
         if (!value) {
             input.style.borderColor = colors.danger;
             input.style.boxShadow = '0 0 0 4px rgba(229, 57, 53, 0.1)';
-            errorEl.textContent = '⚠️ Password is required';
-            errorEl.style.display = 'block';
+            if (errorEl) {
+                errorEl.textContent = '⚠️ Password is required';
+                errorEl.style.display = 'block';
+            }
             input.dataset.error = 'true';
             return false;
         }
@@ -227,16 +250,20 @@ function setupLoginValidation(form, emailInput, passwordWrapper) {
         if (value.length < 6) {
             input.style.borderColor = colors.danger;
             input.style.boxShadow = '0 0 0 4px rgba(229, 57, 53, 0.1)';
-            errorEl.textContent = '⚠️ Password must be at least 6 characters';
-            errorEl.style.display = 'block';
+            if (errorEl) {
+                errorEl.textContent = '⚠️ Password must be at least 6 characters';
+                errorEl.style.display = 'block';
+            }
             input.dataset.error = 'true';
             return false;
         }
 
         input.style.borderColor = colors.success;
         input.style.boxShadow = '0 0 0 4px rgba(67, 160, 71, 0.1)';
-        errorEl.textContent = '';
-        errorEl.style.display = 'none';
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
         delete input.dataset.error;
         return true;
     }

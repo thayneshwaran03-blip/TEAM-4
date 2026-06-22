@@ -1,6 +1,6 @@
 /**
  * ========================================
- * HOSTELHUB - SIGNUP PAGE DESIGN
+ * HOSTELHUB - SIGNUP PAGE DESIGN (FIXED)
  * ========================================
  * Author: Thayaneshwaran S (UI/UX Designer)
  * Description: Signup page created with JavaScript only
@@ -21,7 +21,8 @@ import {
     Footer,
     Toast,
     SectionTitle,
-    FormRow
+    FormRow,
+    addResponsiveStyles
 } from './components.js';
 
 // ========================================
@@ -29,6 +30,9 @@ import {
 // ========================================
 export function createSignupPage() {
     const { colors, typography, spacing } = DesignSystem;
+
+    // Add responsive styles
+    addResponsiveStyles();
 
     // ========================================
     // 1. LEFT SIDE - BRANDING
@@ -59,6 +63,7 @@ export function createSignupPage() {
     form.style.cssText = `
         margin: 0;
         padding: 0;
+        width: 100%;
     `;
 
     // --- Personal Information ---
@@ -196,6 +201,7 @@ export function createSignupPage() {
     const btnWrapper = document.createElement('div');
     btnWrapper.style.cssText = `
         margin-top: ${spacing.sm};
+        width: 100%;
     `;
     btnWrapper.appendChild(signupBtn);
     form.appendChild(btnWrapper);
@@ -206,6 +212,13 @@ export function createSignupPage() {
         'Sign In',
         () => {
             console.log('Navigate to Login');
+            // Toggle to login page
+            const loginContainer = document.getElementById('loginContainer');
+            const signupContainer = document.getElementById('signupContainer');
+            if (loginContainer && signupContainer) {
+                signupContainer.style.display = 'none';
+                loginContainer.style.display = 'flex';
+            }
         }
     );
 
@@ -220,8 +233,10 @@ export function createSignupPage() {
 
     // Add auth link and footer inside card
     const cardContent = formCard.querySelector('.auth-card-content');
-    cardContent.appendChild(authLink);
-    cardContent.appendChild(footer);
+    if (cardContent) {
+        cardContent.appendChild(authLink);
+        cardContent.appendChild(footer);
+    }
 
     // ========================================
     // 3. MAIN CONTAINER
@@ -377,7 +392,6 @@ function setupSignupValidation(
     passwordInput.addEventListener('input', function() {
         if (this.value.trim() !== '') {
             validateField(this, validators.password);
-            // Also validate confirm password if it has content
             if (confirmInput.value.trim() !== '') {
                 validateField(confirmInput, validators.confirm);
             }

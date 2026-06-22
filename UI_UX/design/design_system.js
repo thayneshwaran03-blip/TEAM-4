@@ -42,7 +42,7 @@ const DesignSystem = {
     // TYPOGRAPHY
     // ========================================
     typography: {
-        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
         sizes: {
             xs: '0.75rem',
             sm: '0.875rem',
