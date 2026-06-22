@@ -14,11 +14,14 @@
     <!-- Your Global CSS -->
     <link rel="stylesheet" href="assets/css/style.css" />
     
-    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="assets/images/favicon.ico" />
 </head>
 <body>
     <div class="login-container">
-        <!-- LEFT SIDE: Branding -->
+        <!-- ========================================
+        LEFT SIDE: Branding
+        ======================================== -->
         <div class="login-brand">
             <div class="brand-content">
                 <img src="assets/images/logo.png" alt="HostelHub Logo" class="brand-logo" />
@@ -26,18 +29,20 @@
                 <p class="brand-tagline">centralize &amp; digitalize hostel management.</p>
                 <p class="brand-description">
                     Simplify room allocations, verify visitor records, process leaves instantly, 
-                    and track fees within a secure, responsive dashboard control.
+                    and track occupancy reports within a secure, responsive dashboard control.
                 </p>
                 <div class="brand-features">
-                    <span><i class="fas fa-check-circle"></i> Role-Based Access</span>
-                    <span><i class="fas fa-check-circle"></i> Digital Leave Applications</span>
-                    <span><i class="fas fa-check-circle"></i> QR-Code Based Attendance</span>
-                    <span><i class="fas fa-check-circle"></i> Complaint Resolution Panels</span>
+                    <span><i class="fas fa-check-circle"></i> Student Room Allocation</span>
+                    <span><i class="fas fa-check-circle"></i> Visitor Entry</span>
+                    <span><i class="fas fa-check-circle"></i> Leave Requests</span>
+                    <span><i class="fas fa-check-circle"></i> Occupancy Reports</span>
                 </div>
             </div>
         </div>
         
-        <!-- RIGHT SIDE: Login Form -->
+        <!-- ========================================
+        RIGHT SIDE: Login Form
+        ======================================== -->
         <div class="login-form-wrapper">
             <div class="login-card">
                 <div class="login-header">
@@ -45,16 +50,17 @@
                     <p>Sign in with your registered college email account.</p>
                 </div>
                 
-                <form id="loginForm" action="#" method="POST">
+                <form id="loginForm" novalidate>
                     <div class="form-group">
                         <label for="email"><i class="fas fa-envelope"></i> Email Address</label>
                         <input 
                             type="email" 
                             id="email" 
                             name="email" 
-                            placeholder="student1@hostel.com" 
+                            placeholder="student@hostel.com" 
                             required 
                         />
+                        <small class="error-message" id="emailError"></small>
                     </div>
                     
                     <div class="form-group">
@@ -71,6 +77,7 @@
                                 <i class="fas fa-eye"></i>
                             </button>
                         </div>
+                        <small class="error-message" id="passwordError"></small>
                     </div>
                     
                     <button type="submit" class="login-btn">
@@ -78,21 +85,9 @@
                     </button>
                 </form>
                 
-                <!-- Demo Accounts Section -->
-                <div class="demo-accounts">
-                    <p class="demo-title">Demo Login Accounts (Quick Test)</p>
-                    <div class="demo-buttons">
-                        <button class="demo-btn admin" data-email="admin@hostel.com">
-                            <i class="fas fa-user-shield"></i> Admin
-                        </button>
-                        <button class="demo-btn warden" data-email="warden1@hostel.com">
-                            <i class="fas fa-user-tie"></i> Warden
-                        </button>
-                        <button class="demo-btn student" data-email="student1@hostel.com">
-                            <i class="fas fa-user-graduate"></i> Student
-                        </button>
-                    </div>
-                    <p class="demo-password">Password for all accounts is: <strong>password123</strong></p>
+                <!-- Sign Up Link -->
+                <div class="auth-links">
+                    <p>Don't have an account? <a href="signup.html" class="auth-link">Sign Up</a></p>
                 </div>
                 
                 <div class="login-footer">
@@ -102,6 +97,10 @@
         </div>
     </div>
     
+    <!-- Dharani's Login JS (Frontend Developer) -->
+    <script src="../dharani_frontend/login.js"></script>
+    
+    <!-- Your UI Interactions -->
     <script src="assets/js/main.js"></script>
 </body>
 </html>
