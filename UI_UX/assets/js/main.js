@@ -1,151 +1,445 @@
 /**
  * ========================================
- * HOSTELHUB - LOGIN PAGE JAVASCRIPT
+ * HOSTELHUB - UI INTERACTIONS
  * ========================================
- * Author: Thayaneshwaran S
- * Description: Login page interactions
+ * Author: Thayaneshwaran S (UI/UX Designer)
+ * Description: UI interactions with validation
  * ========================================
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🏠 HostelHub Login Page loaded!');
+    console.log('🏠 HostelHub UI loaded!');
     
     initPasswordToggle();
-    initDemoLogin();
-    initFormValidation();
+    initLoginValidation();
+    initSignupValidation();
 });
 
 // ========================================
-// 1. PASSWORD TOGGLE (Show/Hide)
+// 1. PASSWORD TOGGLE (For all password fields)
 // ========================================
 function initPasswordToggle() {
-    const toggleBtn = document.getElementById('togglePassword');
-    const passwordInput = document.getElementById('password');
+    const toggleBtns = document.querySelectorAll('.toggle-btn');
     
-    if (toggleBtn && passwordInput) {
-        toggleBtn.addEventListener('click', function() {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            const icon = this.querySelector('i');
-            icon.classList.toggle('fa-eye');
-            icon.classList.toggle('fa-eye-slash');
-        });
-    }
-}
-
-// ========================================
-// 2. DEMO LOGIN BUTTONS (Auto-fill credentials)
-// ========================================
-function initDemoLogin() {
-    const demoBtns = document.querySelectorAll('.demo-btn');
-    
-    demoBtns.forEach(btn => {
+    toggleBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            const email = this.getAttribute('data-email');
-            const emailInput = document.getElementById('email');
-            const passwordInput = document.getElementById('password');
-            
-            if (emailInput && passwordInput) {
-                emailInput.value = email;
-                passwordInput.value = 'password123';
-                
-                // Highlight the selected button
-                demoBtns.forEach(b => {
-                    b.style.opacity = '0.5';
-                    b.style.transform = 'scale(1)';
-                });
-                this.style.opacity = '1';
-                this.style.transform = 'scale(1.05)';
-                
-                // Show success notification
-                showNotification(`✅ Demo account loaded: ${email}`, 'success');
+            const input = this.closest('.password-wrapper').querySelector('input');
+            if (input) {
+                const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+                input.setAttribute('type', type);
+                const icon = this.querySelector('i');
+                icon.classList.toggle('fa-eye');
+                icon.classList.toggle('fa-eye-slash');
             }
         });
     });
 }
 
 // ========================================
-// 3. FORM VALIDATION
+// 2. LOGIN VALIDATION
 // ========================================
-function initFormValidation() {
+function initLoginValidation() {
     const loginForm = document.getElementById('loginForm');
     
     if (loginForm) {
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        
+        // Real-time validation on blur
+        emailInput.addEventListener('blur', function() {
+            validateLoginEmail(this);
+        });
+        
+        emailInput.addEventListener('input', function() {
+            if (this.value.trim() !== '') {
+                validateLoginEmail(this);
+            }
+        });
+        
+        passwordInput.addEventListener('blur', function() {
+            validateLoginPassword(this);
+        });
+        
+        passwordInput.addEventListener('input', function() {
+            if (this.value.trim() !== '') {
+                validateLoginPassword(this);
+            }
+        });
+        
+        // Form submit validation
         loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
             const email = document.getElementById('email');
             const password = document.getElementById('password');
             
-            // Clear previous errors
-            clearErrors(this);
+            const isEmailValid = validateLoginEmail(email);
+            const isPasswordValid = validateLoginPassword(password);
             
-            let isValid = true;
-            
-            // Validate Email
-            if (!email.value.trim()) {
-                showError(email, 'Email address is required');
-                isValid = false;
-            } else if (!isValidEmail(email.value.trim())) {
-                showError(email, 'Please enter a valid email address');
-                isValid = false;
-            }
-            
-            // Validate Password
-            if (!password.value.trim()) {
-                showError(password, 'Password is required');
-                isValid = false;
-            } else if (password.value.trim().length < 6) {
-                showError(password, 'Password must be at least 6 characters');
-                isValid = false;
-            }
-            
-            if (!isValid) {
-                e.preventDefault();
-                showNotification('❌ Please fix the errors above', 'error');
-            } else {
-                e.preventDefault();
+            if (isEmailValid && isPasswordValid) {
                 showNotification('✅ Login successful! Redirecting...', 'success');
-                // In real project, this would redirect to dashboard
-                // window.location.href = 'pages/student/dashboard.html';
+                // Redirect will be handled by Dharani's login.js
+                // loginUser(email.value.trim(), password.value.trim());
+            } else {
+                showNotification('❌ Please fix the errors above', 'error');
             }
         });
     }
 }
 
-// Helper: Validate email format
+function validateLoginEmail(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('emailError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Email address is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (!isValidEmail(value)) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please enter a valid email address (e.g., student@hostel.com)';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateLoginPassword(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('passwordError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Password is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value.length < 6) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Password must be at least 6 characters';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+// ========================================
+// 3. SIGNUP VALIDATION
+// ========================================
+function initSignupValidation() {
+    const signupForm = document.getElementById('signupForm');
+    
+    if (!signupForm) return;
+    
+    const fields = {
+        fullname: { validate: validateFullName, errorId: 'fullnameError' },
+        email: { validate: validateSignupEmail, errorId: 'emailError' },
+        phone: { validate: validatePhone, errorId: 'phoneError' },
+        department: { validate: validateDepartment, errorId: 'departmentError' },
+        year: { validate: validateYear, errorId: 'yearError' },
+        gender: { validate: validateGender, errorId: 'genderError' },
+        role: { validate: validateRole, errorId: 'roleError' },
+        password: { validate: validateSignupPassword, errorId: 'passwordError' },
+        confirm_password: { validate: validateConfirmPassword, errorId: 'confirmPasswordError' }
+    };
+    
+    // Add real-time validation for each field
+    Object.keys(fields).forEach(fieldId => {
+        const input = document.getElementById(fieldId);
+        if (input) {
+            input.addEventListener('blur', function() {
+                fields[fieldId].validate(this);
+            });
+            input.addEventListener('input', function() {
+                if (this.value.trim() !== '') {
+                    fields[fieldId].validate(this);
+                }
+                // Also validate confirm password when password changes
+                if (fieldId === 'password') {
+                    const confirmInput = document.getElementById('confirm_password');
+                    if (confirmInput && confirmInput.value.trim() !== '') {
+                        validateConfirmPassword(confirmInput);
+                    }
+                }
+            });
+            if (input.tagName === 'SELECT') {
+                input.addEventListener('change', function() {
+                    fields[fieldId].validate(this);
+                });
+            }
+        }
+    });
+    
+    // Form submit validation
+    signupForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        let allValid = true;
+        
+        Object.keys(fields).forEach(fieldId => {
+            const input = document.getElementById(fieldId);
+            if (input) {
+                const isValid = fields[fieldId].validate(input);
+                if (!isValid) allValid = false;
+            }
+        });
+        
+        if (allValid) {
+            showNotification('✅ Account created successfully! Redirecting...', 'success');
+            // Redirect will be handled by Bharani's signup.js
+        } else {
+            showNotification('❌ Please fix the errors above', 'error');
+        }
+    });
+}
+
+// Signup validation functions
+function validateFullName(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('fullnameError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Full name is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value.length < 3) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Name must be at least 3 characters';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value.length > 100) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Name must be less than 100 characters';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateSignupEmail(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('emailError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Email address is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (!isValidEmail(value)) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please enter a valid email address (e.g., student@hostel.com)';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validatePhone(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('phoneError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Phone number is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (!/^[0-9]{10}$/.test(value)) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please enter a valid 10-digit phone number';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateDepartment(input) {
+    const value = input.value;
+    const errorElement = document.getElementById('departmentError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please select your department';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateYear(input) {
+    const value = input.value;
+    const errorElement = document.getElementById('yearError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please select your year';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateGender(input) {
+    const value = input.value;
+    const errorElement = document.getElementById('genderError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please select your gender';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateRole(input) {
+    const value = input.value;
+    const errorElement = document.getElementById('roleError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please select your role';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateSignupPassword(input) {
+    const value = input.value.trim();
+    const errorElement = document.getElementById('passwordError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Password is required';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value.length < 6) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Password must be at least 6 characters';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value.length > 100) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Password must be less than 100 characters';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+function validateConfirmPassword(input) {
+    const value = input.value.trim();
+    const password = document.getElementById('password');
+    const errorElement = document.getElementById('confirmPasswordError');
+    
+    if (!value) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Please confirm your password';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    if (value !== password.value.trim()) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        errorElement.textContent = '⚠️ Passwords do not match';
+        errorElement.classList.remove('hidden');
+        return false;
+    }
+    
+    input.classList.remove('error');
+    input.classList.add('success');
+    errorElement.classList.add('hidden');
+    return true;
+}
+
+// ========================================
+// 4. HELPER FUNCTIONS
+// ========================================
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// Helper: Show error below input
-function showError(input, message) {
-    const formGroup = input.closest('.form-group');
-    const existingError = formGroup.querySelector('.error-message');
-    if (existingError) existingError.remove();
-    
-    input.style.borderColor = '#e53935';
-    input.style.boxShadow = '0 0 0 4px rgba(229, 57, 53, 0.1)';
-    
-    const error = document.createElement('small');
-    error.className = 'error-message';
-    error.style.cssText = 'color: #e53935; font-size: 0.8rem; margin-top: 4px; display: block;';
-    error.textContent = '❌ ' + message;
-    formGroup.appendChild(error);
-}
-
-// Helper: Clear all errors
-function clearErrors(form) {
-    form.querySelectorAll('.error-message').forEach(el => el.remove());
-    form.querySelectorAll('input').forEach(input => {
-        input.style.borderColor = '';
-        input.style.boxShadow = '';
-    });
-}
-
 // ========================================
-// 4. NOTIFICATION SYSTEM (Toast Messages)
+// 5. NOTIFICATION SYSTEM
 // ========================================
 function showNotification(message, type = 'info', duration = 3000) {
-    // Remove existing toasts
     const existingToasts = document.querySelectorAll('.toast');
     existingToasts.forEach(toast => toast.remove());
     
@@ -154,33 +448,32 @@ function showNotification(message, type = 'info', duration = 3000) {
     toast.textContent = message;
     document.body.appendChild(toast);
     
-    // Show after small delay
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 100);
+    setTimeout(() => toast.classList.add('show'), 100);
     
-    // Auto hide
     setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => {
-            toast.remove();
-        }, 300);
+        setTimeout(() => toast.remove(), 300);
     }, duration);
 }
 
 // ========================================
-// 5. KEYBOARD SHORTCUT: Press Enter to login
+// 6. KEYBOARD SHORTCUT
 // ========================================
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
-        const form = document.getElementById('loginForm');
+        const form = document.getElementById('loginForm') || document.getElementById('signupForm');
         if (form && document.activeElement) {
             const active = document.activeElement;
-            if (active.tagName === 'INPUT') {
+            if (active.tagName === 'INPUT' || active.tagName === 'SELECT') {
                 form.dispatchEvent(new Event('submit'));
             }
         }
     }
 });
 
-console.log('✅ HostelHub Login JS loaded!');
+// ========================================
+// 7. EXPOSE FUNCTIONS GLOBALLY
+// ========================================
+window.showNotification = showNotification;
+
+console.log('✅ HostelHub UI Interactions loaded!');
