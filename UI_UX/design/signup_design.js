@@ -255,7 +255,7 @@ export function createSignupPage() {
     container.appendChild(flexWrapper);
 
     // ========================================
-    // 4. VALIDATION (Design only)
+    // 4. VALIDATION (Connects to backend)
     // ========================================
     setupSignupValidation(
         form,
@@ -267,14 +267,17 @@ export function createSignupPage() {
         genderSelect,
         roleSelect,
         passwordWrapper,
-        confirmPasswordWrapper
+        confirmPasswordWrapper,
+        parentNameInput,
+        parentPhoneInput,
+        signupBtn
     );
 
     return container;
 }
 
 // ========================================
-// VALIDATION (Design only)
+// VALIDATION & API CONNECTIVITY
 // ========================================
 function setupSignupValidation(
     form,
@@ -286,7 +289,10 @@ function setupSignupValidation(
     genderSelect,
     roleSelect,
     passwordWrapper,
-    confirmPasswordWrapper
+    confirmPasswordWrapper,
+    parentNameInput,
+    parentPhoneInput,
+    signupBtn
 ) {
     const { colors } = DesignSystem;
 
@@ -403,8 +409,8 @@ function setupSignupValidation(
         if (this.value.trim() !== '') validateField(this, validators.confirm);
     });
 
-    // Form submit
-    form.addEventListener('submit', function(e) {
+    // Form submit - connects to backend
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const fields = [
@@ -426,7 +432,62 @@ function setupSignupValidation(
         });
 
         if (allValid) {
-            Toast('✅ All fields are valid! Ready to sign up.', 'success');
+            // Show loading state
+            const originalBtnText = signupBtn.innerHTML;
+            signupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+            signupBtn.disabled = true;
+
+            // Map year and gender select labels
+            const yearText = yearSelect.options[yearSelect.selectedIndex]?.text || '1st Year';
+            const genderText = genderSelect.options[genderSelect.selectedIndex]?.text || 'Male';
+
+            const payload = {
+                fullName: nameInput.value.trim(),
+                email: emailInput.value.trim(),
+                phoneNumber: phoneInput.value.trim(),
+                department: deptSelect.value,
+                year: yearText,
+                gender: genderText,
+                role: roleSelect.value,
+                parentName: parentNameInput.value.trim() || undefined,
+                parentContact: parentPhoneInput.value.trim() || undefined,
+                password: passwordInput.value.trim()
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    Toast('✅ ' + data.message, 'success');
+                    
+                    // Reset the form
+                    form.reset();
+                    
+                    // Go to Login page
+                    const loginContainer = document.getElementById('loginContainer');
+                    const signupContainer = document.getElementById('signupContainer');
+                    if (loginContainer && signupContainer) {
+                        signupContainer.style.display = 'none';
+                        loginContainer.style.display = 'flex';
+                    }
+                } else {
+                    Toast('❌ ' + (data.message || 'Registration failed'), 'error');
+                }
+            } catch (error) {
+                console.error('Registration Error:', error);
+                Toast('❌ Connection error to backend server.', 'error');
+            } finally {
+                signupBtn.innerHTML = originalBtnText;
+                signupBtn.disabled = false;
+            }
         } else {
             Toast('❌ Please fix the errors above', 'error');
         }
