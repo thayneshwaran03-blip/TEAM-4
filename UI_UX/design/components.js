@@ -1,9 +1,9 @@
 /**
  * ========================================
- * HOSTELHUB - UI COMPONENTS
+ * HOSTELHUB - UI COMPONENTS (FIXED)
  * ========================================
  * Author: Thayaneshwaran S (UI/UX Designer)
- * Description: Reusable UI components for design prototyping
+ * Description: Reusable UI components with proper styling
  * ========================================
  */
 
@@ -19,8 +19,10 @@ export const Container = (children, styles = {}) => {
     container.style.cssText = `
         display: flex;
         min-height: 100vh;
+        width: 100%;
         background: ${colors.white};
         font-family: ${typography.fontFamily};
+        overflow: hidden;
         ${Object.entries(styles).map(([key, value]) => `${key}: ${value};`).join('')}
     `;
     if (typeof children === 'string') {
@@ -32,12 +34,13 @@ export const Container = (children, styles = {}) => {
 };
 
 // ========================================
-// 2. BRANDING (Left Side)
+// 2. BRANDING (Left Side - FIXED)
 // ========================================
 export const Branding = (title, tagline, description, features, logoUrl) => {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `
         flex: 1.2;
+        min-width: 300px;
         background: ${colors.primaryGradient};
         display: flex;
         align-items: center;
@@ -51,7 +54,6 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
     // Animated background glow
     const glow = document.createElement('div');
     glow.style.cssText = `
-        content: '';
         position: absolute;
         top: -50%;
         right: -30%;
@@ -69,6 +71,7 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
         }
     `;
     wrapper.appendChild(style);
+    wrapper.appendChild(glow);
 
     const content = document.createElement('div');
     content.style.cssText = `
@@ -166,7 +169,7 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
 };
 
 // ========================================
-// 3. FORM CARD (Right Side)
+// 3. FORM CARD (Right Side - FIXED)
 // ========================================
 export const FormCard = (title, subtitle, children) => {
     const wrapper = document.createElement('div');
@@ -175,8 +178,11 @@ export const FormCard = (title, subtitle, children) => {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: ${spacing['2xl']};
+        padding: ${spacing.xl};
         background: ${colors.gray50};
+        overflow-y: auto;
+        max-height: 100vh;
+        min-width: 300px;
     `;
 
     const card = document.createElement('div');
@@ -186,8 +192,32 @@ export const FormCard = (title, subtitle, children) => {
         border-radius: ${radius.xl};
         box-shadow: ${shadows.lg};
         width: 100%;
-        max-width: 500px;
+        max-width: 520px;
+        max-height: 95vh;
+        overflow-y: auto;
+        position: relative;
     `;
+
+    // Scrollbar styling for card
+    const style = document.createElement('style');
+    style.textContent = `
+        .auth-card::-webkit-scrollbar {
+            width: 6px;
+        }
+        .auth-card::-webkit-scrollbar-track {
+            background: ${colors.gray100};
+            border-radius: ${radius.full};
+        }
+        .auth-card::-webkit-scrollbar-thumb {
+            background: ${colors.primary};
+            border-radius: ${radius.full};
+        }
+        .auth-card::-webkit-scrollbar-thumb:hover {
+            background: ${colors.primaryLight};
+        }
+    `;
+    card.appendChild(style);
+    card.className = 'auth-card';
 
     // Header
     const header = document.createElement('div');
@@ -219,6 +249,10 @@ export const FormCard = (title, subtitle, children) => {
     // Form content
     const contentWrapper = document.createElement('div');
     contentWrapper.className = 'auth-card-content';
+    contentWrapper.style.cssText = `
+        width: 100%;
+        box-sizing: border-box;
+    `;
     if (typeof children === 'string') {
         contentWrapper.innerHTML = children;
     } else {
@@ -231,13 +265,15 @@ export const FormCard = (title, subtitle, children) => {
 };
 
 // ========================================
-// 4. FORM GROUP
+// 4. FORM GROUP (FIXED)
 // ========================================
 export const FormGroup = (label, inputElement, errorMessage = '') => {
     const group = document.createElement('div');
     group.className = 'form-group';
     group.style.cssText = `
         margin-bottom: ${spacing.lg};
+        width: 100%;
+        box-sizing: border-box;
     `;
 
     const labelEl = document.createElement('label');
@@ -253,7 +289,39 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
     const inputWrapper = document.createElement('div');
     inputWrapper.style.cssText = `
         position: relative;
+        width: 100%;
+        box-sizing: border-box;
     `;
+
+    // Style the input or select element
+    if (inputElement.tagName === 'INPUT' || inputElement.tagName === 'SELECT') {
+        inputElement.style.cssText += `
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 16px;
+            border: 2px solid ${colors.gray200};
+            border-radius: ${radius.md};
+            font-size: ${typography.sizes.base};
+            font-family: ${typography.fontFamily};
+            background: ${colors.gray50};
+            color: ${colors.gray800};
+            transition: all 0.2s ease;
+        `;
+        // Add focus events
+        inputElement.addEventListener('focus', () => {
+            inputElement.style.borderColor = colors.primary;
+            inputElement.style.boxShadow = `0 0 0 4px rgba(26, 35, 126, 0.1)`;
+            inputElement.style.background = colors.white;
+        });
+        inputElement.addEventListener('blur', () => {
+            if (!inputElement.dataset.error) {
+                inputElement.style.borderColor = colors.gray200;
+                inputElement.style.boxShadow = 'none';
+                inputElement.style.background = colors.gray50;
+            }
+        });
+    }
+
     inputWrapper.appendChild(inputElement);
 
     const errorEl = document.createElement('small');
@@ -264,6 +332,7 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
         margin-top: ${spacing.xs};
         display: ${errorMessage ? 'block' : 'none'};
         min-height: 18px;
+        width: 100%;
     `;
     errorEl.textContent = errorMessage;
 
@@ -275,7 +344,7 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
 };
 
 // ========================================
-// 5. INPUT FIELD
+// 5. INPUT FIELD (FIXED)
 // ========================================
 export const Input = (type, placeholder, value = '', styles = {}) => {
     const input = document.createElement('input');
@@ -292,10 +361,10 @@ export const Input = (type, placeholder, value = '', styles = {}) => {
         font-family: ${typography.fontFamily};
         background: ${colors.gray50};
         color: ${colors.gray800};
+        box-sizing: border-box;
         ${Object.entries(styles).map(([key, value]) => `${key}: ${value};`).join('')}
     `;
 
-    // Focus styles
     input.addEventListener('focus', () => {
         input.style.borderColor = colors.primary;
         input.style.boxShadow = `0 0 0 4px rgba(26, 35, 126, 0.1)`;
@@ -314,13 +383,15 @@ export const Input = (type, placeholder, value = '', styles = {}) => {
 };
 
 // ========================================
-// 6. PASSWORD INPUT (with toggle)
+// 6. PASSWORD INPUT (FIXED)
 // ========================================
 export const PasswordInput = (placeholder, value = '') => {
     const wrapper = document.createElement('div');
     wrapper.className = 'password-wrapper';
     wrapper.style.cssText = `
         position: relative;
+        width: 100%;
+        box-sizing: border-box;
     `;
 
     const input = document.createElement('input');
@@ -337,9 +408,9 @@ export const PasswordInput = (placeholder, value = '') => {
         font-family: ${typography.fontFamily};
         background: ${colors.gray50};
         color: ${colors.gray800};
+        box-sizing: border-box;
     `;
 
-    // Focus styles
     input.addEventListener('focus', () => {
         input.style.borderColor = colors.primary;
         input.style.boxShadow = `0 0 0 4px rgba(26, 35, 126, 0.1)`;
@@ -369,6 +440,7 @@ export const PasswordInput = (placeholder, value = '') => {
         padding: 8px;
         border-radius: ${radius.sm};
         transition: all 0.2s ease;
+        z-index: 2;
     `;
     toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
 
@@ -396,7 +468,7 @@ export const PasswordInput = (placeholder, value = '') => {
 };
 
 // ========================================
-// 7. SELECT DROPDOWN
+// 7. SELECT DROPDOWN (FIXED)
 // ========================================
 export const Select = (options, placeholder = 'Select', styles = {}) => {
     const select = document.createElement('select');
@@ -416,10 +488,10 @@ export const Select = (options, placeholder = 'Select', styles = {}) => {
         background-repeat: no-repeat;
         background-position: right 16px center;
         cursor: pointer;
+        box-sizing: border-box;
         ${Object.entries(styles).map(([key, value]) => `${key}: ${value};`).join('')}
     `;
 
-    // Focus styles
     select.addEventListener('focus', () => {
         select.style.borderColor = colors.primary;
         select.style.boxShadow = `0 0 0 4px rgba(26, 35, 126, 0.1)`;
@@ -452,7 +524,7 @@ export const Select = (options, placeholder = 'Select', styles = {}) => {
 };
 
 // ========================================
-// 8. BUTTON
+// 8. BUTTON (FIXED)
 // ========================================
 export const Button = (text, type = 'submit', icon = '', styles = {}) => {
     const btn = document.createElement('button');
@@ -473,6 +545,7 @@ export const Button = (text, type = 'submit', icon = '', styles = {}) => {
         justify-content: center;
         gap: ${spacing.sm};
         font-family: ${typography.fontFamily};
+        box-sizing: border-box;
         ${Object.entries(styles).map(([key, value]) => `${key}: ${value};`).join('')}
     `;
 
@@ -488,11 +561,15 @@ export const Button = (text, type = 'submit', icon = '', styles = {}) => {
         btn.style.boxShadow = 'none';
     });
 
+    btn.addEventListener('mousedown', () => {
+        btn.style.transform = 'translateY(0)';
+    });
+
     return btn;
 };
 
 // ========================================
-// 9. AUTH LINK
+// 9. AUTH LINK (FIXED)
 // ========================================
 export const AuthLink = (text, linkText, onClick) => {
     const container = document.createElement('div');
@@ -502,6 +579,7 @@ export const AuthLink = (text, linkText, onClick) => {
         margin-top: ${spacing.lg};
         padding-top: ${spacing.md};
         border-top: 1px solid ${colors.gray200};
+        width: 100%;
     `;
 
     const p = document.createElement('p');
@@ -511,7 +589,7 @@ export const AuthLink = (text, linkText, onClick) => {
     `;
 
     const textNode = document.createTextNode(text + ' ');
-    const link = document.createElement('span');
+    const link = document.createElement('button');
     link.className = 'auth-link';
     link.textContent = linkText;
     link.style.cssText = `
@@ -519,6 +597,11 @@ export const AuthLink = (text, linkText, onClick) => {
         font-weight: ${typography.weights.semibold};
         cursor: pointer;
         transition: all 0.2s ease;
+        background: none;
+        border: none;
+        font-size: ${typography.sizes.sm};
+        font-family: ${typography.fontFamily};
+        padding: 0;
     `;
     link.addEventListener('click', onClick);
     link.addEventListener('mouseenter', () => {
@@ -548,6 +631,7 @@ export const Footer = (text) => {
         margin-top: ${spacing.lg};
         color: ${colors.gray400};
         font-size: ${typography.sizes.xs};
+        width: 100%;
     `;
     footer.textContent = text;
     return footer;
@@ -557,7 +641,6 @@ export const Footer = (text) => {
 // 11. TOAST (Notification)
 // ========================================
 export const Toast = (message, type = 'info', duration = 3000) => {
-    // Remove existing toasts
     const existingToasts = document.querySelectorAll('.toast');
     existingToasts.forEach(toast => toast.remove());
 
@@ -618,13 +701,14 @@ export const SectionTitle = (text) => {
         border-bottom: 2px solid ${colors.gray200};
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        width: 100%;
     `;
     title.textContent = text;
     return title;
 };
 
 // ========================================
-// 13. FORM ROW (Two columns)
+// 13. FORM ROW (Two columns - FIXED)
 // ========================================
 export const FormRow = (children) => {
     const row = document.createElement('div');
@@ -633,17 +717,154 @@ export const FormRow = (children) => {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: ${spacing.md};
+        width: 100%;
+        box-sizing: border-box;
     `;
 
     if (Array.isArray(children)) {
         children.forEach(child => {
+            if (child && child.style) {
+                child.style.width = '100%';
+                child.style.boxSizing = 'border-box';
+            }
             row.appendChild(child);
         });
-    } else {
+    } else if (children) {
+        if (children.style) {
+            children.style.width = '100%';
+            children.style.boxSizing = 'border-box';
+        }
         row.appendChild(children);
     }
 
     return row;
+};
+
+// ========================================
+// 14. RESPONSIVE STYLES (Added as global)
+// ========================================
+export const addResponsiveStyles = () => {
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .auth-container {
+                flex-direction: column !important;
+            }
+            
+            .branding {
+                padding: 1.5rem !important;
+                min-height: 200px !important;
+                flex: none !important;
+                width: 100% !important;
+            }
+            
+            .branding-logo {
+                width: 60px !important;
+                height: 60px !important;
+            }
+            
+            .branding h1 {
+                font-size: 1.5rem !important;
+            }
+            
+            .branding-description {
+                display: none !important;
+            }
+            
+            .branding-features {
+                grid-template-columns: 1fr 1fr !important;
+                font-size: 0.75rem !important;
+            }
+            
+            .auth-form-wrapper {
+                padding: 1rem !important;
+                max-height: 100vh !important;
+                overflow-y: auto !important;
+            }
+            
+            .auth-card {
+                padding: 1.5rem !important;
+                max-height: 95vh !important;
+                max-width: 100% !important;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr !important;
+                gap: 0 !important;
+            }
+            
+            .form-section-title {
+                font-size: 0.75rem !important;
+                margin-top: 1rem !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .branding {
+                min-height: 150px !important;
+                padding: 1rem !important;
+            }
+            
+            .branding-logo {
+                width: 40px !important;
+                height: 40px !important;
+            }
+            
+            .branding h1 {
+                font-size: 1.25rem !important;
+            }
+            
+            .branding-tagline {
+                font-size: 0.875rem !important;
+            }
+            
+            .branding-features {
+                grid-template-columns: 1fr !important;
+            }
+            
+            .auth-card {
+                padding: 1rem !important;
+            }
+            
+            select {
+                font-size: 0.875rem !important;
+                padding: 10px 14px !important;
+            }
+            
+            input {
+                font-size: 0.875rem !important;
+                padding: 10px 14px !important;
+            }
+            
+            .login-btn {
+                font-size: 0.875rem !important;
+                padding: 12px !important;
+            }
+        }
+
+        /* Scrollbar for auth card */
+        .auth-card::-webkit-scrollbar {
+            width: 6px;
+        }
+        .auth-card::-webkit-scrollbar-track {
+            background: #f0f2f5;
+            border-radius: 50%;
+        }
+        .auth-card::-webkit-scrollbar-thumb {
+            background: #1a237e;
+            border-radius: 50%;
+        }
+        .auth-card::-webkit-scrollbar-thumb:hover {
+            background: #283593;
+        }
+
+        /* Smooth transitions */
+        * {
+            transition: all 0.2s ease;
+        }
+    `;
+    document.head.appendChild(style);
 };
 
 export default {
@@ -659,5 +880,6 @@ export default {
     Footer,
     Toast,
     SectionTitle,
-    FormRow
+    FormRow,
+    addResponsiveStyles
 };
