@@ -1,0 +1,77 @@
+CREATE DATABASE IF NOT EXISTS hostel_management;
+USE hostel_management;
+CREATE DATABASE Hostel_Management;
+use Hostel_Management;
+CREATE TABLE admin (
+    Admin_id INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(50) NOT NULL,
+    Email VARCHAR(50) UNIQUE NOT NULL,
+    Password VARCHAR(50) NOT NULL
+);
+CREATE TABLE Warden (
+    warden_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    email VARCHAR(50),
+    phone VARCHAR(15)
+);
+CREATE TABLE Room (
+    room_id INT PRIMARY KEY AUTO_INCREMENT,
+    room_number VARCHAR(10) UNIQUE NOT NULL,
+    block_name VARCHAR(20),
+    floor INT,
+    capacity INT NOT NULL,
+    occupied_count INT DEFAULT 0,
+    status VARCHAR(20),
+    admin_id INT,
+    FOREIGN KEY (admin_id)
+    REFERENCES Admin(admin_id)
+);
+CREATE TABLE Student (
+    student_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL,
+    email VARCHAR(50) UNIQUE,
+    phone VARCHAR(15),
+    department VARCHAR(50),
+    year INT,
+    gender VARCHAR(10),
+    room_id INT,
+    admin_id INT,
+    FOREIGN KEY (room_id)
+    REFERENCES Room(room_id),
+    FOREIGN KEY (admin_id)
+    REFERENCES Admin(admin_id)
+);
+CREATE TABLE Visitor (
+    visitor_id INT PRIMARY KEY AUTO_INCREMENT,
+    visitor_name VARCHAR(50),
+    phone VARCHAR(15),
+    relation VARCHAR(30),
+    visit_date DATE,
+    check_in_time TIME,
+    check_out_time TIME,
+    student_id INT,
+    FOREIGN KEY (student_id)
+    REFERENCES Student(student_id)
+);
+CREATE TABLE Leave_Request (
+    leave_id INT PRIMARY KEY AUTO_INCREMENT,
+    from_date DATE,
+    to_date DATE,
+    reason VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'Pending',
+    student_id INT,
+    warden_id INT,
+    FOREIGN KEY (student_id)
+    REFERENCES Student(student_id),
+    FOREIGN KEY (warden_id)
+    REFERENCES Warden(warden_id)
+);
+CREATE TABLE Occupancy_Report (
+    report_id INT PRIMARY KEY AUTO_INCREMENT,
+    room_id INT,
+    occupied_beds INT,
+    vacant_beds INT,
+    generated_date DATE,
+    FOREIGN KEY (room_id)
+    REFERENCES Room(room_id)
+);
