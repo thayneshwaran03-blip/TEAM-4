@@ -1,94 +1,61 @@
 /**
  * ========================================
- * HOSTELHUB - MAIN ENTRY (FIXED)
+ * HOSTELHUB - MAIN ENTRY
  * ========================================
  * Author: Thayaneshwaran S (UI/UX Designer)
- * Description: Entry point for previewing design with toggle
+ * Description: Entry point for previewing all designs
  * ========================================
  */
 
 import createLoginPage from './design/login_design.js';
 import createSignupPage from './design/signup_design.js';
-import createDashboardPage from './design/dashboard_design.js';
+import createAdminDashboard from './design/admin_dashboard_design.js';
+import createStudentDashboard from './design/student_dashboard_design.js';
+import createWardenDashboard from './design/warden_dashboard_design.js';
 
 console.log('🏠 HostelHub Design Preview loaded!');
 
+// ========================================
+// CHOOSE WHICH PAGE TO PREVIEW
+// ========================================
+// Change this value to preview different pages:
+// 'login' - Login page
+// 'signup' - Signup page
+// 'admin' - Admin Dashboard
+// 'student' - Student Dashboard
+// 'warden' - Warden Dashboard
+
+const page = 'signup'; // <-- CHANGE THIS TO PREVIEW DIFFERENT PAGES
+
+// ========================================
+// RENDER SELECTED PAGE
+// ========================================
 const root = document.getElementById('root');
+root.innerHTML = '';
 
-function renderApp() {
-    // Clear root
-    root.innerHTML = '';
-
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-
-    if (token && userStr) {
-        // User is logged in, show Dashboard
-        try {
-            const user = JSON.parse(userStr);
-            const dashboardPage = createDashboardPage(user, token, () => {
-                renderApp();
-            });
-            root.appendChild(dashboardPage);
-            console.log('🔑 Logged in: Rendered dashboard');
-        } catch (e) {
-            console.error('Error parsing user data, logging out:', e);
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            renderApp();
-        }
-    } else {
-        // User not logged in, show Login/Signup forms
-        const loginPage = createLoginPage();
-        const signupPage = createSignupPage();
-
-        // Store references for toggling
-        loginPage.id = 'loginContainer';
-        signupPage.id = 'signupContainer';
-
-        // Show login first
-        loginPage.style.display = 'flex';
-        signupPage.style.display = 'none';
-
-        root.appendChild(loginPage);
-        root.appendChild(signupPage);
-        console.log('🚪 Logged out: Rendered auth views');
-    }
+let pageContent;
+switch(page) {
+    case 'login':
+        pageContent = createLoginPage();
+        break;
+    case 'signup':
+        pageContent = createSignupPage();
+        break;
+    case 'admin':
+        pageContent = createAdminDashboard();
+        break;
+    case 'student':
+        pageContent = createStudentDashboard();
+        break;
+    case 'warden':
+        pageContent = createWardenDashboard();
+        break;
+    default:
+        pageContent = createLoginPage();
 }
 
-// Watch for authentication changes
-window.addEventListener('authChange', () => {
-    renderApp();
-});
+root.appendChild(pageContent);
 
-// Render the application initially
-renderApp();
-
-// Toggle between pages
-document.addEventListener('click', function(e) {
-    const link = e.target.closest('.auth-link');
-    if (link) {
-        const text = link.textContent.trim();
-        const loginPage = document.getElementById('loginContainer');
-        const signupPage = document.getElementById('signupContainer');
-        
-        if (loginPage && signupPage) {
-            if (text === 'Sign Up') {
-                loginPage.style.display = 'none';
-                signupPage.style.display = 'flex';
-                console.log('🔄 Switched to Sign Up page');
-            } else if (text === 'Sign In') {
-                signupPage.style.display = 'none';
-                loginPage.style.display = 'flex';
-                console.log('🔄 Switched to Login page');
-            }
-        }
-    }
-});
-
-console.log('💡 Click "Sign Up" or "Sign In" to switch pages');
-
-// Handle window resize for responsive
-window.addEventListener('resize', function() {
-    console.log('Window resized to: ' + window.innerWidth + 'px');
-});
+console.log('💡 Current page:', page);
+console.log('💡 To switch pages, change the "page" variable in main.js');
+console.log('💡 Options: login, signup, admin, student, warden');

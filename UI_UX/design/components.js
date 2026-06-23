@@ -1,17 +1,5 @@
-/**
- * ========================================
- * HOSTELHUB - UI COMPONENTS (FIXED)
- * ========================================
- * Author: Thayaneshwaran S (UI/UX Designer)
- * Description: Reusable UI components with proper styling
- * ========================================
- */
-
-import DesignSystem from './design_system.js';
-
-const { colors, typography, spacing, radius, shadows } = DesignSystem;
-
 // ========================================
+// RESPONSIVE STYLES
 // 1. CONTAINER
 // ========================================
 export const Container = (children, styles = {}) => {
@@ -852,27 +840,22 @@ export const addResponsiveStyles = () => {
             display: none;
         }
 
+        /* Fade In Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         /* Smooth transitions */
         * {
             transition: all 0.2s ease;
         }
     `;
     document.head.appendChild(style);
-};
-
-export default {
-    Container,
-    Branding,
-    FormCard,
-    FormGroup,
-    Input,
-    PasswordInput,
-    Select,
-    Button,
-    AuthLink,
-    Footer,
-    Toast,
-    SectionTitle,
-    FormRow,
-    addResponsiveStyles
 };
