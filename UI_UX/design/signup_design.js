@@ -1,9 +1,9 @@
 /**
  * ========================================
- * HOSTELHUB - SIGNUP PAGE DESIGN (FIXED)
+ * HOSTELHUB - SIGNUP PAGE DESIGN
  * ========================================
  * Author: Thayaneshwaran S (UI/UX Designer)
- * Description: Signup page created with JavaScript only
+ * Description: Signup page with conditional Parent/Guardian section
  * ========================================
  */
 
@@ -31,7 +31,6 @@ import {
 export function createSignupPage() {
     const { colors, typography, spacing } = DesignSystem;
 
-    // Add responsive styles
     addResponsiveStyles();
 
     // ========================================
@@ -56,7 +55,6 @@ export function createSignupPage() {
     // 2. RIGHT SIDE - SIGNUP FORM
     // ========================================
 
-    // Create form
     const form = document.createElement('form');
     form.id = 'signupForm';
     form.noValidate = true;
@@ -156,8 +154,14 @@ export function createSignupPage() {
 
     form.appendChild(FormRow([genderGroup, roleGroup]));
 
-    // --- Parent Information ---
-    form.appendChild(SectionTitle('Parent / Guardian Information'));
+    // --- Parent / Guardian Information (Conditional - Only for Students) ---
+    const parentSectionTitle = SectionTitle('Parent / Guardian Information');
+    const parentSectionContainer = document.createElement('div');
+    parentSectionContainer.id = 'parentSection';
+    parentSectionContainer.style.cssText = `
+        display: none;
+        animation: fadeIn 0.3s ease;
+    `;
 
     // Parent Name and Phone Row
     const parentNameInput = Input('text', "Parent's full name");
@@ -174,7 +178,8 @@ export function createSignupPage() {
         ''
     );
 
-    form.appendChild(FormRow([parentNameGroup, parentPhoneGroup]));
+    parentSectionContainer.appendChild(parentSectionTitle);
+    parentSectionContainer.appendChild(FormRow([parentNameGroup, parentPhoneGroup]));
 
     // --- Account Security ---
     form.appendChild(SectionTitle('Account Security'));
@@ -195,6 +200,30 @@ export function createSignupPage() {
         ''
     ));
 
+    // --- Parent Section Insertion ---
+    // Insert parent section after the role field (before Account Security)
+    const parentWrapper = document.createElement('div');
+    parentWrapper.id = 'parentSectionWrapper';
+    parentWrapper.appendChild(parentSectionContainer);
+
+    // Find where to insert parent section
+    const roleRow = roleSelect.closest('.form-row');
+    if (roleRow && roleRow.parentNode) {
+        const roleParent = roleRow.parentNode;
+        const insertAfter = roleRow.nextSibling;
+        if (insertAfter) {
+            roleParent.insertBefore(parentWrapper, insertAfter);
+        } else {
+            roleParent.appendChild(parentWrapper);
+        }
+    } else {
+        // Fallback: append after role group
+        const roleParent = roleGroup.parentNode;
+        if (roleParent) {
+            roleParent.appendChild(parentWrapper);
+        }
+    }
+
     // Signup Button
     const signupBtn = Button('Create Account', 'submit', 'fas fa-user-plus');
 
@@ -212,7 +241,6 @@ export function createSignupPage() {
         'Sign In',
         () => {
             console.log('Navigate to Login');
-            // Toggle to login page
             const loginContainer = document.getElementById('loginContainer');
             const signupContainer = document.getElementById('signupContainer');
             if (loginContainer && signupContainer) {
@@ -231,7 +259,6 @@ export function createSignupPage() {
         form
     );
 
-    // Add auth link and footer inside card
     const cardContent = formCard.querySelector('.auth-card-content');
     if (cardContent) {
         cardContent.appendChild(authLink);
@@ -255,7 +282,12 @@ export function createSignupPage() {
     container.appendChild(flexWrapper);
 
     // ========================================
-    // 4. VALIDATION (Connects to backend)
+    // 4. CONDITIONAL LOGIC FOR PARENT SECTION
+    // ========================================
+    setupConditionalParentSection(roleSelect);
+
+    // ========================================
+    // 5. VALIDATION (Design only)
     // ========================================
     setupSignupValidation(
         form,
@@ -269,15 +301,45 @@ export function createSignupPage() {
         passwordWrapper,
         confirmPasswordWrapper,
         parentNameInput,
-        parentPhoneInput,
-        signupBtn
+        parentPhoneInput
     );
 
     return container;
 }
 
 // ========================================
-// VALIDATION & API CONNECTIVITY
+// CONDITIONAL PARENT SECTION LOGIC
+// ========================================
+function setupConditionalParentSection(roleSelect) {
+    const parentSection = document.getElementById('parentSection');
+    const parentWrapper = document.getElementById('parentSectionWrapper');
+
+    if (!roleSelect || !parentSection) return;
+
+    function toggleParentSection() {
+        const selectedRole = roleSelect.value;
+        if (selectedRole === 'student') {
+            parentSection.style.display = 'block';
+            if (parentWrapper) parentWrapper.style.display = 'block';
+            parentSection.style.animation = 'fadeIn 0.3s ease';
+        } else {
+            parentSection.style.display = 'none';
+            if (parentWrapper) parentWrapper.style.display = 'none';
+            // Clear parent fields when hiding
+            const parentName = document.getElementById('parent_name');
+            const parentPhone = document.getElementById('parent_phone');
+            if (parentName) parentName.value = '';
+            if (parentPhone) parentPhone.value = '';
+        }
+    }
+
+    roleSelect.addEventListener('change', toggleParentSection);
+    roleSelect.addEventListener('blur', toggleParentSection);
+    toggleParentSection();
+}
+
+// ========================================
+// VALIDATION (Design only)
 // ========================================
 function setupSignupValidation(
     form,
@@ -291,8 +353,7 @@ function setupSignupValidation(
     passwordWrapper,
     confirmPasswordWrapper,
     parentNameInput,
-    parentPhoneInput,
-    signupBtn
+    parentPhoneInput
 ) {
     const { colors } = DesignSystem;
 
@@ -363,10 +424,26 @@ function setupSignupValidation(
                 return { valid: false, message: 'Passwords do not match' };
             }
             return { valid: true };
+        },
+        parentName: (val) => {
+            if (roleSelect.value === 'student') {
+                if (!val) return { valid: false, message: 'Parent/Guardian name is required' };
+                if (val.length < 2) return { valid: false, message: 'Parent name must be at least 2 characters' };
+            }
+            return { valid: true };
+        },
+        parentPhone: (val) => {
+            if (roleSelect.value === 'student') {
+                if (!val) return { valid: false, message: 'Parent contact is required' };
+                if (!/^[0-9]{10}$/.test(val)) {
+                    return { valid: false, message: 'Please enter a valid 10-digit phone number' };
+                }
+            }
+            return { valid: true };
         }
     };
 
-    // Event listeners
+    // Event listeners for all fields
     nameInput.addEventListener('blur', () => validateField(nameInput, validators.name));
     nameInput.addEventListener('input', function() {
         if (this.value.trim() !== '') validateField(this, validators.name);
@@ -392,7 +469,25 @@ function setupSignupValidation(
     genderSelect.addEventListener('change', () => validateField(genderSelect, (v) => validators.select(v, 'gender')));
 
     roleSelect.addEventListener('blur', () => validateField(roleSelect, (v) => validators.select(v, 'role')));
-    roleSelect.addEventListener('change', () => validateField(roleSelect, (v) => validators.select(v, 'role')));
+    roleSelect.addEventListener('change', () => {
+        validateField(roleSelect, (v) => validators.select(v, 'role'));
+        // Re-validate parent fields when role changes
+        if (roleSelect.value === 'student') {
+            validateField(parentNameInput, validators.parentName);
+            validateField(parentPhoneInput, validators.parentPhone);
+        }
+    });
+
+    // Parent fields
+    parentNameInput.addEventListener('blur', () => validateField(parentNameInput, validators.parentName));
+    parentNameInput.addEventListener('input', function() {
+        if (this.value.trim() !== '') validateField(this, validators.parentName);
+    });
+
+    parentPhoneInput.addEventListener('blur', () => validateField(parentPhoneInput, validators.parentPhone));
+    parentPhoneInput.addEventListener('input', function() {
+        if (this.value.trim() !== '') validateField(this, validators.parentPhone);
+    });
 
     passwordInput.addEventListener('blur', () => validateField(passwordInput, validators.password));
     passwordInput.addEventListener('input', function() {
@@ -409,8 +504,8 @@ function setupSignupValidation(
         if (this.value.trim() !== '') validateField(this, validators.confirm);
     });
 
-    // Form submit - connects to backend
-    form.addEventListener('submit', async function(e) {
+    // Form submit
+    form.addEventListener('submit', function(e) {
         e.preventDefault();
 
         const fields = [
@@ -425,6 +520,12 @@ function setupSignupValidation(
             { input: confirmInput, validator: validators.confirm }
         ];
 
+        // Add parent fields if student
+        if (roleSelect.value === 'student') {
+            fields.push({ input: parentNameInput, validator: validators.parentName });
+            fields.push({ input: parentPhoneInput, validator: validators.parentPhone });
+        }
+
         let allValid = true;
         fields.forEach(({ input, validator }) => {
             const isValid = validateField(input, validator);
@@ -432,62 +533,7 @@ function setupSignupValidation(
         });
 
         if (allValid) {
-            // Show loading state
-            const originalBtnText = signupBtn.innerHTML;
-            signupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-            signupBtn.disabled = true;
-
-            // Map year and gender select labels
-            const yearText = yearSelect.options[yearSelect.selectedIndex]?.text || '1st Year';
-            const genderText = genderSelect.options[genderSelect.selectedIndex]?.text || 'Male';
-
-            const payload = {
-                fullName: nameInput.value.trim(),
-                email: emailInput.value.trim(),
-                phoneNumber: phoneInput.value.trim(),
-                department: deptSelect.value,
-                year: yearText,
-                gender: genderText,
-                role: roleSelect.value,
-                parentName: parentNameInput.value.trim() || undefined,
-                parentContact: parentPhoneInput.value.trim() || undefined,
-                password: passwordInput.value.trim()
-            };
-
-            try {
-                const response = await fetch('http://localhost:5000/api/auth/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                const data = await response.json();
-
-                if (response.ok && data.success) {
-                    Toast('✅ ' + data.message, 'success');
-                    
-                    // Reset the form
-                    form.reset();
-                    
-                    // Go to Login page
-                    const loginContainer = document.getElementById('loginContainer');
-                    const signupContainer = document.getElementById('signupContainer');
-                    if (loginContainer && signupContainer) {
-                        signupContainer.style.display = 'none';
-                        loginContainer.style.display = 'flex';
-                    }
-                } else {
-                    Toast('❌ ' + (data.message || 'Registration failed'), 'error');
-                }
-            } catch (error) {
-                console.error('Registration Error:', error);
-                Toast('❌ Connection error to backend server.', 'error');
-            } finally {
-                signupBtn.innerHTML = originalBtnText;
-                signupBtn.disabled = false;
-            }
+            Toast('✅ All fields are valid! Ready to sign up.', 'success');
         } else {
             Toast('❌ Please fix the errors above', 'error');
         }
@@ -495,7 +541,7 @@ function setupSignupValidation(
 }
 
 // ========================================
-// AUTO-RENDER (If used directly)
+// AUTO-RENDER
 // ========================================
 if (document.getElementById('root')) {
     const root = document.getElementById('root');
