@@ -1,17 +1,5 @@
-/**
- * ========================================
- * HOSTELHUB - UI COMPONENTS (FIXED)
- * ========================================
- * Author: Thayaneshwaran S (UI/UX Designer)
- * Description: Reusable UI components with proper styling
- * ========================================
- */
-
-import DesignSystem from './design_system.js';
-
-const { colors, typography, spacing, radius, shadows } = DesignSystem;
-
 // ========================================
+// RESPONSIVE STYLES
 // 1. CONTAINER
 // ========================================
 export const Container = (children, styles = {}) => {
@@ -49,6 +37,7 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
         color: ${colors.white};
         position: relative;
         overflow: hidden;
+        font-family: ${typography.fontFamily};
     `;
 
     // Animated background glow
@@ -102,21 +91,22 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
     const titleEl = document.createElement('h1');
     titleEl.textContent = title;
     titleEl.style.cssText = `
-        font-size: ${typography.sizes['4xl']};
+        font-size: 3.2rem;
         font-weight: ${typography.weights.extrabold};
-        letter-spacing: -0.5px;
+        letter-spacing: -1px;
         margin-bottom: ${spacing.xs};
         color: ${colors.white};
         text-align: center;
+        line-height: 1.2;
     `;
 
     // Tagline
     const taglineEl = document.createElement('p');
     taglineEl.textContent = tagline;
     taglineEl.style.cssText = `
-        font-size: ${typography.sizes.lg};
-        font-weight: ${typography.weights.light};
-        opacity: 0.9;
+        font-size: 1.35rem;
+        font-weight: ${typography.weights.normal};
+        opacity: 0.95;
         margin-bottom: ${spacing.md};
         color: ${colors.white};
         text-align: center;
@@ -126,8 +116,8 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
     const descEl = document.createElement('p');
     descEl.textContent = description;
     descEl.style.cssText = `
-        font-size: ${typography.sizes.sm};
-        opacity: 0.8;
+        font-size: 1.05rem;
+        opacity: 0.85;
         line-height: 1.8;
         margin-bottom: ${spacing.lg};
         color: ${colors.white};
@@ -140,8 +130,8 @@ export const Branding = (title, tagline, description, features, logoUrl) => {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: ${spacing.sm};
-        font-size: ${typography.sizes.sm};
-        max-width: 400px;
+        font-size: 1.05rem;
+        max-width: 440px;
         margin: 0 auto;
     `;
 
@@ -178,9 +168,9 @@ export const FormCard = (title, subtitle, children) => {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: ${spacing.xl};
+        padding: ${spacing.md};
         background: ${colors.gray50};
-        overflow-y: auto;
+        overflow: hidden;
         max-height: 100vh;
         min-width: 300px;
     `;
@@ -188,13 +178,15 @@ export const FormCard = (title, subtitle, children) => {
     const card = document.createElement('div');
     card.style.cssText = `
         background: ${colors.white};
-        padding: ${spacing['2xl']};
+        padding: ${spacing.lg};
         border-radius: ${radius.xl};
         box-shadow: ${shadows.lg};
         width: 100%;
         max-width: 520px;
-        max-height: 95vh;
+        max-height: 98vh;
         overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
         position: relative;
     `;
 
@@ -271,7 +263,7 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
     const group = document.createElement('div');
     group.className = 'form-group';
     group.style.cssText = `
-        margin-bottom: ${spacing.lg};
+        margin-bottom: 0.65rem;
         width: 100%;
         box-sizing: border-box;
     `;
@@ -282,7 +274,7 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
         font-weight: ${typography.weights.semibold};
         font-size: ${typography.sizes.sm};
         color: ${colors.gray700};
-        margin-bottom: ${spacing.xs};
+        margin-bottom: 4px;
     `;
     labelEl.innerHTML = label;
 
@@ -298,10 +290,10 @@ export const FormGroup = (label, inputElement, errorMessage = '') => {
         inputElement.style.cssText += `
             width: 100%;
             box-sizing: border-box;
-            padding: 12px 16px;
+            padding: 8px 12px;
             border: 2px solid ${colors.gray200};
             border-radius: ${radius.md};
-            font-size: ${typography.sizes.base};
+            font-size: 0.95rem;
             font-family: ${typography.fontFamily};
             background: ${colors.gray50};
             color: ${colors.gray800};
@@ -353,10 +345,10 @@ export const Input = (type, placeholder, value = '', styles = {}) => {
     input.value = value;
     input.style.cssText = `
         width: 100%;
-        padding: 12px 16px;
+        padding: 8px 12px;
         border: 2px solid ${colors.gray200};
         border-radius: ${radius.md};
-        font-size: ${typography.sizes.base};
+        font-size: 0.95rem;
         transition: all 0.2s ease;
         font-family: ${typography.fontFamily};
         background: ${colors.gray50};
@@ -400,10 +392,10 @@ export const PasswordInput = (placeholder, value = '') => {
     input.value = value;
     input.style.cssText = `
         width: 100%;
-        padding: 12px 48px 12px 16px;
+        padding: 8px 40px 8px 12px;
         border: 2px solid ${colors.gray200};
         border-radius: ${radius.md};
-        font-size: ${typography.sizes.base};
+        font-size: 0.95rem;
         transition: all 0.2s ease;
         font-family: ${typography.fontFamily};
         background: ${colors.gray50};
@@ -474,10 +466,10 @@ export const Select = (options, placeholder = 'Select', styles = {}) => {
     const select = document.createElement('select');
     select.style.cssText = `
         width: 100%;
-        padding: 12px 16px;
+        padding: 8px 12px;
         border: 2px solid ${colors.gray200};
         border-radius: ${radius.md};
-        font-size: ${typography.sizes.base};
+        font-size: 0.95rem;
         font-family: ${typography.fontFamily};
         background: ${colors.gray50};
         color: ${colors.gray700};
@@ -486,7 +478,7 @@ export const Select = (options, placeholder = 'Select', styles = {}) => {
         -webkit-appearance: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23616161' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
-        background-position: right 16px center;
+        background-position: right 12px center;
         cursor: pointer;
         box-sizing: border-box;
         ${Object.entries(styles).map(([key, value]) => `${key}: ${value};`).join('')}
@@ -531,12 +523,12 @@ export const Button = (text, type = 'submit', icon = '', styles = {}) => {
     btn.type = type;
     btn.style.cssText = `
         width: 100%;
-        padding: 14px;
+        padding: 10px;
         background: ${colors.primaryGradient};
         color: ${colors.white};
         border: none;
         border-radius: ${radius.md};
-        font-size: ${typography.sizes.base};
+        font-size: 0.95rem;
         font-weight: ${typography.weights.semibold};
         cursor: pointer;
         transition: all 0.3s ease;
@@ -576,8 +568,8 @@ export const AuthLink = (text, linkText, onClick) => {
     container.className = 'auth-links';
     container.style.cssText = `
         text-align: center;
-        margin-top: ${spacing.lg};
-        padding-top: ${spacing.md};
+        margin-top: 10px;
+        padding-top: 8px;
         border-top: 1px solid ${colors.gray200};
         width: 100%;
     `;
@@ -628,7 +620,7 @@ export const Footer = (text) => {
     footer.className = 'auth-footer';
     footer.style.cssText = `
         text-align: center;
-        margin-top: ${spacing.lg};
+        margin-top: 10px;
         color: ${colors.gray400};
         font-size: ${typography.sizes.xs};
         width: 100%;
@@ -692,12 +684,12 @@ export const SectionTitle = (text) => {
     const title = document.createElement('div');
     title.className = 'form-section-title';
     title.style.cssText = `
-        font-size: ${typography.sizes.sm};
+        font-size: 13px;
         font-weight: ${typography.weights.bold};
         color: ${colors.primary};
-        margin-top: ${spacing.lg};
-        margin-bottom: ${spacing.md};
-        padding-bottom: ${spacing.xs};
+        margin-top: 8px;
+        margin-bottom: 6px;
+        padding-bottom: 2px;
         border-bottom: 2px solid ${colors.gray200};
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -843,20 +835,21 @@ export const addResponsiveStyles = () => {
             }
         }
 
-        /* Scrollbar for auth card */
+        /* Hide scrollbar for auth card */
         .auth-card::-webkit-scrollbar {
-            width: 6px;
+            display: none;
         }
-        .auth-card::-webkit-scrollbar-track {
-            background: #f0f2f5;
-            border-radius: 50%;
-        }
-        .auth-card::-webkit-scrollbar-thumb {
-            background: #1a237e;
-            border-radius: 50%;
-        }
-        .auth-card::-webkit-scrollbar-thumb:hover {
-            background: #283593;
+
+        /* Fade In Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* Smooth transitions */
@@ -865,21 +858,4 @@ export const addResponsiveStyles = () => {
         }
     `;
     document.head.appendChild(style);
-};
-
-export default {
-    Container,
-    Branding,
-    FormCard,
-    FormGroup,
-    Input,
-    PasswordInput,
-    Select,
-    Button,
-    AuthLink,
-    Footer,
-    Toast,
-    SectionTitle,
-    FormRow,
-    addResponsiveStyles
 };

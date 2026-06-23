@@ -1,0 +1,11 @@
+Admin:
+
+ID: admin@hostelhub.com
+
+Pass: admin123
+
+Warden:
+
+ID: warden@hostelhub.com
+
+Pass: warden123

@@ -10,6 +10,9 @@
 import createLoginPage from './design/login_design.js';
 import createSignupPage from './design/signup_design.js';
 import createDashboardPage from './design/dashboard_design.js';
+import {
+    createWardenDashboard
+} from './design/warden_dashboard.js';
 
 console.log('🏠 HostelHub Design Preview loaded!');
 
@@ -92,3 +95,12 @@ console.log('💡 Click "Sign Up" or "Sign In" to switch pages');
 window.addEventListener('resize', function() {
     console.log('Window resized to: ' + window.innerWidth + 'px');
 });
+if (user.role === 'warden') {
+    root.innerHTML = '';
+    root.appendChild(
+        createWardenDashboard(
+            user,
+            handleLogout
+        )
+    );
+}
