@@ -9,42 +9,79 @@
 
 import createLoginPage from './design/login_design.js';
 import createSignupPage from './design/signup_design.js';
+import createDashboardPage from './design/dashboard_design.js';
 
 console.log('🏠 HostelHub Design Preview loaded!');
 
 const root = document.getElementById('root');
 
-// Clear root
-root.innerHTML = '';
+function renderApp() {
+    // Clear root
+    root.innerHTML = '';
 
-// Create both pages
-const loginPage = createLoginPage();
-const signupPage = createSignupPage();
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
 
-// Store references for toggling
-loginPage.id = 'loginContainer';
-signupPage.id = 'signupContainer';
+    if (token && userStr) {
+        // User is logged in, show Dashboard
+        try {
+            const user = JSON.parse(userStr);
+            const dashboardPage = createDashboardPage(user, token, () => {
+                renderApp();
+            });
+            root.appendChild(dashboardPage);
+            console.log('🔑 Logged in: Rendered dashboard');
+        } catch (e) {
+            console.error('Error parsing user data, logging out:', e);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            renderApp();
+        }
+    } else {
+        // User not logged in, show Login/Signup forms
+        const loginPage = createLoginPage();
+        const signupPage = createSignupPage();
 
-// Show login first
-loginPage.style.display = 'flex';
-signupPage.style.display = 'none';
+        // Store references for toggling
+        loginPage.id = 'loginContainer';
+        signupPage.id = 'signupContainer';
 
-root.appendChild(loginPage);
-root.appendChild(signupPage);
+        // Show login first
+        loginPage.style.display = 'flex';
+        signupPage.style.display = 'none';
+
+        root.appendChild(loginPage);
+        root.appendChild(signupPage);
+        console.log('🚪 Logged out: Rendered auth views');
+    }
+}
+
+// Watch for authentication changes
+window.addEventListener('authChange', () => {
+    renderApp();
+});
+
+// Render the application initially
+renderApp();
 
 // Toggle between pages
 document.addEventListener('click', function(e) {
     const link = e.target.closest('.auth-link');
     if (link) {
         const text = link.textContent.trim();
-        if (text === 'Sign Up') {
-            loginPage.style.display = 'none';
-            signupPage.style.display = 'flex';
-            console.log('🔄 Switched to Sign Up page');
-        } else if (text === 'Sign In') {
-            signupPage.style.display = 'none';
-            loginPage.style.display = 'flex';
-            console.log('🔄 Switched to Login page');
+        const loginPage = document.getElementById('loginContainer');
+        const signupPage = document.getElementById('signupContainer');
+        
+        if (loginPage && signupPage) {
+            if (text === 'Sign Up') {
+                loginPage.style.display = 'none';
+                signupPage.style.display = 'flex';
+                console.log('🔄 Switched to Sign Up page');
+            } else if (text === 'Sign In') {
+                signupPage.style.display = 'none';
+                loginPage.style.display = 'flex';
+                console.log('🔄 Switched to Login page');
+            }
         }
     }
 });
