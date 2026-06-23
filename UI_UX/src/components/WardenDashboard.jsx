@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function WardenDashboard({ user, onLogout }) {
-  const name = user ? user.fullName : 'Warden User';
+  const name = user && user.fullName ? user.fullName : 'Warden User';
 
   const stats = [
     { value: '250', label: 'Total Students' },
