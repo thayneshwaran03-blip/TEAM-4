@@ -1,0 +1,2928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HostelHub · College Utilities</title>
+
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com">
+    </script>
+    <!-- FontAwesome via CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <!-- Chart.js via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
+    </script>
+
+    <style>
+        /* --- Inter font --- */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap');
+
+        * {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #F8FAFC;
+        }
+
+        #sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 20px;
+        }
+
+        .stat-card {
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px -8px rgba(37, 99, 235, 0.12);
+        }
+
+        .nav-link.active {
+            background: #2563EB;
+            color: #fff !important;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.30);
+        }
+        .nav-link.active i {
+            color: #fff !important;
+        }
+        .nav-link.active .nav-text {
+            color: #fff !important;
+        }
+
+        .nav-link {
+            transition: background 0.15s, color 0.15s;
+            cursor: pointer;
+        }
+        .nav-link:hover:not(.active) {
+            background: #eef2ff;
+        }
+
+        .badge-paid {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+        .badge-unpaid {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .badge-pending {
+            background: #fef9c3;
+            color: #ca8a04;
+        }
+        .badge-approved {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+        .badge-rejected {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .status-open {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+        .status-resolved {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+        .status-progress {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .login-left {
+            background: linear-gradient(145deg, #1e40af, #2563eb);
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .view-container {
+            animation: fadeIn 0.25s ease;
+        }
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                z-index: 1000;
+                width: 280px;
+                transition: transform 0.25s ease;
+                box-shadow: 8px 0 30px rgba(0, 0, 0, 0.08);
+            }
+            #sidebar.open {
+                transform: translateX(0);
+            }
+            #sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.25);
+                z-index: 999;
+            }
+            #sidebar-overlay.active {
+                display: block;
+            }
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 220px;
+        }
+        .chart-wrapper-bar {
+            position: relative;
+            height: 200px;
+        }
+
+        .truncate-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Toast container */
+        #toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 380px;
+            width: 100%;
+            pointer-events: none;
+        }
+        .toast-item {
+            pointer-events: auto;
+            padding: 14px 20px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+            border-left: 4px solid #2563EB;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #0b1e3a;
+        }
+        .toast-item.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        .toast-item.hide {
+            transform: translateX(120%);
+            opacity: 0;
+        }
+        .toast-item.success {
+            border-left-color: #16a34a;
+        }
+        .toast-item.success .toast-icon {
+            color: #16a34a;
+        }
+        .toast-item.error {
+            border-left-color: #dc2626;
+        }
+        .toast-item.error .toast-icon {
+            color: #dc2626;
+        }
+        .toast-icon {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+        .toast-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0 4px;
+            transition: color 0.2s;
+        }
+        .toast-close:hover {
+            color: #0b1e3a;
+        }
+        .toast-message {
+            flex: 1;
+        }
+
+        /* Role toggle button group */
+        .role-toggle-btn {
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .role-toggle-btn.active {
+            background: #2563EB;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            border-color: #2563EB;
+        }
+        .role-toggle-btn:not(.active):hover {
+            background: #eef2ff;
+        }
+
+        /* Modal overlay */
+        #modalOverlay {
+            transition: opacity 0.25s ease;
+        }
+        #modalOverlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #modalOverlay:not(.hidden) {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #modalContent {
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+        #modalOverlay.hidden #modalContent {
+            transform: scale(0.95);
+            opacity: 0;
+        }
+        #modalOverlay:not(.hidden) #modalContent {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        /* Notification panel */
+        #notificationPanel {
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform-origin: top right;
+        }
+        #notificationPanel.hidden {
+            opacity: 0;
+            transform: scale(0.95) translateY(-10px);
+            pointer-events: none;
+        }
+        #notificationPanel:not(.hidden) {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            pointer-events: auto;
+        }
+        .notification-item {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 0.75rem 1rem;
+            transition: background 0.15s;
+        }
+        .notification-item:last-child {
+            border-bottom: none;
+        }
+        .notification-item:hover {
+            background: #f8fafc;
+        }
+        .notification-item.unread {
+            border-left: 3px solid #2563EB;
+            background: #f0f7ff;
+        }
+        .notification-item.unread:hover {
+            background: #e6f0ff;
+        }
+
+        /* Custom status dropdown */
+        .status-select {
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            outline: none;
+            cursor: pointer;
+        }
+        .status-select:focus {
+            border-color: #2563EB;
+            ring: 2px solid rgba(37,99,235,0.3);
+        }
+        .status-select option {
+            background: white;
+            color: #0b1e3a;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================ -->
+    <!-- TOAST CONTAINER                                               -->
+    <!-- ============================================================ -->
+    <div id="toast-container"></div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL OVERLAY                                                 -->
+    <!-- ============================================================ -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[999] hidden">
+        <div id="modalContent" class="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6 transform transition-all">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="modalTitle" class="text-xl font-bold text-[#0b1e3a]">Modal Title</h3>
+                <button id="modalCloseBtn" class="text-gray-400 hover:text-gray-600 text-lg"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="modalBody" class="text-sm text-gray-600"></div>
+            <div id="modalFooter" class="mt-6 flex justify-end gap-3">
+                <button id="modalCancelBtn" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition text-sm font-medium">Cancel</button>
+                <button id="modalConfirmBtn" class="px-4 py-2 bg-[#2563EB] text-white rounded-lg hover:bg-[#1d4ed8] transition text-sm font-medium">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- NOTIFICATION PANEL (dropdown)                                 -->
+    <!-- ============================================================ -->
+    <div id="notificationPanel" class="hidden fixed right-6 top-16 w-80 bg-white rounded-xl shadow-2xl border border-gray-200/80 z-[800] max-h-[400px] overflow-y-auto no-scrollbar">
+        <div class="sticky top-0 bg-white/80 backdrop-blur-sm px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span class="font-semibold text-gray-800 text-sm">Notifications</span>
+            <button id="markAllReadBtn" class="text-xs text-[#2563EB] hover:text-[#1d4ed8] font-medium">Mark all as read</button>
+        </div>
+        <div id="notificationList" class="divide-y divide-gray-100">
+            <!-- dynamic items -->
+        </div>
+        <div id="notificationEmpty" class="px-4 py-6 text-center text-sm text-gray-400">No notifications</div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- SIDEBAR OVERLAY (mobile)                                      -->
+    <!-- ============================================================ -->
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- ============================================================ -->
+    <!-- APP WRAPPER                                                   -->
+    <!-- ============================================================ -->
+    <div id="app" class="flex min-h-screen bg-[#F8FAFC]">
+
+        <!-- ========================================================== -->
+        <!-- SIDEBAR                                                     -->
+        <!-- ========================================================== -->
+        <aside id="sidebar"
+        class="w-[260px] min-h-screen bg-white border-r border-gray-200/70 flex-shrink-0 flex flex-col overflow-y-auto no-scrollbar sticky top-0 z-50 transition-transform duration-250">
+
+        <!-- Logo -->
+        <div class="px-5 pt-6 pb-4 border-b border-gray-100">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-[#2563EB] flex items-center justify-center text-white shadow-md shadow-blue-500/25">
+                    <i class="fas fa-building text-sm"></i>
+                </div>
+                <span class="text-xl font-bold text-[#0b1e3a] tracking-tight">Hostel<span class="text-[#2563EB]">Hub</span></span>
+            </div>
+        </div>
+
+        <!-- User Badge -->
+        <div class="px-4 py-4 border-b border-gray-100">
+            <div class="flex items-center gap-3">
+                <div id="sidebar-avatar" class="w-10 h-10 rounded-full bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] font-semibold text-sm ring-2 ring-white shadow-sm">
+                    JD
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p id="sidebar-username" class="text-sm font-semibold text-gray-800 truncate">John Doe</p>
+                    <p id="sidebar-role" class="text-[11px] font-medium text-gray-400 truncate">Student</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav id="sidebar-nav" class="flex-1 px-3 py-4 space-y-1">
+            <!-- Dynamic nav links rendered by JS -->
+        </nav>
+    </aside>
+
+    <!-- ========================================================== -->
+    <!-- MAIN CONTENT                                               -->
+    <!-- ========================================================== -->
+    <main class="flex-1 min-w-0 flex flex-col">
+
+        <!-- TOP HEADER -->
+        <header class="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <button id="menuToggle" class="lg:hidden text-gray-600 hover:text-[#2563EB] text-xl p-1 -ml-2">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 id="pageTitle" class="text-lg font-semibold text-[#0b1e3a]">Dashboard</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <!-- Notification Bell -->
+                <div class="relative">
+                    <button id="notificationBell" class="text-gray-400 hover:text-gray-600 text-lg relative transition">
+                        <i class="fas fa-bell"></i>
+                        <span id="notificationBadge" class="absolute -top-1 -right-1.5 w-4 h-4 bg-red-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center">0</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div id="header-avatar" class="w-9 h-9 rounded-full bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] font-semibold text-sm ring-2 ring-white shadow-sm">
+                        JD
+                    </div>
+                    <div class="hidden sm:block text-right leading-tight">
+                        <p id="header-username" class="text-sm font-semibold text-gray-800">John Doe</p>
+                        <p id="header-role" class="text-[11px] font-medium text-gray-400">Student</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- VIEW CONTAINER -->
+        <div id="viewContainer" class="flex-1 p-6 overflow-y-auto view-container">
+            <!-- Dynamic content rendered here -->
+        </div>
+
+    </main>
+</div>
+
+<!-- ============================================================ -->
+<!-- JAVASCRIPT — ALL LOGIC                                        -->
+<!-- ============================================================ -->
+<script>
+    (function() {
+        'use strict';
+
+        // =============================================================
+        // 1.  DEFAULT DATA (seed)
+        // =============================================================
+        const DEFAULT_DATA = {
+            users: [{
+                id: 'u1',
+                name: 'Admin User',
+                email: 'admin@hostelhub.com',
+                password: 'admin123',
+                role: 'admin',
+                roomId: null,
+                avatar: 'AU'
+            }, {
+                id: 'u2',
+                name: 'Dr. Sarah Warden',
+                email: 'warden@hostelhub.com',
+                password: 'warden123',
+                role: 'warden',
+                roomId: null,
+                avatar: 'SW'
+            }, {
+                id: 'u3',
+                name: 'John Doe',
+                email: 'student@hostelhub.com',
+                password: 'student123',
+                role: 'student',
+                roomId: 'r1',
+                avatar: 'JD'
+            }, {
+                id: 'u4',
+                name: 'Michael Chen',
+                email: 'michael@hostel.edu',
+                password: 'pass123',
+                role: 'student',
+                roomId: 'r3',
+                avatar: 'MC'
+            }, {
+                id: 'u5',
+                name: 'Priya Sharma',
+                email: 'priya@hostel.edu',
+                password: 'pass123',
+                role: 'student',
+                roomId: 'r3',
+                avatar: 'PS'
+            }],
+            rooms: [{
+                id: 'r1',
+                number: 'A-101',
+                type: 'Single',
+                capacity: 1,
+                occupied: 1,
+                students: ['u3']
+            }, {
+                id: 'r2',
+                number: 'A-102',
+                type: 'Single',
+                capacity: 1,
+                occupied: 0,
+                students: []
+            }, {
+                id: 'r3',
+                number: 'B-204',
+                type: 'Double',
+                capacity: 2,
+                occupied: 2,
+                students: ['u4', 'u5']
+            }, {
+                id: 'r4',
+                number: 'C-312',
+                type: 'Double',
+                capacity: 2,
+                occupied: 0,
+                students: []
+            }, {
+                id: 'r5',
+                number: 'D-105',
+                type: 'Single',
+                capacity: 1,
+                occupied: 0,
+                students: []
+            }],
+            complaints: [{
+                id: 'c1',
+                title: 'WiFi not working in Block A',
+                category: 'Internet',
+                description: 'The WiFi signal is extremely weak in rooms A-101 to A-110 since yesterday.',
+                status: 'open',
+                createdAt: '2026-06-18T10:30:00Z',
+                createdBy: 'u3',
+                resolvedBy: null
+            }, {
+                id: 'c2',
+                title: 'Water heater malfunction',
+                category: 'Maintenance',
+                description: 'The water heater on floor 3 is not heating water properly.',
+                status: 'in-progress',
+                createdAt: '2026-06-16T14:20:00Z',
+                createdBy: 'u4',
+                resolvedBy: null
+            }, {
+                id: 'c3',
+                title: 'Noise disturbance after 11 PM',
+                category: 'Discipline',
+                description: 'Loud music from room B-210 every night past 11 PM.',
+                status: 'open',
+                createdAt: '2026-06-14T22:10:00Z',
+                createdBy: 'u5',
+                resolvedBy: null
+            }, {
+                id: 'c4',
+                title: 'Broken window in common room',
+                category: 'Maintenance',
+                description: 'The window near the TV area is cracked and needs immediate repair.',
+                status: 'resolved',
+                createdAt: '2026-06-10T09:15:00Z',
+                createdBy: 'u3',
+                resolvedBy: 'u2'
+            }],
+            fees: [{
+                id: 'f1',
+                studentId: 'u3',
+                title: 'Hostel Rent - June 2026',
+                amount: 4500,
+                dueDate: '2026-06-30',
+                status: 'unpaid',
+                invoiceNo: 'INV-2026-001'
+            }, {
+                id: 'f2',
+                studentId: 'u3',
+                title: 'Mess Bill - May 2026',
+                amount: 3200,
+                dueDate: '2026-06-05',
+                status: 'paid',
+                invoiceNo: 'INV-2026-002'
+            }, {
+                id: 'f3',
+                studentId: 'u3',
+                title: 'Electricity & Water - May 2026',
+                amount: 1800,
+                dueDate: '2026-06-10',
+                status: 'unpaid',
+                invoiceNo: 'INV-2026-003'
+            }, {
+                id: 'f4',
+                studentId: 'u4',
+                title: 'Hostel Rent - June 2026',
+                amount: 4500,
+                dueDate: '2026-06-30',
+                status: 'unpaid',
+                invoiceNo: 'INV-2026-004'
+            }, {
+                id: 'f5',
+                studentId: 'u5',
+                title: 'Hostel Rent - June 2026',
+                amount: 4500,
+                dueDate: '2026-06-30',
+                status: 'paid',
+                invoiceNo: 'INV-2026-005'
+            }],
+            leaves: [{
+                id: 'l1',
+                studentId: 'u3',
+                from: '2026-07-01',
+                to: '2026-07-05',
+                reason: 'Family vacation',
+                status: 'approved',
+                approvedBy: 'u2'
+            }, {
+                id: 'l2',
+                studentId: 'u4',
+                from: '2026-06-25',
+                to: '2026-06-27',
+                reason: 'Medical appointment',
+                status: 'pending',
+                approvedBy: null
+            }, {
+                id: 'l3',
+                studentId: 'u5',
+                from: '2026-07-10',
+                to: '2026-07-12',
+                reason: 'Personal work',
+                status: 'pending',
+                approvedBy: null
+            }],
+            announcements: [{
+                id: 'a1',
+                title: 'Summer Vacation Notice',
+                content: 'Hostel will be closed from July 15th to August 10th. Please plan accordingly.',
+                date: '2026-06-20',
+                author: 'Warden Office'
+            }, {
+                id: 'a2',
+                title: 'WiFi Upgrade Scheduled',
+                content: 'Network maintenance on June 25th from 2 AM to 5 AM. Service may be interrupted.',
+                date: '2026-06-19',
+                author: 'IT Department'
+            }, {
+                id: 'a3',
+                title: 'Mess Menu Changes',
+                content: 'New summer menu starts July 1st. Check the notice board for details.',
+                date: '2026-06-17',
+                author: 'Mess Committee'
+            }],
+            visitors: [{
+                id: 'v1',
+                studentId: 'u3',
+                name: 'Robert Johnson',
+                relation: 'Father',
+                phone: '+91 98765 43210',
+                visitDate: '2026-06-15',
+                inTime: '10:30 AM',
+                outTime: '12:15 PM'
+            }, {
+                id: 'v2',
+                studentId: 'u3',
+                name: 'Emily Davis',
+                relation: 'Sister',
+                phone: '+91 87654 32109',
+                visitDate: '2026-06-12',
+                inTime: '4:00 PM',
+                outTime: '6:30 PM'
+            }, {
+                id: 'v3',
+                studentId: 'u4',
+                name: 'James Chen',
+                relation: 'Brother',
+                phone: '+91 99887 76655',
+                visitDate: '2026-06-18',
+                inTime: '11:00 AM',
+                outTime: '1:30 PM'
+            }],
+            notifications: []
+        };
+
+        // =============================================================
+        // 2.  DATA STORE (localStorage)
+        // =============================================================
+        const STORAGE_KEY = 'hostelhub_data';
+
+        function loadData() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    return deepMerge(DEFAULT_DATA, parsed);
+                }
+            } catch (_) { /* ignore */ }
+            return JSON.parse(JSON.stringify(DEFAULT_DATA));
+        }
+
+        function saveData(data) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function deepMerge(target, source) {
+            const result = JSON.parse(JSON.stringify(target));
+            for (const key in source) {
+                if (source.hasOwnProperty(key)) {
+                    if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+                        result[key] = deepMerge(result[key] || {}, source[key]);
+                    } else {
+                        result[key] = source[key];
+                    }
+                }
+            }
+            return result;
+        }
+
+        let appData = loadData();
+
+        function persist() {
+            saveData(appData);
+        }
+
+        // =============================================================
+        // 3.  STATE
+        // =============================================================
+        let currentUser = null;
+        let currentView = 'dashboard';
+        let doughnutChart = null;
+        let barChart = null;
+
+        // DOM refs
+        const viewContainer = document.getElementById('viewContainer');
+        const pageTitle = document.getElementById('pageTitle');
+        const sidebarNav = document.getElementById('sidebar-nav');
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        const toastContainer = document.getElementById('toast-container');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+        const modalCancelBtn = document.getElementById('modalCancelBtn');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        const notificationBell = document.getElementById('notificationBell');
+        const notificationPanel = document.getElementById('notificationPanel');
+        const notificationList = document.getElementById('notificationList');
+        const notificationEmpty = document.getElementById('notificationEmpty');
+        const markAllReadBtn = document.getElementById('markAllReadBtn');
+        const notificationBadge = document.getElementById('notificationBadge');
+
+        // =============================================================
+        // 4.  TOAST SYSTEM
+        // =============================================================
+        function showToast(message, type = 'success', duration = 3500) {
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+            const toast = document.createElement('div');
+            toast.className = `toast-item ${type}`;
+            toast.innerHTML = `
+                <span class="toast-icon"><i class="fas ${icon}"></i></span>
+                <span class="toast-message">${message}</span>
+                <button class="toast-close"><i class="fas fa-times"></i></button>
+            `;
+            toastContainer.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            toast.querySelector('.toast-close').addEventListener('click', () => {
+                dismissToast(toast);
+            });
+
+            const timer = setTimeout(() => {
+                dismissToast(toast);
+            }, duration);
+            toast._timer = timer;
+            return toast;
+        }
+
+        function dismissToast(toast) {
+            if (toast._dismissed) return;
+            toast._dismissed = true;
+            clearTimeout(toast._timer);
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 350);
+        }
+
+        // =============================================================
+        // 5.  MODAL SYSTEM (extended)
+        // =============================================================
+        let modalCallback = null;
+
+        function showModal(title, bodyHTML, confirmText = 'Confirm', cancelText = 'Cancel', onConfirm = null) {
+            modalTitle.textContent = title;
+            modalBody.innerHTML = bodyHTML;
+            modalConfirmBtn.textContent = confirmText;
+            modalCancelBtn.textContent = cancelText;
+            modalCallback = onConfirm;
+            modalOverlay.classList.remove('hidden');
+            setTimeout(() => modalConfirmBtn.focus(), 50);
+        }
+
+        function closeModal() {
+            modalOverlay.classList.add('hidden');
+            modalCallback = null;
+        }
+
+        modalCloseBtn.addEventListener('click', closeModal);
+        modalCancelBtn.addEventListener('click', closeModal);
+        modalConfirmBtn.addEventListener('click', function() {
+            if (typeof modalCallback === 'function') {
+                modalCallback();
+            }
+            closeModal();
+        });
+        modalOverlay.addEventListener('click', function(e) {
+            if (e.target === modalOverlay) closeModal();
+        });
+
+        // Helper: open edit modal with form fields and a save callback
+        function openEditModal(title, formHTML, onSave) {
+            showModal(title, formHTML, 'Save Changes', 'Cancel', onSave);
+        }
+
+        // Helper: open delete confirmation modal
+        function confirmDelete(message, onConfirm) {
+            showModal('Confirm Delete', `<p class="text-gray-600">${message}</p>`, 'Delete', 'Cancel', onConfirm);
+        }
+
+        // =============================================================
+        // 6.  NOTIFICATION SYSTEM (unchanged)
+        // =============================================================
+        function addNotification(message, targetRole = 'all', type = 'info') {
+            const notif = {
+                id: generateId(),
+                message,
+                targetRole,
+                type,
+                read: false,
+                timestamp: new Date().toISOString()
+            };
+            appData.notifications.push(notif);
+            persist();
+            updateNotificationBadge();
+            if (!notificationPanel.classList.contains('hidden')) {
+                renderNotificationPanel();
+            }
+        }
+
+        function getNotificationsForUser(user) {
+            if (!user) return [];
+            if (user.role === 'admin') {
+                return appData.notifications.filter(n => n.targetRole === 'admin' || n.targetRole === 'all');
+            } else if (user.role === 'warden') {
+                return appData.notifications.filter(n => n.targetRole === 'warden' || n.targetRole === 'all');
+            } else {
+                return appData.notifications.filter(n => n.targetRole === 'student' || n.targetRole === 'all');
+            }
+        }
+
+        function getUnreadCount(user) {
+            const notifs = getNotificationsForUser(user);
+            return notifs.filter(n => !n.read).length;
+        }
+
+        function updateNotificationBadge() {
+            const count = currentUser ? getUnreadCount(currentUser) : 0;
+            notificationBadge.textContent = count;
+            notificationBadge.style.display = count > 0 ? 'flex' : 'none';
+        }
+
+        function renderNotificationPanel() {
+            if (!currentUser) {
+                notificationList.innerHTML = '';
+                notificationEmpty.style.display = 'block';
+                return;
+            }
+            const notifs = getNotificationsForUser(currentUser);
+            notifs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            if (notifs.length === 0) {
+                notificationList.innerHTML = '';
+                notificationEmpty.style.display = 'block';
+                return;
+            }
+            notificationEmpty.style.display = 'none';
+            notificationList.innerHTML = notifs.map(n => `
+                <div class="notification-item ${n.read ? '' : 'unread'} flex items-start gap-3">
+                    <div class="flex-1">
+                        <p class="text-sm text-gray-800">${n.message}</p>
+                        <span class="text-xs text-gray-400">${formatDate(n.timestamp)}</span>
+                    </div>
+                    ${!n.read ? `<button class="mark-read-btn text-xs text-[#2563EB] hover:text-[#1d4ed8]" data-id="${n.id}">Mark read</button>` : ''}
+                </div>
+            `).join('');
+
+            notificationList.querySelectorAll('.mark-read-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const id = this.dataset.id;
+                    const notif = appData.notifications.find(n => n.id === id);
+                    if (notif) {
+                        notif.read = true;
+                        persist();
+                        renderNotificationPanel();
+                        updateNotificationBadge();
+                    }
+                });
+            });
+        }
+
+        markAllReadBtn.addEventListener('click', function() {
+            if (!currentUser) return;
+            const notifs = getNotificationsForUser(currentUser);
+            notifs.forEach(n => {
+                const found = appData.notifications.find(not => not.id === n.id);
+                if (found) found.read = true;
+            });
+            persist();
+            renderNotificationPanel();
+            updateNotificationBadge();
+        });
+
+        notificationBell.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isHidden = notificationPanel.classList.contains('hidden');
+            if (isHidden) {
+                renderNotificationPanel();
+                notificationPanel.classList.remove('hidden');
+            } else {
+                notificationPanel.classList.add('hidden');
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!notificationPanel.classList.contains('hidden')) {
+                const target = e.target;
+                if (!notificationPanel.contains(target) && target !== notificationBell && !notificationBell.contains(
+                        target)) {
+                    notificationPanel.classList.add('hidden');
+                }
+            }
+        });
+
+        // =============================================================
+        // 7.  HELPERS
+        // =============================================================
+        function formatDate(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+
+        function formatCurrency(amount) {
+            return '₹' + Number(amount).toLocaleString('en-IN');
+        }
+
+        function getInitials(name) {
+            if (!name) return '?';
+            const parts = name.trim().split(/\s+/);
+            if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+
+        function getUserById(id) {
+            return appData.users.find(u => u.id === id);
+        }
+
+        function getStudents() {
+            return appData.users.filter(u => u.role === 'student');
+        }
+
+        function getWardens() {
+            return appData.users.filter(u => u.role === 'warden');
+        }
+
+        function getRoomById(id) {
+            return appData.rooms.find(r => r.id === id);
+        }
+
+        function getRoomForStudent(studentId) {
+            return appData.rooms.find(r => r.students && r.students.includes(studentId));
+        }
+
+        function getStudentFees(studentId) {
+            return appData.fees.filter(f => f.studentId === studentId);
+        }
+
+        function getStudentComplaints(studentId) {
+            return appData.complaints.filter(c => c.createdBy === studentId);
+        }
+
+        function getStudentLeaves(studentId) {
+            return appData.leaves.filter(l => l.studentId === studentId);
+        }
+
+        function getStudentVisitors(studentId) {
+            return appData.visitors.filter(v => v.studentId === studentId);
+        }
+
+        function getTotalOutstanding(studentId) {
+            return appData.fees
+                .filter(f => f.studentId === studentId && f.status === 'unpaid')
+                .reduce((sum, f) => sum + Number(f.amount), 0);
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        }
+
+        // =============================================================
+        // 8.  SIDEBAR / NAV
+        // =============================================================
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+        }
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            overlay.classList.add('active');
+        }
+
+        menuToggle.addEventListener('click', openSidebar);
+        overlay.addEventListener('click', closeSidebar);
+
+        function getNavLinks(role) {
+            const common = [
+                { view: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' }
+            ];
+            const adminLinks = [
+                { view: 'manage-students', label: 'Manage Students', icon: 'fa-user-graduate' },
+                { view: 'manage-rooms', label: 'Manage Rooms', icon: 'fa-door-open' },
+                { view: 'manage-wardens', label: 'Manage Wardens', icon: 'fa-user-tie' },
+                { view: 'manage-fees', label: 'Manage Fees', icon: 'fa-money-bill-wave' },
+                { view: 'system-reports', label: 'System Reports', icon: 'fa-chart-bar' },
+            ];
+            const wardenLinks = [
+                { view: 'room-occupancy', label: 'Room Occupancy', icon: 'fa-bed' },
+                { view: 'leaves-approval', label: 'Leaves Approval', icon: 'fa-check-double' },
+                { view: 'visitor-entries', label: 'Visitor Entries', icon: 'fa-address-book' },
+                { view: 'complaints-resolver', label: 'Complaints Resolver', icon: 'fa-tools' },
+            ];
+            const studentLinks = [
+                { view: 'profile', label: 'My Profile', icon: 'fa-user' },
+                { view: 'room', label: 'My Room', icon: 'fa-door-open' },
+                { view: 'leave', label: 'Apply Leave', icon: 'fa-calendar-check' },
+                { view: 'complaints', label: 'Complaints', icon: 'fa-exclamation-triangle' },
+                { view: 'fees', label: 'Fees & Dues', icon: 'fa-credit-card' },
+                { view: 'announcements', label: 'Announcements', icon: 'fa-bullhorn' },
+                { view: 'visitors', label: 'My Visitor History', icon: 'fa-address-book' },
+                { view: 'gatepass', label: 'QR Gate Pass', icon: 'fa-qrcode' },
+            ];
+
+            if (role === 'admin') return [...common, ...adminLinks];
+            if (role === 'warden') return [...common, ...wardenLinks];
+            return [...common, ...studentLinks];
+        }
+
+        function renderSidebar(role) {
+            const links = getNavLinks(role);
+            const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+            let html = `
+                <div class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">${roleLabel} Menu</div>
+            `;
+            links.forEach(link => {
+                const active = link.view === currentView ? 'active' : '';
+                html += `
+                    <a href="#" data-view="${link.view}" class="nav-link ${active} flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 transition-all">
+                        <i class="fas ${link.icon} w-5 text-center text-gray-400 text-[15px]"></i>
+                        <span class="nav-text">${link.label}</span>
+                    </a>
+                `;
+            });
+            html += `
+                <div class="border-t border-gray-100 my-4"></div>
+                <a href="#" id="signOutBtn" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 transition-all">
+                    <i class="fas fa-sign-out-alt w-5 text-center text-red-400 text-[15px]"></i>
+                    <span>Sign Out</span>
+                </a>
+            `;
+            sidebarNav.innerHTML = html;
+
+            sidebarNav.querySelectorAll('.nav-link[data-view]').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const view = link.dataset.view;
+                    if (view) {
+                        closeSidebar();
+                        navigateTo(view);
+                    }
+                });
+            });
+
+            document.getElementById('signOutBtn').addEventListener('click', (e) => {
+                e.preventDefault();
+                signOut();
+            });
+        }
+
+        // =============================================================
+        // 9.  AUTHENTICATION
+        // =============================================================
+        function login(email, password, selectedRole) {
+            const user = appData.users.find(u =>
+                u.email.toLowerCase() === email.toLowerCase() &&
+                u.password === password
+            );
+            if (!user) {
+                showToast('Invalid email or password. Please try again.', 'error');
+                return false;
+            }
+            if (user.role !== selectedRole) {
+                showToast(`Invalid role selected. Please select "${user.role.charAt(0).toUpperCase() + user.role.slice(1)}".`, 'error');
+                return false;
+            }
+            currentUser = user;
+            updateUserUI(user);
+            showToast(`Welcome back, ${user.name}!`, 'success');
+            sidebar.style.display = 'flex';
+            document.querySelector('header').style.display = 'flex';
+            currentView = 'dashboard';
+            renderSidebar(user.role);
+            navigateTo('dashboard');
+            updateNotificationBadge();
+            return true;
+        }
+
+        function signOut() {
+            if (doughnutChart) { doughnutChart.destroy();
+                doughnutChart = null; }
+            if (barChart) { barChart.destroy();
+                barChart = null; }
+            currentUser = null;
+            sidebar.style.display = 'none';
+            document.querySelector('header').style.display = 'none';
+            notificationPanel.classList.add('hidden');
+            showLogin();
+            showToast('Signed out successfully.', 'success');
+        }
+
+        function updateUserUI(user) {
+            const init = getInitials(user.name);
+            document.getElementById('sidebar-avatar').textContent = init;
+            document.getElementById('sidebar-username').textContent = user.name;
+            document.getElementById('sidebar-role').textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+            document.getElementById('header-avatar').textContent = init;
+            document.getElementById('header-username').textContent = user.name;
+            document.getElementById('header-role').textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+        }
+
+        // =============================================================
+        // 10. LOGIN SCREEN (clean)
+        // =============================================================
+        function showLogin() {
+            viewContainer.innerHTML = `
+                <div class="flex items-center justify-center min-h-[80vh]">
+                    <div class="w-full max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col md:flex-row">
+                        <div class="login-left md:w-2/5 p-8 md:p-10 text-white flex flex-col justify-center">
+                            <div class="flex items-center gap-3 mb-6">
+                                <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center text-white text-xl shadow-lg">
+                                    <i class="fas fa-building"></i>
+                                </div>
+                                <span class="text-2xl font-bold tracking-tight">Hostel<span class="font-light">Hub</span></span>
+                            </div>
+                            <h2 class="text-3xl font-bold leading-tight mb-3">Centralized College Utilities</h2>
+                            <p class="text-white/80 text-sm leading-relaxed mb-6">Manage complaints, fees, leaves, and more — all in one place.</p>
+                            <div class="space-y-2.5 text-sm text-white/70">
+                                <div class="flex items-center gap-3"><i class="fas fa-check-circle text-white/80 w-5"></i><span>Submit & track complaints</span></div>
+                                <div class="flex items-center gap-3"><i class="fas fa-check-circle text-white/80 w-5"></i><span>View fees & settle invoices</span></div>
+                                <div class="flex items-center gap-3"><i class="fas fa-check-circle text-white/80 w-5"></i><span>Apply for leaves</span></div>
+                                <div class="flex items-center gap-3"><i class="fas fa-check-circle text-white/80 w-5"></i><span>QR gate pass for visitors</span></div>
+                            </div>
+                        </div>
+                        <div class="md:w-3/5 p-8 md:p-10 flex flex-col justify-center">
+                            <h3 class="text-2xl font-bold text-[#0b1e3a] mb-1">Welcome back</h3>
+                            <p class="text-gray-400 text-sm mb-6">Sign in to your account to continue</p>
+                            <form id="loginForm" class="space-y-4">
+                                <div>
+                                    <label class="text-xs font-medium text-gray-500 block mb-1.5">Select Role</label>
+                                    <div class="flex bg-gray-100/80 rounded-xl p-0.5 border border-gray-200/60">
+                                        <button type="button" data-role="admin" class="role-toggle-btn flex-1 py-2.5 rounded-lg text-sm font-medium transition-all active">Admin</button>
+                                        <button type="button" data-role="warden" class="role-toggle-btn flex-1 py-2.5 rounded-lg text-sm font-medium transition-all">Warden</button>
+                                        <button type="button" data-role="student" class="role-toggle-btn flex-1 py-2.5 rounded-lg text-sm font-medium transition-all">Student</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-medium text-gray-500 block mb-1">Email Address</label>
+                                    <input type="email" id="loginEmail" required placeholder="Enter your email" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-medium text-gray-500 block mb-1">Password</label>
+                                    <input type="password" id="loginPassword" required placeholder="Enter your password" class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                </div>
+                                <button type="submit" class="w-full py-3 bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-medium rounded-xl transition shadow-sm shadow-blue-500/20 text-sm">
+                                    <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const roleBtns = document.querySelectorAll('.role-toggle-btn');
+            let selectedRole = 'admin';
+            roleBtns.forEach(btn => {
+                if (btn.dataset.role === 'admin') btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+            roleBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    roleBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    selectedRole = this.dataset.role;
+                });
+            });
+
+            sidebar.style.display = 'none';
+            document.querySelector('header').style.display = 'none';
+            pageTitle.textContent = 'Login';
+
+            document.getElementById('loginForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('loginEmail').value.trim();
+                const password = document.getElementById('loginPassword').value.trim();
+                if (!email || !password) {
+                    showToast('Please fill in all fields.', 'error');
+                    return;
+                }
+                const activeBtn = document.querySelector('.role-toggle-btn.active');
+                const role = activeBtn ? activeBtn.dataset.role : 'admin';
+                login(email, password, role);
+            });
+        }
+
+        // =============================================================
+        // 11. NAVIGATION
+        // =============================================================
+        function navigateTo(view) {
+            if (!currentUser) { showLogin(); return; }
+            currentView = view;
+            sidebarNav.querySelectorAll('.nav-link[data-view]').forEach(link => {
+                link.classList.toggle('active', link.dataset.view === view);
+            });
+
+            const titles = {
+                dashboard: 'Dashboard',
+                profile: 'My Profile',
+                room: 'My Room',
+                leave: 'Apply Leave',
+                complaints: 'Complaints',
+                fees: 'Fees & Dues',
+                announcements: 'Announcements',
+                visitors: 'My Visitor History',
+                gatepass: 'QR Gate Pass',
+                'manage-students': 'Manage Students',
+                'manage-rooms': 'Manage Rooms',
+                'manage-wardens': 'Manage Wardens',
+                'manage-fees': 'Manage Fees',
+                'system-reports': 'System Reports',
+                'room-occupancy': 'Room Occupancy',
+                'leaves-approval': 'Leaves Approval',
+                'visitor-entries': 'Visitor Entries',
+                'complaints-resolver': 'Complaints Resolver',
+            };
+            pageTitle.textContent = titles[view] || view;
+            renderView(view);
+            updateNotificationBadge();
+        }
+
+        // =============================================================
+        // 12. RENDER ENGINE
+        // =============================================================
+        function renderView(view) {
+            if (!currentUser) { showLogin(); return; }
+            if (doughnutChart) { doughnutChart.destroy();
+                doughnutChart = null; }
+            if (barChart) { barChart.destroy();
+                barChart = null; }
+
+            switch (view) {
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'profile':
+                    renderProfile();
+                    break;
+                case 'room':
+                    renderRoom();
+                    break;
+                case 'leave':
+                    renderLeave();
+                    break;
+                case 'complaints':
+                    renderComplaints();
+                    break;
+                case 'fees':
+                    renderFees();
+                    break;
+                case 'announcements':
+                    renderAnnouncements();
+                    break;
+                case 'visitors':
+                    renderVisitors();
+                    break;
+                case 'gatepass':
+                    renderGatepass();
+                    break;
+                case 'manage-students':
+                    renderManageStudents();
+                    break;
+                case 'manage-rooms':
+                    renderManageRooms();
+                    break;
+                case 'manage-wardens':
+                    renderManageWardens();
+                    break;
+                case 'manage-fees':
+                    renderManageFees();
+                    break;
+                case 'system-reports':
+                    renderSystemReports();
+                    break;
+                case 'room-occupancy':
+                    renderRoomOccupancy();
+                    break;
+                case 'leaves-approval':
+                    renderLeavesApproval();
+                    break;
+                case 'visitor-entries':
+                    renderVisitorEntries();
+                    break;
+                case 'complaints-resolver':
+                    renderComplaintsResolver();
+                    break;
+                default:
+                    viewContainer.innerHTML =
+                        `<div class="flex items-center justify-center h-64 text-gray-400"><i class="fas fa-construction text-4xl mr-3"></i><span class="text-lg">Coming soon</span></div>`;
+            }
+        }
+
+        // =============================================================
+        // 13. DASHBOARD (role-specific)
+        // =============================================================
+        function renderDashboard() {
+            const role = currentUser.role;
+            if (role === 'admin') renderAdminDashboard();
+            else if (role === 'warden') renderWardenDashboard();
+            else renderStudentDashboard();
+        }
+
+        // --- Admin Dashboard (unchanged) ---
+        function renderAdminDashboard() {
+            const students = getStudents();
+            const rooms = appData.rooms;
+            const occupiedRooms = rooms.filter(r => r.occupied > 0).length;
+            const totalRooms = rooms.length;
+            const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+            const pendingComplaints = appData.complaints.filter(c => c.status === 'open' || c.status === 'in-progress')
+                .length;
+            const pendingLeaves = appData.leaves.filter(l => l.status === 'pending').length;
+
+            const catMap = {};
+            appData.complaints.forEach(c => {
+                catMap[c.category] = (catMap[c.category] || 0) + 1;
+            });
+            const catLabels = Object.keys(catMap);
+            const catValues = Object.values(catMap);
+
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Students</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${students.length}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB]"><i class="fas fa-users text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Rooms</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${occupiedRooms}/${totalRooms}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><i class="fas fa-door-open text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Occupancy</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${occupancyRate}%</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-chart-pie text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Pending</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${pendingComplaints + pendingLeaves}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500"><i class="fas fa-clock text-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Bed Occupancy</h3>
+                            <div class="chart-wrapper"><canvas id="doughnutChart"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Complaints by Category</h3>
+                            <div class="chart-wrapper-bar"><canvas id="barChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-semibold text-gray-700">Recent Activity</h3>
+                            <span class="text-xs text-gray-400">${appData.complaints.length} complaints</span>
+                        </div>
+                        <div class="space-y-3">
+                            ${appData.complaints.slice(0, 4).map(c => `
+                                <div class="flex items-center justify-between border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-800">${c.title}</p>
+                                        <p class="text-xs text-gray-400">${formatDate(c.createdAt)} · ${c.category}</p>
+                                    </div>
+                                    <span class="text-xs font-medium px-2.5 py-1 rounded-full status-${c.status}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</span>
+                                </div>
+                            `).join('')}
+                            ${appData.complaints.length === 0 ? '<p class="text-sm text-gray-400 text-center py-4">No complaints yet.</p>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                const ctx1 = document.getElementById('doughnutChart');
+                if (ctx1) {
+                    const freeRooms = totalRooms - occupiedRooms;
+                    doughnutChart = new Chart(ctx1, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Occupied', 'Free'],
+                            datasets: [{ data: [occupiedRooms, freeRooms], backgroundColor: ['#2563EB',
+                                    '#e2e8f0'
+                                ], borderColor: ['#2563EB', '#e2e8f0'], borderWidth: 2 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom',
+                                    labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } },
+                            cutout: '68%' }
+                    });
+                }
+                const ctx2 = document.getElementById('barChart');
+                if (ctx2) {
+                    barChart = new Chart(ctx2, {
+                        type: 'bar',
+                        data: {
+                            labels: catLabels.length ? catLabels : ['No Data'],
+                            datasets: [{ label: 'Complaints', data: catLabels.length ? catValues : [0],
+                                backgroundColor: '#2563EB', borderRadius: 6, barPercentage: 0.6 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1 } },
+                                x: { grid: { display: false } } } }
+                    });
+                }
+            }, 80);
+        }
+
+        // --- Warden Dashboard (unchanged) ---
+        function renderWardenDashboard() {
+            const students = getStudents();
+            const rooms = appData.rooms;
+            const occupiedRooms = rooms.filter(r => r.occupied > 0).length;
+            const totalRooms = rooms.length;
+            const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+            const pendingLeaves = appData.leaves.filter(l => l.status === 'pending').length;
+            const pendingComplaints = appData.complaints.filter(c => c.status === 'open' || c.status === 'in-progress')
+                .length;
+
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Students</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${students.length}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-[#2563EB]"><i class="fas fa-users text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Rooms</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${occupiedRooms}/${totalRooms}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><i class="fas fa-door-open text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Pending Leaves</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${pendingLeaves}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600"><i class="fas fa-calendar-check text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Open Complaints</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${pendingComplaints}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500"><i class="fas fa-exclamation-triangle text-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Bed Occupancy</h3>
+                            <div class="chart-wrapper"><canvas id="doughnutChart"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Leaves Status</h3>
+                            <div class="chart-wrapper"><canvas id="leaveChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-semibold text-gray-700">Recent Leave Requests</h3>
+                            <span class="text-xs text-gray-400">${appData.leaves.length} total</span>
+                        </div>
+                        <div class="space-y-3">
+                            ${appData.leaves.slice(0, 4).map(l => {
+                                const student = getUserById(l.studentId);
+                                return `
+                                    <div class="flex items-center justify-between border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-800">${student ? student.name : 'Unknown'} · ${formatDate(l.from)} — ${formatDate(l.to)}</p>
+                                            <p class="text-xs text-gray-400">${l.reason}</p>
+                                        </div>
+                                        <span class="text-xs font-medium px-2.5 py-1 rounded-full ${l.status === 'approved' ? 'badge-approved' : l.status === 'pending' ? 'badge-pending' : 'badge-rejected'}">${l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                            ${appData.leaves.length === 0 ? '<p class="text-sm text-gray-400 text-center py-4">No leave requests.</p>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setTimeout(() => {
+                const totalRooms = appData.rooms.length;
+                const occupiedRooms = appData.rooms.filter(r => r.occupied > 0).length;
+                const freeRooms = totalRooms - occupiedRooms;
+                const ctx1 = document.getElementById('doughnutChart');
+                if (ctx1) {
+                    doughnutChart = new Chart(ctx1, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Occupied', 'Free'],
+                            datasets: [{ data: [occupiedRooms, freeRooms], backgroundColor: ['#2563EB',
+                                    '#e2e8f0'
+                                ], borderColor: ['#2563EB', '#e2e8f0'], borderWidth: 2 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom',
+                                    labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } },
+                            cutout: '68%' }
+                    });
+                }
+                const ctx2 = document.getElementById('leaveChart');
+                if (ctx2) {
+                    const approved = appData.leaves.filter(l => l.status === 'approved').length;
+                    const pending = appData.leaves.filter(l => l.status === 'pending').length;
+                    const rejected = appData.leaves.filter(l => l.status === 'rejected').length;
+                    barChart = new Chart(ctx2, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Approved', 'Pending', 'Rejected'],
+                            datasets: [{ data: [approved, pending, rejected], backgroundColor: ['#16a34a',
+                                    '#ca8a04', '#dc2626'
+                                ], borderColor: ['#16a34a', '#ca8a04', '#dc2626'], borderWidth: 2 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom',
+                                    labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } },
+                            cutout: '68%' }
+                    });
+                }
+            }, 80);
+        }
+
+        // --- Student Dashboard (unchanged) ---
+        function renderStudentDashboard() {
+            const u = currentUser;
+            const fees = getStudentFees(u.id);
+            const complaints = getStudentComplaints(u.id);
+            const leaves = getStudentLeaves(u.id);
+            const outstanding = getTotalOutstanding(u.id);
+            const room = getRoomForStudent(u.id);
+
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Outstanding</p><p class="text-2xl font-bold ${outstanding > 0 ? 'text-red-500' : 'text-emerald-600'} mt-1">${formatCurrency(outstanding)}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500"><i class="fas fa-credit-card text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">My Room</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${room ? room.number : '—'}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><i class="fas fa-door-open text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Complaints</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${complaints.length}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600"><i class="fas fa-exclamation-triangle text-lg"></i></div>
+                            </div>
+                        </div>
+                        <div class="stat-card bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div><p class="text-xs font-medium text-gray-400 uppercase tracking-wider">Leaves</p><p class="text-2xl font-bold text-[#0b1e3a] mt-1">${leaves.filter(l=>l.status==='approved').length}</p></div>
+                                <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-calendar-check text-lg"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">My Invoices</h3>
+                            ${fees.length ? `
+                                <div class="space-y-2">
+                                    ${fees.slice(0, 4).map(f => `
+                                        <div class="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                                            <div><p class="text-sm font-medium text-gray-800">${f.title}</p><p class="text-xs text-gray-400">${formatDate(f.dueDate)}</p></div>
+                                            <div class="flex items-center gap-3"><span class="text-sm font-semibold text-gray-800">${formatCurrency(f.amount)}</span><span class="text-xs px-2 py-0.5 rounded-full ${f.status === 'paid' ? 'badge-paid' : 'badge-unpaid'}">${f.status.toUpperCase()}</span></div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p class="text-sm text-gray-400 text-center py-4">No invoices.</p>'}
+                        </div>
+                        <div class="bg-white rounded-xl p-5 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Recent Complaints</h3>
+                            ${complaints.length ? `
+                                <div class="space-y-2">
+                                    ${complaints.slice(0, 4).map(c => `
+                                        <div class="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                                            <div><p class="text-sm font-medium text-gray-800">${c.title}</p><p class="text-xs text-gray-400">${formatDate(c.createdAt)}</p></div>
+                                            <span class="text-xs px-2 py-0.5 rounded-full status-${c.status}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p class="text-sm text-gray-400 text-center py-4">No complaints filed.</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // =============================================================
+        // 14. STUDENT VIEWS (unchanged)
+        // =============================================================
+        function renderProfile() {
+            const u = currentUser;
+            const room = getRoomForStudent(u.id);
+            const complaints = getStudentComplaints(u.id);
+            const outstanding = getTotalOutstanding(u.id);
+            const leaves = getStudentLeaves(u.id);
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-3xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center gap-5 pb-5 border-b border-gray-100">
+                            <div class="w-20 h-20 rounded-full bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] text-3xl font-bold ring-4 ring-white shadow-sm">${getInitials(u.name)}</div>
+                            <div>
+                                <h2 class="text-2xl font-bold text-[#0b1e3a]">${u.name}</h2>
+                                <p class="text-sm text-gray-400">${u.email}</p>
+                                <span class="inline-block mt-1 text-xs font-medium px-3 py-0.5 rounded-full bg-[#2563EB]/10 text-[#2563EB]">${u.role.charAt(0).toUpperCase()+u.role.slice(1)}</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-5">
+                            <div><p class="text-xs text-gray-400">Room</p><p class="font-medium text-gray-800">${room ? room.number : '—'}</p></div>
+                            <div><p class="text-xs text-gray-400">Total Complaints</p><p class="font-medium text-gray-800">${complaints.length}</p></div>
+                            <div><p class="text-xs text-gray-400">Outstanding Fees</p><p class="font-medium text-gray-800">${formatCurrency(outstanding)}</p></div>
+                            <div><p class="text-xs text-gray-400">Leaves Approved</p><p class="font-medium text-gray-800">${leaves.filter(l=>l.status==='approved').length}</p></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderRoom() {
+            const room = getRoomForStudent(currentUser.id);
+            const occupants = room ? room.students.map(id => getUserById(id)).filter(Boolean) : [];
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-3xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">My Room</h3>
+                        <p class="text-sm text-gray-400 mb-5">Room details and roommate information</p>
+                        ${room ? `
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                                <div class="bg-[#F8FAFC] rounded-xl p-4 text-center"><p class="text-xs text-gray-400">Room Number</p><p class="text-xl font-bold text-[#0b1e3a]">${room.number}</p></div>
+                                <div class="bg-[#F8FAFC] rounded-xl p-4 text-center"><p class="text-xs text-gray-400">Type</p><p class="text-xl font-bold text-[#0b1e3a]">${room.type}</p></div>
+                                <div class="bg-[#F8FAFC] rounded-xl p-4 text-center"><p class="text-xs text-gray-400">Occupancy</p><p class="text-xl font-bold text-[#0b1e3a]">${room.occupied}/${room.capacity}</p></div>
+                            </div>
+                            ${room.capacity > 1 ? `
+                                <h4 class="font-semibold text-gray-700 mb-2">Roommates</h4>
+                                <div class="space-y-2">
+                                    ${occupants.filter(o => o.id !== currentUser.id).map(o => `
+                                        <div class="flex items-center gap-3 bg-[#F8FAFC] rounded-xl px-4 py-2.5 border border-gray-100">
+                                            <div class="w-8 h-8 rounded-full bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] text-xs font-bold">${getInitials(o.name)}</div>
+                                            <div><p class="text-sm font-medium text-gray-800">${o.name}</p><p class="text-xs text-gray-400">${o.email}</p></div>
+                                        </div>
+                                    `).join('')}
+                                    ${occupants.filter(o => o.id !== currentUser.id).length === 0 ? '<p class="text-sm text-gray-400">No roommates assigned.</p>' : ''}
+                                </div>
+                            ` : '<p class="text-sm text-gray-400">This is a single occupancy room.</p>'}
+                        ` : `<div class="text-center py-8 text-gray-400"><i class="fas fa-door-open text-4xl mb-3 block"></i><p>No room assigned yet.</p></div>`}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLeave() {
+            const leaves = getStudentLeaves(currentUser.id);
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-3xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm mb-6">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">Apply Leave</h3>
+                        <p class="text-sm text-gray-400 mb-4">Submit a leave request</p>
+                        <form id="leaveForm" class="space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div><label class="text-xs font-medium text-gray-500 block mb-1">From Date</label><input type="date" id="leaveFrom" required class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></div>
+                                <div><label class="text-xs font-medium text-gray-500 block mb-1">To Date</label><input type="date" id="leaveTo" required class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></div>
+                            </div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Reason</label><textarea id="leaveReason" rows="2" required placeholder="Enter reason for leave..." class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></textarea></div>
+                            <button type="submit" class="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-paper-plane mr-2"></i>Submit Request</button>
+                        </form>
+                    </div>
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h4 class="font-semibold text-gray-700 mb-3">My Leave History</h4>
+                        ${leaves.length ? `
+                            <div class="space-y-3">
+                                ${leaves.slice().sort((a,b)=>new Date(b.from)-new Date(a.from)).map(l => `
+                                    <div class="flex items-center justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                                        <div><p class="text-sm font-medium text-gray-800">${formatDate(l.from)} — ${formatDate(l.to)}</p><p class="text-xs text-gray-400">${l.reason}</p></div>
+                                        <span class="text-xs font-medium px-2.5 py-1 rounded-full ${l.status === 'approved' ? 'badge-approved' : l.status === 'pending' ? 'badge-pending' : 'badge-rejected'}">${l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-4">No leave records found.</p>'}
+                    </div>
+                </div>
+            `;
+            document.getElementById('leaveForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const from = document.getElementById('leaveFrom').value;
+                const to = document.getElementById('leaveTo').value;
+                const reason = document.getElementById('leaveReason').value.trim();
+                if (!from || !to || !reason) { showToast('Please fill all fields.', 'error'); return; }
+                const newLeave = { id: generateId(), studentId: currentUser.id, from, to, reason,
+                    status: 'pending', approvedBy: null };
+                appData.leaves.push(newLeave);
+                persist();
+                addNotification(`Leave request from ${currentUser.name} (${formatDate(from)} - ${formatDate(to)})`, 'warden');
+                addNotification(`Leave request from ${currentUser.name} (${formatDate(from)} - ${formatDate(to)})`, 'admin');
+                showToast('Leave request submitted successfully!', 'success');
+                renderLeave();
+                updateNotificationBadge();
+            });
+        }
+
+        function renderComplaints() {
+            const complaints = getStudentComplaints(currentUser.id);
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div class="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                            <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">File a Complaint</h3>
+                            <p class="text-sm text-gray-400 mb-4">Submit a new ticket</p>
+                            <form id="complaintForm" class="space-y-4">
+                                <div><label class="text-xs font-medium text-gray-500 block mb-1">Title</label><input type="text" id="compTitle" required placeholder="Brief title..." class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></div>
+                                <div><label class="text-xs font-medium text-gray-500 block mb-1">Category</label>
+                                    <select id="compCategory" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                        <option value="Internet">Internet</option><option value="Maintenance">Maintenance</option><option value="Discipline">Discipline</option><option value="Hygiene">Hygiene</option><option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div><label class="text-xs font-medium text-gray-500 block mb-1">Description</label><textarea id="compDesc" rows="3" required placeholder="Describe the issue..." class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></textarea></div>
+                                <button type="submit" class="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-plus mr-2"></i>File Complaint</button>
+                            </form>
+                        </div>
+                        <div class="lg:col-span-3 bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="font-semibold text-gray-700">Active Tickets</h4>
+                                <span class="text-xs text-gray-400">${complaints.filter(c=>c.status!=='resolved').length} open</span>
+                            </div>
+                            ${complaints.length ? `
+                                <div class="space-y-3 max-h-[400px] overflow-y-auto pr-1 no-scrollbar">
+                                    ${complaints.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(c => `
+                                        <div class="border border-gray-100 rounded-xl p-4 hover:bg-[#F8FAFC] transition">
+                                            <div class="flex items-start justify-between">
+                                                <div>
+                                                    <p class="font-medium text-gray-800 text-sm">${c.title}</p>
+                                                    <p class="text-xs text-gray-400 mt-0.5">${c.category} · ${formatDate(c.createdAt)}</p>
+                                                    <p class="text-xs text-gray-500 mt-1 truncate-2">${c.description}</p>
+                                                </div>
+                                                <span class="text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 status-${c.status}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p class="text-sm text-gray-400 text-center py-8">No complaints filed yet.</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('complaintForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const title = document.getElementById('compTitle').value.trim();
+                const category = document.getElementById('compCategory').value;
+                const description = document.getElementById('compDesc').value.trim();
+                if (!title || !description) { showToast('Please fill all fields.', 'error'); return; }
+                const newComplaint = {
+                    id: generateId(),
+                    title,
+                    category,
+                    description,
+                    status: 'open',
+                    createdAt: new Date().toISOString(),
+                    createdBy: currentUser.id,
+                    resolvedBy: null
+                };
+                appData.complaints.push(newComplaint);
+                persist();
+                addNotification(`New complaint: "${title}" from ${currentUser.name}`, 'warden');
+                addNotification(`New complaint: "${title}" from ${currentUser.name}`, 'admin');
+                showToast('Complaint filed successfully!', 'success');
+                renderComplaints();
+                updateNotificationBadge();
+            });
+        }
+
+        function renderFees() {
+            const fees = getStudentFees(currentUser.id);
+            const outstanding = getTotalOutstanding(currentUser.id);
+            const sorted = fees.slice().sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-4xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm mb-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div><h3 class="text-lg font-semibold text-[#0b1e3a]">Fees & Dues</h3><p class="text-sm text-gray-400">Manage your invoices</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl px-5 py-3 text-center border border-gray-200/60">
+                                <p class="text-xs text-gray-400">Outstanding Balance</p>
+                                <p class="text-2xl font-bold ${outstanding > 0 ? 'text-red-500' : 'text-emerald-600'}">${formatCurrency(outstanding)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h4 class="font-semibold text-gray-700 mb-3">Invoices</h4>
+                        ${sorted.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-2 font-medium">Invoice</th><th class="pb-2 font-medium">Title</th><th class="pb-2 font-medium">Due Date</th><th class="pb-2 font-medium text-right">Amount</th><th class="pb-2 font-medium text-center">Status</th><th class="pb-2 font-medium text-right">Action</th></tr></thead>
+                                    <tbody>
+                                        ${sorted.map(f => `
+                                            <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                <td class="py-3 font-mono text-xs text-gray-400">${f.invoiceNo}</td>
+                                                <td class="py-3 font-medium text-gray-700">${f.title}</td>
+                                                <td class="py-3 text-gray-500 text-xs">${formatDate(f.dueDate)}</td>
+                                                <td class="py-3 text-right font-semibold text-gray-800">${formatCurrency(f.amount)}</td>
+                                                <td class="py-3 text-center"><span class="text-xs font-medium px-2.5 py-1 rounded-full ${f.status === 'paid' ? 'badge-paid' : 'badge-unpaid'}">${f.status.toUpperCase()}</span></td>
+                                                <td class="py-3 text-right">${f.status === 'unpaid' ? `<button data-feeid="${f.id}" class="settle-btn text-xs font-medium px-3 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-lg transition shadow-sm shadow-blue-500/20">Settle Invoice</button>` : '<span class="text-xs text-gray-400">—</span>'}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No invoices found.</p>'}
+                    </div>
+                </div>
+            `;
+            document.querySelectorAll('.settle-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const fee = appData.fees.find(f => f.id === this.dataset.feeid);
+                    if (fee) { fee.status = 'paid';
+                        persist();
+                        showToast('Invoice settled successfully!', 'success');
+                        renderFees();
+                        updateNotificationBadge(); }
+                });
+            });
+        }
+
+        function renderAnnouncements() {
+            const anns = appData.announcements.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-3xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">Announcements</h3>
+                        <p class="text-sm text-gray-400 mb-5">Latest updates from the administration</p>
+                        ${anns.length ? `
+                            <div class="space-y-4">
+                                ${anns.map(a => `
+                                    <div class="border-l-4 border-[#2563EB] pl-4 py-1 hover:bg-[#F8FAFC] -mx-2 px-2 rounded-r-xl transition">
+                                        <div class="flex items-start justify-between">
+                                            <div><p class="font-semibold text-gray-800">${a.title}</p><p class="text-sm text-gray-500">${a.content}</p></div>
+                                            <span class="text-xs text-gray-400 whitespace-nowrap ml-3">${formatDate(a.date)}</span>
+                                        </div>
+                                        <p class="text-xs text-gray-400 mt-1">— ${a.author}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No announcements yet.</p>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderVisitors() {
+            const visitors = getStudentVisitors(currentUser.id);
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-3xl mx-auto">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">My Visitor History</h3>
+                        <p class="text-sm text-gray-400 mb-4">Record of all visitor entries</p>
+                        ${visitors.length ? `
+                            <div class="space-y-3">
+                                ${visitors.slice().sort((a,b)=>new Date(b.visitDate)-new Date(a.visitDate)).map(v => `
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                                        <div><p class="font-medium text-gray-800">${v.name}</p><p class="text-xs text-gray-400">${v.relation} · ${v.phone}</p></div>
+                                        <div class="text-xs text-gray-500 mt-1 sm:mt-0">${formatDate(v.visitDate)} · ${v.inTime} – ${v.outTime}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No visitor records found.</p>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderGatepass() {
+            const room = getRoomForStudent(currentUser.id);
+            viewContainer.innerHTML = `
+                <div class="view-container max-w-2xl mx-auto">
+                    <div class="bg-white rounded-xl p-8 border border-gray-200/60 shadow-sm text-center">
+                        <div class="w-24 h-24 rounded-2xl bg-[#2563EB]/10 flex items-center justify-center text-[#2563EB] text-5xl mx-auto mb-4 ring-4 ring-white shadow-md"><i class="fas fa-qrcode"></i></div>
+                        <h3 class="text-xl font-bold text-[#0b1e3a]">QR Gate Pass</h3>
+                        <p class="text-sm text-gray-400 mt-1">Scan to verify identity</p>
+                        <div class="mt-6 p-4 bg-[#F8FAFC] rounded-xl border border-gray-200/60 max-w-xs mx-auto">
+                            <div class="flex items-center justify-between text-sm"><span class="text-gray-500">Name</span><span class="font-medium text-gray-800">${currentUser.name}</span></div>
+                            <div class="flex items-center justify-between text-sm mt-1.5"><span class="text-gray-500">Room</span><span class="font-medium text-gray-800">${room ? room.number : '—'}</span></div>
+                            <div class="flex items-center justify-between text-sm mt-1.5"><span class="text-gray-500">ID</span><span class="font-mono text-xs text-gray-500">${currentUser.id.slice(0,8)}</span></div>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-5"><i class="fas fa-info-circle mr-1"></i> Show this to the gate attendant for entry.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // =============================================================
+        // 15. ADMIN VIEWS (with full CRUD)
+        // =============================================================
+
+        // --- Manage Students ---
+        function renderManageStudents() {
+            const students = getStudents();
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-5">
+                            <div><h3 class="text-lg font-semibold text-[#0b1e3a]">Manage Students</h3><p class="text-sm text-gray-400">${students.length} students enrolled</p></div>
+                            <button id="addStudentBtn" class="px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-plus mr-2"></i>Add Student</button>
+                        </div>
+                        ${students.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-3 font-medium">Name</th><th class="pb-3 font-medium">Email</th><th class="pb-3 font-medium">Room</th><th class="pb-3 font-medium text-center">Actions</th></tr></thead>
+                                    <tbody>
+                                        ${students.map(s => {
+                                            const room = getRoomForStudent(s.id);
+                                            return `
+                                                <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                    <td class="py-3 font-medium text-gray-800">${s.name}</td>
+                                                    <td class="py-3 text-gray-500">${s.email}</td>
+                                                    <td class="py-3 text-gray-500">${room ? room.number : '—'}</td>
+                                                    <td class="py-3 text-center">
+                                                        <button data-userid="${s.id}" class="edit-student-btn text-blue-600 hover:text-blue-800 mr-2" title="Edit"><i class="fas fa-edit"></i></button>
+                                                        <button data-userid="${s.id}" class="delete-student-btn text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No students found.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Add Student
+            document.getElementById('addStudentBtn').addEventListener('click', () => {
+                const roomOptions = appData.rooms.map(r =>
+                    `<option value="${r.id}">${r.number} (${r.occupied}/${r.capacity})</option>`
+                ).join('');
+                const formHTML = `
+                    <div class="space-y-4">
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Full Name</label><input type="text" id="newStudentName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="e.g. Jane Doe"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Email</label><input type="email" id="newStudentEmail" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="student@hostel.edu"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Password</label><input type="text" id="newStudentPassword" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="Enter a password" value="pass123"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Assign Room</label>
+                            <select id="newStudentRoom" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                <option value="">— No room —</option>
+                                ${roomOptions}
+                            </select>
+                        </div>
+                    </div>
+                `;
+                showModal('Add New Student', formHTML, 'Create Student', 'Cancel', function() {
+                    const name = document.getElementById('newStudentName').value.trim();
+                    const email = document.getElementById('newStudentEmail').value.trim();
+                    const password = document.getElementById('newStudentPassword').value.trim();
+                    const roomId = document.getElementById('newStudentRoom').value;
+                    if (!name || !email || !password) {
+                        showToast('Please fill all required fields.', 'error');
+                        return;
+                    }
+                    if (appData.users.find(u => u.email === email)) {
+                        showToast('Email already exists.', 'error');
+                        return;
+                    }
+                    const newUser = {
+                        id: generateId(),
+                        name,
+                        email,
+                        password,
+                        role: 'student',
+                        roomId: roomId || null,
+                        avatar: getInitials(name)
+                    };
+                    appData.users.push(newUser);
+                    if (roomId) {
+                        const room = appData.rooms.find(r => r.id === roomId);
+                        if (room && room.occupied < room.capacity) {
+                            room.students.push(newUser.id);
+                            room.occupied = room.students.length;
+                        } else {
+                            showToast('Selected room is full or invalid.', 'error');
+                            appData.users.pop();
+                            return;
+                        }
+                    }
+                    persist();
+                    addNotification(`New student ${name} created by ${currentUser.name}`, 'admin');
+                    showToast(`Student ${name} created successfully!`, 'success');
+                    renderManageStudents();
+                    updateNotificationBadge();
+                });
+            });
+
+            // Edit Student
+            document.querySelectorAll('.edit-student-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.userid;
+                    const student = getUserById(id);
+                    if (!student) return;
+                    const currentRoom = getRoomForStudent(id);
+                    const roomOptions = appData.rooms.map(r =>
+                        `<option value="${r.id}" ${currentRoom && r.id === currentRoom.id ? 'selected' : ''}>${r.number} (${r.occupied}/${r.capacity})</option>`
+                    ).join('');
+                    const formHTML = `
+                        <div class="space-y-4">
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Full Name</label><input type="text" id="editStudentName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${student.name}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Email</label><input type="email" id="editStudentEmail" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${student.email}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Password</label><input type="text" id="editStudentPassword" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${student.password}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Assign Room</label>
+                                <select id="editStudentRoom" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    <option value="">— No room —</option>
+                                    ${roomOptions}
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    openEditModal('Edit Student', formHTML, function() {
+                        const name = document.getElementById('editStudentName').value.trim();
+                        const email = document.getElementById('editStudentEmail').value.trim();
+                        const password = document.getElementById('editStudentPassword').value.trim();
+                        const newRoomId = document.getElementById('editStudentRoom').value;
+                        if (!name || !email || !password) {
+                            showToast('Please fill all fields.', 'error');
+                            return;
+                        }
+                        // Check email uniqueness (exclude self)
+                        if (appData.users.find(u => u.email === email && u.id !== id)) {
+                            showToast('Email already exists.', 'error');
+                            return;
+                        }
+                        // Update user
+                        student.name = name;
+                        student.email = email;
+                        student.password = password;
+                        // Handle room change
+                        const oldRoom = getRoomForStudent(id);
+                        if (oldRoom) {
+                            // Remove from old room
+                            oldRoom.students = oldRoom.students.filter(sid => sid !== id);
+                            oldRoom.occupied = oldRoom.students.length;
+                        }
+                        if (newRoomId) {
+                            const newRoom = appData.rooms.find(r => r.id === newRoomId);
+                            if (newRoom && newRoom.occupied < newRoom.capacity) {
+                                newRoom.students.push(id);
+                                newRoom.occupied = newRoom.students.length;
+                                student.roomId = newRoomId;
+                            } else {
+                                showToast('Selected room is full or invalid.', 'error');
+                                // Rollback: re-add to old room if existed
+                                if (oldRoom) {
+                                    oldRoom.students.push(id);
+                                    oldRoom.occupied = oldRoom.students.length;
+                                }
+                                return;
+                            }
+                        } else {
+                            student.roomId = null;
+                        }
+                        persist();
+                        showToast('Student details updated successfully!', 'success');
+                        renderManageStudents();
+                        updateNotificationBadge();
+                    });
+                });
+            });
+
+            // Delete Student
+            document.querySelectorAll('.delete-student-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.userid;
+                    const student = getUserById(id);
+                    if (!student) return;
+                    confirmDelete(`Are you sure you want to remove <strong>${student.name}</strong>? This action cannot be undone.`, function() {
+                        // Remove user
+                        appData.users = appData.users.filter(u => u.id !== id);
+                        // Remove from rooms
+                        appData.rooms.forEach(r => {
+                            r.students = r.students.filter(sid => sid !== id);
+                            r.occupied = r.students.length;
+                        });
+                        persist();
+                        showToast(`Student ${student.name} removed.`, 'success');
+                        renderManageStudents();
+                        updateNotificationBadge();
+                    });
+                });
+            });
+        }
+
+        // --- Manage Rooms ---
+        function renderManageRooms() {
+            const rooms = appData.rooms;
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-5">
+                            <div><h3 class="text-lg font-semibold text-[#0b1e3a]">Manage Rooms</h3><p class="text-sm text-gray-400">${rooms.length} rooms total</p></div>
+                            <button id="addRoomBtn" class="px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-plus mr-2"></i>Add Room</button>
+                        </div>
+                        ${rooms.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-3 font-medium">Room</th><th class="pb-3 font-medium">Type</th><th class="pb-3 font-medium">Capacity</th><th class="pb-3 font-medium">Occupied</th><th class="pb-3 font-medium text-center">Actions</th></tr></thead>
+                                    <tbody>
+                                        ${rooms.map(r => `
+                                            <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                <td class="py-3 font-medium text-gray-800">${r.number}</td>
+                                                <td class="py-3 text-gray-500">${r.type}</td>
+                                                <td class="py-3 text-gray-500">${r.capacity}</td>
+                                                <td class="py-3 text-gray-500">${r.occupied}/${r.capacity}</td>
+                                                <td class="py-3 text-center">
+                                                    <button data-roomid="${r.id}" class="edit-room-btn text-blue-600 hover:text-blue-800 mr-2" title="Edit"><i class="fas fa-edit"></i></button>
+                                                    <button data-roomid="${r.id}" class="delete-room-btn text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No rooms found.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Add Room
+            document.getElementById('addRoomBtn').addEventListener('click', () => {
+                const formHTML = `
+                    <div class="space-y-4">
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Room Number</label><input type="text" id="newRoomNumber" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="e.g. A-101"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Type</label>
+                            <select id="newRoomType" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                <option value="Single">Single</option>
+                                <option value="Double">Double</option>
+                            </select>
+                        </div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Capacity</label>
+                            <select id="newRoomCapacity" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                showModal('Add New Room', formHTML, 'Add Room', 'Cancel', function() {
+                    const number = document.getElementById('newRoomNumber').value.trim();
+                    const type = document.getElementById('newRoomType').value;
+                    const capacity = parseInt(document.getElementById('newRoomCapacity').value);
+                    if (!number) { showToast('Room number is required.', 'error'); return; }
+                    if (appData.rooms.find(r => r.number === number)) {
+                        showToast('Room number already exists.', 'error');
+                        return;
+                    }
+                    appData.rooms.push({
+                        id: generateId(),
+                        number,
+                        type,
+                        capacity,
+                        occupied: 0,
+                        students: []
+                    });
+                    persist();
+                    showToast(`Room ${number} added!`, 'success');
+                    renderManageRooms();
+                });
+            });
+
+            // Edit Room
+            document.querySelectorAll('.edit-room-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.roomid;
+                    const room = appData.rooms.find(r => r.id === id);
+                    if (!room) return;
+                    const formHTML = `
+                        <div class="space-y-4">
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Room Number</label><input type="text" id="editRoomNumber" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${room.number}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Type</label>
+                                <select id="editRoomType" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    <option value="Single" ${room.type === 'Single' ? 'selected' : ''}>Single</option>
+                                    <option value="Double" ${room.type === 'Double' ? 'selected' : ''}>Double</option>
+                                </select>
+                            </div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Capacity</label>
+                                <select id="editRoomCapacity" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    <option value="1" ${room.capacity === 1 ? 'selected' : ''}>1</option>
+                                    <option value="2" ${room.capacity === 2 ? 'selected' : ''}>2</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    openEditModal('Edit Room', formHTML, function() {
+                        const number = document.getElementById('editRoomNumber').value.trim();
+                        const type = document.getElementById('editRoomType').value;
+                        const capacity = parseInt(document.getElementById('editRoomCapacity').value);
+                        if (!number) { showToast('Room number is required.', 'error'); return; }
+                        // Check duplicate number (exclude self)
+                        if (appData.rooms.find(r => r.number === number && r.id !== id)) {
+                            showToast('Room number already exists.', 'error');
+                            return;
+                        }
+                        // If capacity changes, ensure occupancy doesn't exceed new capacity
+                        if (room.occupied > capacity) {
+                            showToast(`Cannot reduce capacity below current occupancy (${room.occupied}).`, 'error');
+                            return;
+                        }
+                        room.number = number;
+                        room.type = type;
+                        room.capacity = capacity;
+                        persist();
+                        showToast('Room updated successfully!', 'success');
+                        renderManageRooms();
+                    });
+                });
+            });
+
+            // Delete Room
+            document.querySelectorAll('.delete-room-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.roomid;
+                    const room = appData.rooms.find(r => r.id === id);
+                    if (!room) return;
+                    if (room.occupied > 0) {
+                        showToast('Cannot remove an occupied room.', 'error');
+                        return;
+                    }
+                    confirmDelete(`Are you sure you want to remove room <strong>${room.number}</strong>?`, function() {
+                        appData.rooms = appData.rooms.filter(r => r.id !== id);
+                        persist();
+                        showToast('Room removed.', 'success');
+                        renderManageRooms();
+                    });
+                });
+            });
+        }
+
+        // --- Manage Wardens ---
+        function renderManageWardens() {
+            const wardens = getWardens();
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-5">
+                            <div><h3 class="text-lg font-semibold text-[#0b1e3a]">Manage Wardens</h3><p class="text-sm text-gray-400">${wardens.length} wardens</p></div>
+                            <button id="addWardenBtn" class="px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-plus mr-2"></i>Add Warden</button>
+                        </div>
+                        ${wardens.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-3 font-medium">Name</th><th class="pb-3 font-medium">Email</th><th class="pb-3 font-medium text-center">Actions</th></tr></thead>
+                                    <tbody>
+                                        ${wardens.map(w => `
+                                            <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                <td class="py-3 font-medium text-gray-800">${w.name}</td>
+                                                <td class="py-3 text-gray-500">${w.email}</td>
+                                                <td class="py-3 text-center">
+                                                    <button data-userid="${w.id}" class="edit-warden-btn text-blue-600 hover:text-blue-800 mr-2" title="Edit"><i class="fas fa-edit"></i></button>
+                                                    <button data-userid="${w.id}" class="delete-warden-btn text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No wardens found.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Add Warden
+            document.getElementById('addWardenBtn').addEventListener('click', () => {
+                const formHTML = `
+                    <div class="space-y-4">
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Full Name</label><input type="text" id="newWardenName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="e.g. Dr. Smith"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Email</label><input type="email" id="newWardenEmail" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="warden@hostel.edu"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Password</label><input type="text" id="newWardenPassword" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="Enter a password" value="warden123"></div>
+                    </div>
+                `;
+                showModal('Add New Warden', formHTML, 'Create Warden', 'Cancel', function() {
+                    const name = document.getElementById('newWardenName').value.trim();
+                    const email = document.getElementById('newWardenEmail').value.trim();
+                    const password = document.getElementById('newWardenPassword').value.trim();
+                    if (!name || !email || !password) {
+                        showToast('Please fill all fields.', 'error');
+                        return;
+                    }
+                    if (appData.users.find(u => u.email === email)) {
+                        showToast('Email already exists.', 'error');
+                        return;
+                    }
+                    appData.users.push({
+                        id: generateId(),
+                        name,
+                        email,
+                        password,
+                        role: 'warden',
+                        roomId: null,
+                        avatar: getInitials(name)
+                    });
+                    persist();
+                    addNotification(`New warden ${name} created by ${currentUser.name}`, 'admin');
+                    showToast(`Warden ${name} created!`, 'success');
+                    renderManageWardens();
+                    updateNotificationBadge();
+                });
+            });
+
+            // Edit Warden
+            document.querySelectorAll('.edit-warden-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.userid;
+                    const warden = getUserById(id);
+                    if (!warden) return;
+                    const formHTML = `
+                        <div class="space-y-4">
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Full Name</label><input type="text" id="editWardenName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${warden.name}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Email</label><input type="email" id="editWardenEmail" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${warden.email}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Password</label><input type="text" id="editWardenPassword" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${warden.password}"></div>
+                        </div>
+                    `;
+                    openEditModal('Edit Warden', formHTML, function() {
+                        const name = document.getElementById('editWardenName').value.trim();
+                        const email = document.getElementById('editWardenEmail').value.trim();
+                        const password = document.getElementById('editWardenPassword').value.trim();
+                        if (!name || !email || !password) {
+                            showToast('Please fill all fields.', 'error');
+                            return;
+                        }
+                        if (appData.users.find(u => u.email === email && u.id !== id)) {
+                            showToast('Email already exists.', 'error');
+                            return;
+                        }
+                        warden.name = name;
+                        warden.email = email;
+                        warden.password = password;
+                        persist();
+                        showToast('Warden updated successfully!', 'success');
+                        renderManageWardens();
+                        updateNotificationBadge();
+                    });
+                });
+            });
+
+            // Delete Warden
+            document.querySelectorAll('.delete-warden-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.userid;
+                    const warden = getUserById(id);
+                    if (!warden) return;
+                    confirmDelete(`Remove warden <strong>${warden.name}</strong>?`, function() {
+                        appData.users = appData.users.filter(u => u.id !== id);
+                        persist();
+                        showToast('Warden removed.', 'success');
+                        renderManageWardens();
+                        updateNotificationBadge();
+                    });
+                });
+            });
+        }
+
+        // --- Manage Fees (Admin) ---
+        function renderManageFees() {
+            const fees = appData.fees;
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <div class="flex items-center justify-between mb-5">
+                            <div><h3 class="text-lg font-semibold text-[#0b1e3a]">Manage Fees</h3><p class="text-sm text-gray-400">${fees.length} invoices</p></div>
+                            <button id="addFeeBtn" class="px-4 py-2 bg-[#2563EB] hover:bg-[#1d4ed8] text-white text-sm font-medium rounded-xl transition shadow-sm shadow-blue-500/20"><i class="fas fa-plus mr-2"></i>Add Fee</button>
+                        </div>
+                        ${fees.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-3 font-medium">Student</th><th class="pb-3 font-medium">Title</th><th class="pb-3 font-medium">Amount</th><th class="pb-3 font-medium">Due Date</th><th class="pb-3 font-medium">Status</th><th class="pb-3 font-medium text-center">Actions</th></tr></thead>
+                                    <tbody>
+                                        ${fees.map(f => {
+                                            const student = getUserById(f.studentId);
+                                            return `
+                                                <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                    <td class="py-3 font-medium text-gray-800">${student ? student.name : 'Unknown'}</td>
+                                                    <td class="py-3 text-gray-700">${f.title}</td>
+                                                    <td class="py-3 text-gray-700">${formatCurrency(f.amount)}</td>
+                                                    <td class="py-3 text-gray-500">${formatDate(f.dueDate)}</td>
+                                                    <td class="py-3"><span class="text-xs font-medium px-2.5 py-1 rounded-full ${f.status === 'paid' ? 'badge-paid' : 'badge-unpaid'}">${f.status.toUpperCase()}</span></td>
+                                                    <td class="py-3 text-center">
+                                                        <button data-feeid="${f.id}" class="edit-fee-btn text-blue-600 hover:text-blue-800 mr-2" title="Edit"><i class="fas fa-edit"></i></button>
+                                                        <button data-feeid="${f.id}" class="delete-fee-btn text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No fees found.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Add Fee
+            document.getElementById('addFeeBtn').addEventListener('click', () => {
+                const studentOptions = getStudents().map(s =>
+                    `<option value="${s.id}">${s.name} (${s.email})</option>`
+                ).join('');
+                const formHTML = `
+                    <div class="space-y-4">
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Student</label>
+                            <select id="newFeeStudent" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                ${studentOptions}
+                            </select>
+                        </div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Title</label><input type="text" id="newFeeTitle" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="e.g. Hostel Rent - July 2026"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Amount (₹)</label><input type="number" id="newFeeAmount" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" placeholder="5000"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Due Date</label><input type="date" id="newFeeDueDate" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition"></div>
+                        <div><label class="text-xs font-medium text-gray-500 block mb-1">Status</label>
+                            <select id="newFeeStatus" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                <option value="unpaid">Unpaid</option>
+                                <option value="paid">Paid</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                showModal('Add New Fee', formHTML, 'Add Fee', 'Cancel', function() {
+                    const studentId = document.getElementById('newFeeStudent').value;
+                    const title = document.getElementById('newFeeTitle').value.trim();
+                    const amount = parseFloat(document.getElementById('newFeeAmount').value);
+                    const dueDate = document.getElementById('newFeeDueDate').value;
+                    const status = document.getElementById('newFeeStatus').value;
+                    if (!studentId || !title || isNaN(amount) || !dueDate) {
+                        showToast('Please fill all fields.', 'error');
+                        return;
+                    }
+                    const newFee = {
+                        id: generateId(),
+                        studentId,
+                        title,
+                        amount,
+                        dueDate,
+                        status,
+                        invoiceNo: 'INV-' + new Date().getFullYear() + '-' + String(appData.fees.length + 1).padStart(3,
+                            '0')
+                    };
+                    appData.fees.push(newFee);
+                    persist();
+                    showToast('Fee added successfully!', 'success');
+                    renderManageFees();
+                });
+            });
+
+            // Edit Fee
+            document.querySelectorAll('.edit-fee-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.feeid;
+                    const fee = appData.fees.find(f => f.id === id);
+                    if (!fee) return;
+                    const studentOptions = getStudents().map(s =>
+                        `<option value="${s.id}" ${fee.studentId === s.id ? 'selected' : ''}>${s.name} (${s.email})</option>`
+                    ).join('');
+                    const formHTML = `
+                        <div class="space-y-4">
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Student</label>
+                                <select id="editFeeStudent" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    ${studentOptions}
+                                </select>
+                            </div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Title</label><input type="text" id="editFeeTitle" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${fee.title}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Amount (₹)</label><input type="number" id="editFeeAmount" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${fee.amount}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Due Date</label><input type="date" id="editFeeDueDate" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition" value="${fee.dueDate}"></div>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Status</label>
+                                <select id="editFeeStatus" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    <option value="unpaid" ${fee.status === 'unpaid' ? 'selected' : ''}>Unpaid</option>
+                                    <option value="paid" ${fee.status === 'paid' ? 'selected' : ''}>Paid</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    openEditModal('Edit Fee', formHTML, function() {
+                        const studentId = document.getElementById('editFeeStudent').value;
+                        const title = document.getElementById('editFeeTitle').value.trim();
+                        const amount = parseFloat(document.getElementById('editFeeAmount').value);
+                        const dueDate = document.getElementById('editFeeDueDate').value;
+                        const status = document.getElementById('editFeeStatus').value;
+                        if (!studentId || !title || isNaN(amount) || !dueDate) {
+                            showToast('Please fill all fields.', 'error');
+                            return;
+                        }
+                        fee.studentId = studentId;
+                        fee.title = title;
+                        fee.amount = amount;
+                        fee.dueDate = dueDate;
+                        fee.status = status;
+                        persist();
+                        showToast('Fee updated successfully!', 'success');
+                        renderManageFees();
+                    });
+                });
+            });
+
+            // Delete Fee
+            document.querySelectorAll('.delete-fee-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.feeid;
+                    const fee = appData.fees.find(f => f.id === id);
+                    if (!fee) return;
+                    confirmDelete(`Delete invoice <strong>${fee.invoiceNo}</strong>?`, function() {
+                        appData.fees = appData.fees.filter(f => f.id !== id);
+                        persist();
+                        showToast('Fee deleted.', 'success');
+                        renderManageFees();
+                    });
+                });
+            });
+        }
+
+        // --- System Reports (unchanged) ---
+        function renderSystemReports() {
+            const students = getStudents();
+            const rooms = appData.rooms;
+            const occupiedRooms = rooms.filter(r => r.occupied > 0).length;
+            const totalRooms = rooms.length;
+            const pendingComplaints = appData.complaints.filter(c => c.status === 'open' || c.status === 'in-progress')
+                .length;
+            const pendingLeaves = appData.leaves.filter(l => l.status === 'pending').length;
+            const totalFees = appData.fees.reduce((sum, f) => sum + Number(f.amount), 0);
+            const paidFees = appData.fees.filter(f => f.status === 'paid').reduce((sum, f) => sum + Number(f.amount), 0);
+            const outstandingFees = totalFees - paidFees;
+
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-5">System Reports</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Total Students</p><p class="text-2xl font-bold text-[#0b1e3a]">${students.length}</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Total Rooms</p><p class="text-2xl font-bold text-[#0b1e3a]">${totalRooms}</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Occupancy Rate</p><p class="text-2xl font-bold text-[#0b1e3a]">${totalRooms > 0 ? Math.round((occupiedRooms/totalRooms)*100) : 0}%</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Pending Complaints</p><p class="text-2xl font-bold text-rose-500">${pendingComplaints}</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Pending Leaves</p><p class="text-2xl font-bold text-amber-500">${pendingLeaves}</p></div>
+                            <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100"><p class="text-xs text-gray-400">Outstanding Fees</p><p class="text-2xl font-bold text-red-500">${formatCurrency(outstandingFees)}</p></div>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-gray-100">
+                            <p class="text-xs text-gray-400">Total Fees Collected: ${formatCurrency(paidFees)} of ${formatCurrency(totalFees)}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // =============================================================
+        // 16. WARDEN VIEWS (with edit capabilities)
+        // =============================================================
+
+        // --- Room Occupancy (with room reallocation) ---
+        function renderRoomOccupancy() {
+            const rooms = appData.rooms;
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-5">Room Occupancy</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            ${rooms.map(r => {
+                                const students = r.students.map(id => getUserById(id)).filter(Boolean);
+                                return `
+                                    <div class="bg-[#F8FAFC] rounded-xl p-4 border border-gray-100 hover:shadow-md transition">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-bold text-lg text-[#0b1e3a]">${r.number}</span>
+                                            <span class="text-xs font-medium px-2.5 py-1 rounded-full ${r.occupied === r.capacity ? 'badge-paid' : r.occupied > 0 ? 'badge-pending' : 'badge-unpaid'}">${r.occupied}/${r.capacity}</span>
+                                        </div>
+                                        <p class="text-xs text-gray-400 mt-1">${r.type} · ${r.capacity} bed${r.capacity > 1 ? 's' : ''}</p>
+                                        ${students.length ? `
+                                            <div class="mt-2 space-y-1">
+                                                ${students.map(s => `
+                                                    <div class="flex items-center justify-between text-xs">
+                                                        <span class="text-gray-700">${s.name}</span>
+                                                        <button data-studentid="${s.id}" class="reallocate-btn text-blue-600 hover:text-blue-800 text-xs font-medium">Change Room</button>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : '<p class="text-xs text-gray-400 mt-2">Vacant</p>'}
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Reallocate Room
+            document.querySelectorAll('.reallocate-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const studentId = this.dataset.studentid;
+                    const student = getUserById(studentId);
+                    if (!student) return;
+                    const currentRoom = getRoomForStudent(studentId);
+                    const availableRooms = appData.rooms.filter(r =>
+                        r.occupied < r.capacity && (currentRoom ? r.id !== currentRoom.id : true)
+                    );
+                    if (availableRooms.length === 0) {
+                        showToast('No available rooms with capacity.', 'error');
+                        return;
+                    }
+                    const roomOptions = availableRooms.map(r =>
+                        `<option value="${r.id}">${r.number} (${r.occupied}/${r.capacity})</option>`
+                    ).join('');
+                    const formHTML = `
+                        <div class="space-y-4">
+                            <p class="text-sm text-gray-600">Reallocating <strong>${student.name}</strong> from <strong>${currentRoom ? currentRoom.number : 'No room'}</strong></p>
+                            <div><label class="text-xs font-medium text-gray-500 block mb-1">Select New Room</label>
+                                <select id="reallocateRoom" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 focus:border-[#2563EB] transition">
+                                    ${roomOptions}
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    showModal('Change Room Allocation', formHTML, 'Reallocate', 'Cancel', function() {
+                        const newRoomId = document.getElementById('reallocateRoom').value;
+                        if (!newRoomId) { showToast('Please select a room.', 'error'); return; }
+                        const newRoom = appData.rooms.find(r => r.id === newRoomId);
+                        if (!newRoom || newRoom.occupied >= newRoom.capacity) {
+                            showToast('Selected room is full.', 'error');
+                            return;
+                        }
+                        // Remove from old room
+                        if (currentRoom) {
+                            currentRoom.students = currentRoom.students.filter(id => id !== studentId);
+                            currentRoom.occupied = currentRoom.students.length;
+                        }
+                        // Add to new room
+                        newRoom.students.push(studentId);
+                        newRoom.occupied = newRoom.students.length;
+                        student.roomId = newRoomId;
+                        persist();
+                        showToast(`${student.name} reallocated to ${newRoom.number}`, 'success');
+                        renderRoomOccupancy();
+                        updateNotificationBadge();
+                    });
+                });
+            });
+        }
+
+        // --- Leaves Approval (with dropdown status update) ---
+        function renderLeavesApproval() {
+            const pendingLeaves = appData.leaves.filter(l => l.status === 'pending');
+            const allLeaves = appData.leaves.slice().sort((a, b) => new Date(b.from) - new Date(a.from));
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">Leaves Approval</h3>
+                        <p class="text-sm text-gray-400 mb-5">${pendingLeaves.length} pending requests</p>
+                        ${pendingLeaves.length ? `
+                            <div class="space-y-3 mb-6">
+                                ${pendingLeaves.map(l => {
+                                    const student = getUserById(l.studentId);
+                                    return `
+                                        <div class="flex items-center justify-between border border-gray-100 rounded-xl p-4 hover:bg-[#F8FAFC] transition">
+                                            <div><p class="font-medium text-gray-800">${student ? student.name : 'Unknown'}</p><p class="text-xs text-gray-400">${formatDate(l.from)} — ${formatDate(l.to)} · ${l.reason}</p></div>
+                                            <div class="flex items-center gap-2">
+                                                <select data-leaveid="${l.id}" class="status-select leave-status-select">
+                                                    <option value="pending" selected>Pending</option>
+                                                    <option value="approved">Approved</option>
+                                                    <option value="rejected">Rejected</option>
+                                                </select>
+                                                <button data-leaveid="${l.id}" class="update-leave-status-btn text-xs font-medium px-3 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-lg transition">Update</button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-4">No pending leave requests.</p>'}
+                        <h4 class="font-semibold text-gray-700 mb-3 mt-6 border-t border-gray-100 pt-4">All Leave History</h4>
+                        ${allLeaves.length ? `
+                            <div class="space-y-2">
+                                ${allLeaves.slice(0, 10).map(l => {
+                                    const student = getUserById(l.studentId);
+                                    return `
+                                        <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                                            <div><p class="text-sm text-gray-800">${student ? student.name : 'Unknown'} · ${formatDate(l.from)} — ${formatDate(l.to)}</p><p class="text-xs text-gray-400">${l.reason}</p></div>
+                                            <span class="text-xs font-medium px-2.5 py-1 rounded-full ${l.status === 'approved' ? 'badge-approved' : l.status === 'pending' ? 'badge-pending' : 'badge-rejected'}">${l.status.charAt(0).toUpperCase()+l.status.slice(1)}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-4">No leave records.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Update leave status via dropdown
+            document.querySelectorAll('.update-leave-status-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.leaveid;
+                    const select = document.querySelector(`.leave-status-select[data-leaveid="${id}"]`);
+                    if (!select) return;
+                    const newStatus = select.value;
+                    const leave = appData.leaves.find(l => l.id === id);
+                    if (!leave) return;
+                    if (leave.status === newStatus) {
+                        showToast('Status unchanged.', 'error');
+                        return;
+                    }
+                    const student = getUserById(leave.studentId);
+                    leave.status = newStatus;
+                    leave.approvedBy = currentUser.id;
+                    persist();
+                    addNotification(`Leave ${newStatus} for ${student ? student.name : 'student'}`, 'student');
+                    addNotification(`Leave ${newStatus} for ${student ? student.name : 'student'}`, 'admin');
+                    showToast(`Leave status updated to ${newStatus}!`, 'success');
+                    renderLeavesApproval();
+                    updateNotificationBadge();
+                });
+            });
+        }
+
+        // --- Visitor Entries (unchanged, no edit needed) ---
+        function renderVisitorEntries() {
+            const visitors = appData.visitors.slice().sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate));
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">Visitor Entries</h3>
+                        <p class="text-sm text-gray-400 mb-5">All visitor records</p>
+                        ${visitors.length ? `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-xs text-gray-400 border-b border-gray-100"><th class="pb-3 font-medium">Student</th><th class="pb-3 font-medium">Visitor</th><th class="pb-3 font-medium">Relation</th><th class="pb-3 font-medium">Date</th><th class="pb-3 font-medium">Time</th></tr></thead>
+                                    <tbody>
+                                        ${visitors.map(v => {
+                                            const student = getUserById(v.studentId);
+                                            return `
+                                                <tr class="border-b border-gray-50 hover:bg-[#F8FAFC] transition">
+                                                    <td class="py-3 font-medium text-gray-800">${student ? student.name : 'Unknown'}</td>
+                                                    <td class="py-3 text-gray-700">${v.name}</td>
+                                                    <td class="py-3 text-gray-500">${v.relation}</td>
+                                                    <td class="py-3 text-gray-500">${formatDate(v.visitDate)}</td>
+                                                    <td class="py-3 text-gray-500">${v.inTime} – ${v.outTime}</td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-8">No visitor records.</p>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Complaints Resolver (with dropdown status update) ---
+        function renderComplaintsResolver() {
+            const complaints = appData.complaints.filter(c => c.status !== 'resolved');
+            const allComplaints = appData.complaints.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            viewContainer.innerHTML = `
+                <div class="view-container">
+                    <div class="bg-white rounded-xl p-6 border border-gray-200/60 shadow-sm">
+                        <h3 class="text-lg font-semibold text-[#0b1e3a] mb-1">Complaints Resolver</h3>
+                        <p class="text-sm text-gray-400 mb-5">${complaints.length} open complaints</p>
+                        ${complaints.length ? `
+                            <div class="space-y-3 mb-6">
+                                ${complaints.map(c => {
+                                    const student = getUserById(c.createdBy);
+                                    return `
+                                        <div class="flex items-center justify-between border border-gray-100 rounded-xl p-4 hover:bg-[#F8FAFC] transition">
+                                            <div><p class="font-medium text-gray-800">${c.title}</p><p class="text-xs text-gray-400">${student ? student.name : 'Unknown'} · ${c.category} · ${formatDate(c.createdAt)}</p><p class="text-xs text-gray-500 mt-1">${c.description}</p></div>
+                                            <div class="flex items-center gap-2">
+                                                <select data-complaintid="${c.id}" class="status-select complaint-status-select">
+                                                    <option value="open" ${c.status === 'open' ? 'selected' : ''}>Open</option>
+                                                    <option value="in-progress" ${c.status === 'in-progress' ? 'selected' : ''}>In Progress</option>
+                                                    <option value="resolved" ${c.status === 'resolved' ? 'selected' : ''}>Resolved</option>
+                                                </select>
+                                                <button data-complaintid="${c.id}" class="update-complaint-status-btn text-xs font-medium px-3 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded-lg transition">Update</button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-4">All complaints resolved! 🎉</p>'}
+                        <h4 class="font-semibold text-gray-700 mb-3 mt-6 border-t border-gray-100 pt-4">All Complaints</h4>
+                        ${allComplaints.length ? `
+                            <div class="space-y-2">
+                                ${allComplaints.slice(0, 10).map(c => {
+                                    const student = getUserById(c.createdBy);
+                                    return `
+                                        <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                                            <div><p class="text-sm text-gray-800">${c.title}</p><p class="text-xs text-gray-400">${student ? student.name : 'Unknown'} · ${formatDate(c.createdAt)}</p></div>
+                                            <span class="text-xs font-medium px-2.5 py-1 rounded-full status-${c.status}">${c.status.charAt(0).toUpperCase()+c.status.slice(1)}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : '<p class="text-sm text-gray-400 text-center py-4">No complaints.</p>'}
+                    </div>
+                </div>
+            `;
+
+            // Update complaint status via dropdown
+            document.querySelectorAll('.update-complaint-status-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.dataset.complaintid;
+                    const select = document.querySelector(`.complaint-status-select[data-complaintid="${id}"]`);
+                    if (!select) return;
+                    const newStatus = select.value;
+                    const complaint = appData.complaints.find(c => c.id === id);
+                    if (!complaint) return;
+                    if (complaint.status === newStatus) {
+                        showToast('Status unchanged.', 'error');
+                        return;
+                    }
+                    const student = getUserById(complaint.createdBy);
+                    complaint.status = newStatus;
+                    if (newStatus === 'resolved') complaint.resolvedBy = currentUser.id;
+                    persist();
+                    addNotification(`Complaint "${complaint.title}" status updated to ${newStatus}`, 'student');
+                    addNotification(`Complaint "${complaint.title}" status updated to ${newStatus}`, 'admin');
+                    showToast(`Complaint status updated to ${newStatus}!`, 'success');
+                    renderComplaintsResolver();
+                    updateNotificationBadge();
+                });
+            });
+        }
+
+        // =============================================================
+        // 17. INIT
+        // =============================================================
+        currentUser = null;
+        sidebar.style.display = 'none';
+        document.querySelector('header').style.display = 'none';
+        showLogin();
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === STORAGE_KEY) {
+                appData = loadData();
+                if (currentUser) {
+                    renderView(currentView);
+                    updateNotificationBadge();
+                }
+            }
+        });
+
+        window.__appData = appData;
+        window.__reloadData = function() {
+            appData = loadData();
+            if (currentUser) renderView(currentView);
+        };
+        window.__showToast = showToast;
+
+        console.log('🏠 HostelHub initialized with full CRUD.');
+    })();
+</script>
+
+</body>
+</html>
