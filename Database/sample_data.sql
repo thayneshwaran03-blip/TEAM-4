@@ -45,3 +45,11 @@ WHERE occupied_count < capacity;SELECT s.name,
 FROM Leave_Request l
 JOIN Student s
 ON l.student_id = s.student_id;SELECT * FROM Student;
+INSERT INTO Announcement
+(title, message, created_date, created_time, admin_id)
+VALUES
+('Hostel Meeting',
+ 'All students must attend the hostel meeting at 6 PM.',
+ CURDATE(),
+ CURTIME(),
+ 1);
