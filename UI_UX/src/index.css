@@ -11,7 +11,7 @@
   }
 
   body {
-    font-family: 'Poppins', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', 'Poppins', 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 }
 
@@ -58,3 +58,35 @@
 .animate-float-glow {
   animation: floatGlow 12s ease-in-out infinite;
 }
+
+/* Polished micro-animations for dashboard */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
