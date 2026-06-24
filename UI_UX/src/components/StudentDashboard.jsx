@@ -69,6 +69,23 @@ export default function StudentDashboard({ user, onLogout }) {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+  const name = user && user.fullName ? user.fullName : 'Alex Mercer';
+  const role = user && user.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Student';
+  const initials = user && user.fullName 
+    ? user.fullName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() 
+    : 'AM';
+
+  const navItems = [
+    { icon: 'fa-th-large', label: 'Dashboard', active: true },
+    { icon: 'fa-user', label: 'My Profile' },
+    { icon: 'fa-door-open', label: 'My Room' },
+    { icon: 'fa-calendar-check', label: 'Apply Leave' },
+    { icon: 'fa-exclamation-triangle', label: 'Complaints' },
+    { icon: 'fa-credit-card', label: 'Fees & Dues' },
+    { icon: 'fa-bullhorn', label: 'Announcements' },
+    { icon: 'fa-address-book', label: 'My Visitor History' },
+    { icon: 'fa-qrcode', label: 'QR Gate Pass' }
+  ];
 
   // ── derived ───────────────────────────────────────────────────────────────
   const unread         = notifications.filter(n => !n.read).length;
