@@ -212,21 +212,7 @@ const forgotPassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Send OTP email
-    try {
-      await sendOtpEmail(user.email, otp, user.fullName);
-    } catch (emailError) {
-      console.warn('⚠️ SMTP Email Sending Failed. Falling back to console logging for development.');
-      console.warn(`[OTP DEV FALLBACK] OTP for ${user.email} is: ${otp}`);
-      
-      const isPlaceholder = !process.env.EMAIL_USER || process.env.EMAIL_USER.includes('your_gmail');
-      if (isPlaceholder || emailError.code === 'EAUTH' || emailError.code === 'ECONNREFUSED') {
-        return res.status(200).json({
-          success: true,
-          message: `OTP logged to server console (SMTP not configured).`,
-        });
-      }
-      throw emailError;
-    }
+    await sendOtpEmail(user.email, otp, user.fullName);
 
     return res.status(200).json({
       success: true,
@@ -338,7 +324,7 @@ const resetPassword = async (req, res) => {
     user.password = newPassword;
     user.resetOtp = null;
     user.resetOtpExpiry = null;
-    await user.save({ validateBeforeSave: false });
+    await user.save();
 
     return res.status(200).json({
       success: true,
