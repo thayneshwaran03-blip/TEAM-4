@@ -1,9 +1,11 @@
 import React from 'react';
 
 export default function AdminDashboard({ user, onLogout }) {
-  const name = user ? user.fullName : 'System Admin';
-  const role = user ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Administrator';
-  const initials = user ? user.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'SA';
+  const name = user && user.fullName ? user.fullName : 'System Admin';
+  const role = user && user.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Administrator';
+  const initials = user && user.fullName 
+    ? user.fullName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() 
+    : 'SA';
 
   const navItems = [
     { icon: 'fa-th-large', label: 'Dashboard', active: true },

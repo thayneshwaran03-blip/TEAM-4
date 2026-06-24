@@ -1,9 +1,11 @@
 import React from 'react';
 
 export default function StudentDashboard({ user, onLogout }) {
-  const name = user ? user.fullName : 'Alex Mercer';
-  const role = user ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Student';
-  const initials = user ? user.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'AM';
+  const name = user && user.fullName ? user.fullName : 'Alex Mercer';
+  const role = user && user.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Student';
+  const initials = user && user.fullName 
+    ? user.fullName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() 
+    : 'AM';
 
   const navItems = [
     { icon: 'fa-th-large', label: 'Dashboard', active: true },
