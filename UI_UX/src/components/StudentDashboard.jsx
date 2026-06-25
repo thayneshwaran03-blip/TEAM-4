@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function StudentDashboard({ user, onLogout }) {
   const name       = user?.fullName  || 'Alex Mercer';
@@ -12,10 +12,11 @@ export default function StudentDashboard({ user, onLogout }) {
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [isMobileDrawerOpen,  setIsMobileDrawerOpen]  = useState(false);
-  const [isMoreOptionsOpen,   setIsMoreOptionsOpen]   = useState(false);
+  const [isSidebarExpanded,   setIsSidebarExpanded]   = useState(false);
   const [isProfileOpen,       setIsProfileOpen]       = useState(false);
   const [isNotifOpen,         setIsNotifOpen]         = useState(false);
   const [activeTab,           setActiveTab]           = useState('Dashboard');
+  const [toast,               setToast]               = useState(null); // { message, type: 'success'|'error' }
 
   // ── Modals ────────────────────────────────────────────────────────────────
   const [showProfileModal,  setShowProfileModal]  = useState(false);
@@ -23,22 +24,11 @@ export default function StudentDashboard({ user, onLogout }) {
   const [showPwModal,       setShowPwModal]       = useState(false);
 
   // ── Data state ────────────────────────────────────────────────────────────
-  const [notifications, setNotifications] = useState([
-    { id: 1, text: 'Leave request for Weekend Outing approved.',  time: '2 hours ago', read: false },
-    { id: 2, text: 'Mess fee invoice for July 2026 generated.',   time: '1 day ago',   read: false },
-    { id: 3, text: 'Complaint regarding AC in Room 101 resolved.', time: '2 days ago', read: true  },
-  ]);
-  const [leaves, setLeaves] = useState([
-    { id: 1, type: 'Weekend Outing', startDate: '2026-06-27', endDate: '2026-06-28', reason: 'Visiting parents',  status: 'Approved' },
-    { id: 2, type: 'Medical Leave',  startDate: '2026-06-15', endDate: '2026-06-18', reason: 'Dental checkup',    status: 'Approved' },
-  ]);
-  const [complaints, setComplaints] = useState([
-    { id: 1, type: 'Maintenance', description: 'AC unit making loud noise.', date: '2026-06-23', status: 'Pending' },
-  ]);
-  const [visitors, setVisitors] = useState([
-    { id: 1, name: 'Rajesh Balasubramaniam', relation: 'Father', date: '2026-06-20', timeIn: '10:00 AM', timeOut: '04:30 PM', status: 'Checked Out' },
-    { id: 2, name: 'Uma Balasubramaniam',    relation: 'Mother', date: '2026-06-12', timeIn: '11:15 AM', timeOut: '02:00 PM', status: 'Checked Out' },
-  ]);
+  const [notifications, setNotifications] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [leaves, setLeaves] = useState([]);
+  const [complaints, setComplaints] = useState([]);
+  const [visitors, setVisitors] = useState([]);
 
   // form fields
   const [leaveType,      setLeaveType]      = useState('Weekend Outing');
@@ -70,6 +60,46 @@ export default function StudentDashboard({ user, onLogout }) {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  // ── API helpers & data loading ─────────────────────────────────────────
+  const apiFetch = async (path, opts = {}) => {
+    const token = localStorage.getItem('token');
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`/api${path}`, Object.assign({}, opts, { headers }));
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status} ${res.statusText} - ${text}`);
+    }
+    return res.json();
+  };
+
+  const fetchAll = async () => {
+    try {
+      const [profileResp, leaveResp, compResp, visResp, annResp, notifResp] = await Promise.all([
+        apiFetch('/student/profile').catch(() => null),
+        apiFetch('/student/leave/history').catch(() => ({ leaveHistory: [] })),
+        apiFetch('/student/complaint/history').catch(() => ({ complaints: [] })),
+        apiFetch('/student/visitor/history').catch(() => ({ visitorRequests: [] })),
+        apiFetch('/student/announcements').catch(() => ({ announcements: [] })),
+        apiFetch('/student/notifications').catch(() => ({ notifications: [] })),
+      ]);
+
+      if (profileResp && profileResp.student) {
+        // profileResp.student is available here if needed
+      }
+
+      setLeaves(leaveResp.leaveHistory || []);
+      setComplaints(compResp.complaints || []);
+      setVisitors(visResp.visitorRequests || []);
+      setAnnouncements(annResp.announcements || []);
+      setNotifications(notifResp.notifications || []);
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error.message);
+    }
+  };
+
+  useEffect(() => { fetchAll(); }, []);
+
   // ── derived ───────────────────────────────────────────────────────────────
   const unread         = notifications.filter(n => !n.read).length;
   const pendingLeaves  = leaves.filter(l => l.status === 'Pending').length;
@@ -80,33 +110,64 @@ export default function StudentDashboard({ user, onLogout }) {
   const dateStr = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const dayStr  = today.toLocaleDateString('en-US', { weekday: 'long' });
 
+  // ── Toast helper ─────────────────────────────────────────────────────────
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
   // ── handlers ──────────────────────────────────────────────────────────────
-  const submitLeave = e => {
+  const submitLeave = async e => {
     e.preventDefault();
-    if (!leaveStart || !leaveEnd || !leaveReason) return alert('Fill all fields.');
-    setLeaves([{ id: leaves.length + 1, type: leaveType, startDate: leaveStart, endDate: leaveEnd, reason: leaveReason, status: 'Pending' }, ...leaves]);
-    setLeaveStart(''); setLeaveEnd(''); setLeaveReason('');
-    alert('Leave submitted!');
+    try {
+      if (!leaveStart || !leaveEnd || !leaveReason) { showToast('Please fill all required fields.', 'error'); return; }
+      if (new Date(leaveEnd) < new Date(leaveStart)) { showToast('End date must be after start date.', 'error'); return; }
+      const payload = { leaveType, fromDate: leaveStart, toDate: leaveEnd, reason: leaveReason };
+      await apiFetch('/student/leave', { method: 'POST', body: JSON.stringify(payload) });
+      setLeaveStart(''); setLeaveEnd(''); setLeaveReason('');
+      await fetchAll();
+      showToast('Leave request submitted successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Unable to submit leave request.', 'error');
+    }
   };
-  const submitComplaint = e => {
+
+  const submitComplaint = async e => {
     e.preventDefault();
-    if (!complaintDesc) return alert('Describe the issue.');
-    setComplaints([{ id: complaints.length + 1, type: complaintType, description: complaintDesc, date: new Date().toISOString().split('T')[0], status: 'Pending' }, ...complaints]);
-    setComplaintDesc('');
-    alert('Complaint filed!');
+    try {
+      if (!complaintDesc.trim()) { showToast('Please describe the issue.', 'error'); return; }
+      const payload = { category: complaintType, title: complaintDesc.substring(0, 80), description: complaintDesc, priority: 'Medium' };
+      await apiFetch('/student/complaint', { method: 'POST', body: JSON.stringify(payload) });
+      setComplaintDesc('');
+      await fetchAll();
+      showToast('Complaint filed successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Unable to file complaint.', 'error');
+    }
   };
-  const submitVisitor = e => {
+
+  const submitVisitor = async e => {
     e.preventDefault();
-    if (!visitorName || !visitorRel || !visitorDate) return alert('Fill all fields.');
-    setVisitors([{ id: visitors.length + 1, name: visitorName, relation: visitorRel, date: visitorDate, timeIn: 'Scheduled', timeOut: '--', status: 'Approved' }, ...visitors]);
-    setVisitorName(''); setVisitorRel(''); setVisitorDate('');
-    alert('Visitor registered!');
+    try {
+      if (!visitorName.trim() || !visitorRel.trim() || !visitorDate) { showToast('Please fill all visitor details.', 'error'); return; }
+      const payload = { visitorName, relationship: visitorRel, phoneNumber: '', visitDate: visitorDate, expectedArrivalTime: '00:00' };
+      await apiFetch('/student/visitor', { method: 'POST', body: JSON.stringify(payload) });
+      setVisitorName(''); setVisitorRel(''); setVisitorDate('');
+      await fetchAll();
+      showToast('Visitor registered successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Unable to register visitor.', 'error');
+    }
   };
   const submitPw = e => {
     e.preventDefault();
-    if (!oldPw || !newPw || !confirmPw) return alert('Fill all fields.');
-    if (newPw !== confirmPw) return alert('Passwords do not match.');
-    alert('Password updated!');
+    if (!oldPw || !newPw || !confirmPw) { showToast('Please fill all password fields.', 'error'); return; }
+    if (newPw.length < 6) { showToast('New password must be at least 6 characters.', 'error'); return; }
+    if (newPw !== confirmPw) { showToast('New password and confirm password do not match.', 'error'); return; }
+    showToast('Password updated successfully!');
     setOldPw(''); setNewPw(''); setConfirmPw('');
     setShowPwModal(false);
   };
@@ -120,99 +181,145 @@ export default function StudentDashboard({ user, onLogout }) {
     { id: 'Announcements',      icon: 'fa-bullhorn',    label: 'Announcements'     },
     { id: 'My Visitor History', icon: 'fa-user-friends',label: 'My Visitor History'},
   ];
-  const moreNav = [
-    { id: 'Fees & Dues',  icon: 'fa-credit-card', label: 'Fees & Dues'  },
-    { id: 'QR Gate Pass', icon: 'fa-qrcode',      label: 'QR Gate Pass' },
-  ];
 
   // ── shared input style ────────────────────────────────────────────────────
-  const inp = 'w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400 transition';
+  const inp = 'w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition';
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
     <div className="flex w-full min-h-screen bg-[#F5F7FB] font-sans antialiased text-gray-800 overflow-x-hidden">
 
+      {/* ── TOAST NOTIFICATION ───────────────────────────────────────────── */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[9999] flex items-center space-x-2.5 px-4 py-3 rounded-xl shadow-xl transition-all duration-300 animate-fadeIn ${
+          toast.type === 'success'
+            ? 'bg-emerald-500 text-white'
+            : 'bg-rose-500 text-white'
+        }`}>
+          <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-sm`} />
+          <span className="text-sm font-medium">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-2 text-white/70 hover:text-white transition-colors">
+            <i className="fas fa-times text-xs" />
+          </button>
+        </div>
+      )}
+
       {/* Mobile overlay */}
       {isMobileDrawerOpen && (
-        <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onClick={() => setIsMobileDrawerOpen(false)} />
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setIsMobileDrawerOpen(false)}
+
+        />
       )}
 
       {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col w-56 bg-white border-r border-gray-100 transition-transform duration-300
-        lg:static lg:translate-x-0 lg:h-screen
-        ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-
-        {/* User profile card */}
-        <div className="flex flex-col items-center py-7 px-4 border-b border-gray-100">
-          <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-xl shadow mb-3">
-            {initials}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-gray-100
+          transition-all duration-300 ease-in-out overflow-hidden
+          lg:static lg:h-screen lg:flex
+          ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+        style={{ width: isMobileDrawerOpen ? '256px' : (isSidebarExpanded ? '256px' : '72px') }}
+      >
+        {/* ── Sidebar top: logo row (always visible) ── */}
+        <div
+          className="flex items-center border-b border-gray-100 shrink-0"
+          style={{ height: '64px', padding: isSidebarExpanded || isMobileDrawerOpen ? '0 16px' : '0', justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'flex-start' : 'center' }}
+        >
+          <div className="w-9 h-9 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
+            <i className="fas fa-home text-primary text-base" />
           </div>
-          <p className="text-sm font-semibold text-gray-900 truncate text-center">{name}</p>
-          <span className="mt-1 px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-wider rounded-full">
-            {role}
+          <span
+            className="font-bold text-gray-900 text-base tracking-tight select-none ml-2.5 whitespace-nowrap overflow-hidden transition-all duration-300"
+            style={{ opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0, maxWidth: isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px' }}
+          >
+            Hostel<span className="text-primary">Hub</span>
           </span>
-          <p className="mt-1.5 text-xs text-gray-400 font-normal">Room {roomNumber}, {blockName}</p>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 flex flex-col px-3 py-4 space-y-0.5 overflow-y-auto">
+        {/* ── Profile card (only when expanded) ── */}
+        <div
+          className="mx-3 mt-4 mb-2 p-4 bg-primary/5 rounded-2xl border border-primary/10 overflow-hidden transition-all duration-300"
+          style={{
+            opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+            maxHeight: isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px',
+            marginTop: isSidebarExpanded || isMobileDrawerOpen ? '16px' : '0px',
+            marginBottom: isSidebarExpanded || isMobileDrawerOpen ? '8px' : '0px',
+            padding: isSidebarExpanded || isMobileDrawerOpen ? '16px' : '0px',
+            pointerEvents: isSidebarExpanded || isMobileDrawerOpen ? 'auto' : 'none',
+          }}
+        >
+          <div className="flex flex-col items-center text-center">
+            <div className="w-11 h-11 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-md mb-2" style={{ fontSize: '16px' }}>
+              {initials.charAt(0)}
+            </div>
+            <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '14px' }}>{name}</p>
+            <span className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap" style={{ fontSize: '9px', letterSpacing: '0.08em' }}>Student</span>
+            <p className="mt-1.5 text-[#6B7280] font-medium whitespace-nowrap" style={{ fontSize: '11px' }}>Room {roomNumber}, {blockName}</p>
+          </div>
+        </div>
+
+        {/* ── Navigation ── */}
+        <nav className="flex-1 flex flex-col py-2 overflow-y-auto overflow-x-hidden" style={{ padding: '8px 10px' }}>
           {mainNav.map(item => {
             const active = activeTab === item.id;
+            const expanded = isSidebarExpanded || isMobileDrawerOpen;
             return (
               <button
                 key={item.id}
                 onClick={() => navigate(item.id)}
-                className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full text-left transition-all duration-150
-                  ${active
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
+                title={!expanded ? item.label : undefined}
+                className={`flex items-center rounded-xl w-full text-left transition-all duration-150 mb-0.5
+                  ${active ? 'bg-primary/10 text-primary' : 'text-[#6B7280] hover:bg-gray-50 hover:text-[#1F2937]'}`}
+                style={{
+                  padding: expanded ? '10px 14px' : '10px 0',
+                  justifyContent: expanded ? 'flex-start' : 'center',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
               >
-                <i className={`fas ${item.icon} w-4 text-center text-sm ${active ? 'text-indigo-600' : 'text-gray-400'}`} />
-                <span>{item.label}</span>
+                <i className={`fas ${item.icon} shrink-0 text-center transition-colors ${ active ? 'text-primary' : 'text-gray-400' }`}
+                  style={{ width: '20px', fontSize: '16px' }}
+                />
+                <span
+                  className="whitespace-nowrap overflow-hidden transition-all duration-300"
+                  style={{ opacity: expanded ? 1 : 0, maxWidth: expanded ? '180px' : '0px', marginLeft: expanded ? '12px' : '0px' }}
+                >
+                  {item.label}
+                </span>
               </button>
             );
           })}
-
-          {/* More Options section */}
-          <div className="pt-4">
-            <button
-              onClick={() => setIsMoreOptionsOpen(!isMoreOptionsOpen)}
-              className="flex items-center justify-between w-full px-3 py-1.5 text-left"
-            >
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">More Options</span>
-              <i className={`fas fa-chevron-down text-[9px] text-gray-400 transition-transform duration-200 ${isMoreOptionsOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            <div className={`overflow-hidden transition-all duration-300 space-y-0.5 mt-0.5 ${isMoreOptionsOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'}`}>
-              {moreNav.map(item => {
-                const active = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => navigate(item.id)}
-                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full text-left transition-all duration-150
-                      ${active
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
-                  >
-                    <i className={`fas ${item.icon} w-4 text-center text-sm ${active ? 'text-indigo-600' : 'text-gray-400'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </nav>
 
-        {/* Sign Out */}
-        <div className="px-3 py-4 border-t border-gray-100">
-          <button
-            onClick={onLogout}
-            className="flex items-center space-x-3 px-3 py-2.5 rounded-xl w-full text-left text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
-          >
-            <i className="fas fa-sign-out-alt w-4 text-center text-sm" />
-            <span>Sign Out</span>
-          </button>
+        {/* ── Sign Out ── */}
+        <div className="border-t border-gray-100 shrink-0" style={{ padding: '10px 10px' }}>
+          {(() => {
+            const expanded = isSidebarExpanded || isMobileDrawerOpen;
+            return (
+              <button
+                onClick={onLogout}
+                title={!expanded ? 'Sign Out' : undefined}
+                className="flex items-center rounded-xl w-full text-left text-red-500 hover:bg-red-50 transition-colors"
+                style={{
+                  padding: expanded ? '10px 14px' : '10px 0',
+                  justifyContent: expanded ? 'flex-start' : 'center',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                }}
+              >
+                <i className="fas fa-sign-out-alt shrink-0 text-center" style={{ width: '20px', fontSize: '16px' }} />
+                <span
+                  className="whitespace-nowrap overflow-hidden transition-all duration-300"
+                  style={{ opacity: expanded ? 1 : 0, maxWidth: expanded ? '180px' : '0px', marginLeft: expanded ? '12px' : '0px' }}
+                >
+                  Sign Out
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </aside>
 
@@ -220,32 +327,39 @@ export default function StudentDashboard({ user, onLogout }) {
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
 
         {/* ── TOP NAVBAR ───────────────────────────────────────────────── */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-6 py-3.5 flex items-center justify-between">
-          {/* Left: hamburger + logo */}
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
-              className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg transition-colors lg:hidden"
-            >
-              <i className="fas fa-bars text-base" />
-            </button>
-            {/* Desktop hamburger (does nothing visible, just matches screenshot) */}
-            <button className="hidden lg:flex p-2 text-gray-400 hover:bg-gray-50 rounded-lg transition-colors">
-              <i className="fas fa-bars text-base" />
-            </button>
-            {/* Logo */}
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-home text-indigo-600 text-sm" />
+        <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-5 flex items-center justify-between" style={{ height: '64px' }}>
+          {/* Left: Logo + Hamburger + Breadcrumb */}
+          <div className="flex items-center">
+            {/* HostelHub Logo (visible on mobile when sidebar is hidden) */}
+            <div className="flex items-center space-x-2 lg:hidden mr-3">
+              <div className="w-8 h-8 bg-primary/15 rounded-lg flex items-center justify-center">
+                <i className="fas fa-home text-primary text-sm" />
               </div>
-              <span className="font-bold text-gray-900 text-base tracking-tight">
-                Hostel<span className="text-indigo-600">Hub</span>
+              <span className="font-bold text-gray-900 text-base tracking-tight select-none">
+                Hostel<span className="text-primary">Hub</span>
               </span>
+            </div>
+            {/* Hamburger — between logo and breadcrumb */}
+            <button
+              onClick={() => {
+                if (window.innerWidth < 1024) {
+                  setIsMobileDrawerOpen(!isMobileDrawerOpen);
+                } else {
+                  setIsSidebarExpanded(!isSidebarExpanded);
+                }
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-[#374151] hover:bg-gray-100 transition-colors mr-3"
+            >
+              <i className="fas fa-bars" style={{ fontSize: '16px' }} />
+            </button>
+            {/* Page Breadcrumb */}
+            <div className="hidden sm:flex items-center">
+              <span className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>{activeTab}</span>
             </div>
           </div>
 
           {/* Right: bell + profile */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-4">
 
             {/* Notification bell */}
             <div className="relative" ref={notifRef}>
@@ -263,19 +377,19 @@ export default function StudentDashboard({ user, onLogout }) {
               {isNotifOpen && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 p-4 origin-top-right animate-scaleIn">
                   <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
-                    <span className="text-sm font-semibold text-gray-800">Notifications</span>
+                    <span className="text-sm font-semibold text-[#1F2937]">Notifications</span>
                     {unread > 0 && (
                       <button
                         onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
-                        className="text-xs text-indigo-600 font-medium hover:underline"
+                        className="text-xs text-primary font-medium hover:underline"
                       >Mark all read</button>
                     )}
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {notifications.map(n => (
-                      <div key={n.id} className={`p-2.5 rounded-xl text-xs ${n.read ? '' : 'bg-indigo-50/50'}`}>
-                        <p className="text-gray-700 font-normal">{n.text}</p>
-                        <p className="text-gray-400 mt-0.5">{n.time}</p>
+                      <div key={n.id} className={`p-2.5 rounded-xl text-xs ${n.read ? '' : 'bg-primary/5'}`}>
+                        <p className="text-[#374151] font-normal">{n.text}</p>
+                        <p className="text-[#6B7280] mt-0.5">{n.time}</p>
                       </div>
                     ))}
                   </div>
@@ -287,23 +401,20 @@ export default function StudentDashboard({ user, onLogout }) {
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
-                className="flex items-center space-x-2.5 pl-2 pr-3 py-1.5 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
+                className="flex items-center space-x-3 pl-2 pr-3 py-2 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-semibold">
-                  {initials}
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
+                  {initials.charAt(0)}
                 </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-semibold text-gray-900 leading-tight">{name}</p>
-                  <p className="text-[10px] text-gray-400 font-normal">{role}</p>
-                </div>
-                <i className={`fas fa-chevron-down text-[10px] text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+                <span className="hidden sm:block font-semibold text-[#1F2937] leading-none" style={{ fontSize: '17px' }}>{name}</span>
+                <i className={`fas fa-chevron-down text-[11px] text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isProfileOpen && (
                 <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 p-2 origin-top-right animate-scaleIn">
                   <div className="px-3 py-2 border-b border-gray-100 mb-1">
-                    <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
-                    <p className="text-[10px] text-gray-400 truncate">{email}</p>
+                    <p className="text-xs font-semibold text-[#1F2937] truncate">{name}</p>
+                    <p className="text-[10px] text-[#6B7280] truncate">{email}</p>
                   </div>
                   {[
                     { icon: 'fa-user-circle', label: 'My Profile',       action: () => { setShowProfileModal(true);  setIsProfileOpen(false); } },
@@ -330,7 +441,8 @@ export default function StudentDashboard({ user, onLogout }) {
         </header>
 
         {/* ── MAIN BODY ─────────────────────────────────────────────────── */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+        <main className="flex-1 p-6 md:p-8 overflow-y-auto flex flex-col justify-between">
+          <div className="flex-1 space-y-6">
 
           {/* ══ DASHBOARD ══════════════════════════════════════════════════ */}
           {activeTab === 'Dashboard' && (
@@ -339,61 +451,60 @@ export default function StudentDashboard({ user, onLogout }) {
               {/* Welcome row */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl md:text-[28px] font-bold text-gray-900 leading-tight">
-                    Welcome back, {name}! 👋
+                  <h1 className="font-bold text-[#111827] leading-tight tracking-tight" style={{ fontSize: '42px' }}>
+                    Welcome Back, {name.split(' ')[0]} 👋
                   </h1>
-                  <p className="text-sm text-gray-400 font-normal mt-1">Here's what's happening in your hostel today.</p>
+                  <p className="text-[#4B5563] mt-2" style={{ fontSize: '18px', fontWeight: 500 }}>Here's what's happening in your hostel today.</p>
                 </div>
                 {/* Date card */}
-                <div className="flex items-center space-x-2.5 px-4 py-3 bg-white rounded-2xl shadow-sm border border-gray-100 text-left shrink-0">
-                  <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                    <i className="fas fa-calendar-alt text-indigo-500 text-sm" />
+                <div className="flex items-center space-x-3 px-5 py-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 text-left shrink-0">
+                  <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <i className="fas fa-calendar-alt text-primary-light text-base" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-gray-900 leading-tight">{dateStr}</p>
-                    <p className="text-[10px] text-gray-400 font-normal">{dayStr}</p>
+                    <p className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '14px' }}>{dateStr}</p>
+                    <p className="text-[#6B7280] font-medium" style={{ fontSize: '12px' }}>{dayStr}</p>
                   </div>
                 </div>
               </div>
 
               {/* Stat cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
                   {
-                    icon: 'fa-home',    iconBg: 'bg-blue-50',   iconColor: 'text-blue-500',
-                    label: 'My Room',   value: roomNumber,       sub: `${blockName}, 1st Floor`,
+                    icon: 'fa-home',    iconBg: 'bg-blue-50',   iconColor: 'text-blue-600',
+                    label: 'My Room',   value: `Room ${roomNumber}`,   sub: `${blockName} · 1st Floor`,
                     tab: 'My Room',
                   },
                   {
-                    icon: 'fa-calendar-check', iconBg: 'bg-orange-50', iconColor: 'text-orange-500',
-                    label: 'Pending Leaves',   value: pendingLeaves || 2, sub: 'Awaiting approvals',
+                    icon: 'fa-calendar-check', iconBg: 'bg-amber-50', iconColor: 'text-amber-600',
+                    label: 'Pending Leaves',   value: pendingLeaves || 0, sub: 'Awaiting approval',
                     tab: 'Apply Leave',
                   },
                   {
-                    icon: 'fa-exclamation-triangle', iconBg: 'bg-red-50', iconColor: 'text-red-500',
-                    label: 'Active Complaints',       value: activeComp || 1, sub: 'Under resolution',
+                    icon: 'fa-exclamation-triangle', iconBg: 'bg-rose-50', iconColor: 'text-rose-600',
+                    label: 'Active Complaints',       value: activeComp || 0, sub: 'Under resolution',
                     tab: 'My Room',
-                  },
-                  {
-                    icon: 'fa-credit-card', iconBg: 'bg-green-50', iconColor: 'text-green-500',
-                    label: 'Fees Status',     value: 'No Dues',        sub: 'All payments cleared',
-                    tab: 'Fees & Dues',
                   },
                 ].map((c, i) => (
                   <div
                     key={i}
                     onClick={() => navigate(c.tab)}
-                    className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer relative"
+                    className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-primary/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 cursor-pointer flex flex-col justify-between h-full group"
                   >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`w-10 h-10 ${c.iconBg} rounded-xl flex items-center justify-center`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`w-9 h-9 ${c.iconBg} rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
                         <i className={`fas ${c.icon} ${c.iconColor} text-base`} />
                       </div>
-                      <i className="fas fa-chevron-right text-gray-300 text-xs mt-1" />
+                      <span className="w-6 h-6 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                        <i className="fas fa-chevron-right text-gray-400 group-hover:text-primary text-[9px] transition-transform duration-300 group-hover:translate-x-0.5" />
+                      </span>
                     </div>
-                    <p className="text-xs font-normal text-gray-400 mb-1">{c.label}</p>
-                    <p className="text-2xl font-bold text-gray-900 leading-tight mb-1">{c.value}</p>
-                    <p className="text-xs text-gray-400 font-normal">{c.sub}</p>
+                    <div>
+                      <p className="uppercase tracking-wider mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{c.label}</p>
+                      <p className="font-semibold text-[#111827] mb-1 leading-tight" style={{ fontSize: '22px' }}>{c.value}</p>
+                      <p className="text-[#6B7280]" style={{ fontSize: '13px', fontWeight: 500 }}>{c.sub}</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -402,39 +513,39 @@ export default function StudentDashboard({ user, onLogout }) {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                 {/* Current Room Allocation */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-building text-indigo-500 text-sm" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-gray-900">Current Room Allocation</h3>
-                    </div>
-                    <button className="text-gray-400 hover:text-gray-600 transition-colors p-1">
-                      <i className="fas fa-ellipsis-h text-sm" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mb-5">
-                    {[
-                      { label: 'ROOM NUMBER',    value: '101',        icon: 'fa-bed',       iconColor: 'text-blue-500'   },
-                      { label: 'BLOCK / WING',   value: 'Block A',    icon: 'fa-building',  iconColor: 'text-indigo-500' },
-                      { label: 'FLOOR LEVEL',    value: '1st Floor',  icon: 'fa-layer-group',iconColor: 'text-orange-500'},
-                      { label: 'ROOMMATES COUNT',value: '1 Roommate', icon: 'fa-user-friends',iconColor: 'text-green-500'},
-                    ].map((item, i) => (
-                      <div key={i} className="bg-gray-50/70 rounded-xl p-4 flex items-end justify-between">
-                        <div>
-                          <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">{item.label}</p>
-                          <p className="text-base font-bold text-gray-900">{item.value}</p>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                          <i className="fas fa-building text-primary-light text-sm" />
                         </div>
-                        <i className={`fas ${item.icon} ${item.iconColor} text-xl opacity-70`} />
+                        <h3 className="font-semibold text-[#1F2937]" style={{ fontSize: '18px' }}>Current Room Allocation</h3>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      {[
+                        { label: 'ROOM NUMBER',    value: '101',        icon: 'fa-bed',       iconColor: 'text-blue-500'   },
+                        { label: 'BLOCK / WING',   value: 'Block A',    icon: 'fa-building',  iconColor: 'text-primary-light' },
+                        { label: 'FLOOR LEVEL',    value: '1st Floor',  icon: 'fa-layer-group',iconColor: 'text-orange-500'},
+                        { label: 'ROOMMATES COUNT',value: '1 Roommate', icon: 'fa-user-friends',iconColor: 'text-green-500'},
+                      ].map((item, i) => (
+                        <div key={i} className="bg-gray-50/50 hover:bg-gray-50/80 rounded-xl p-4 flex items-center justify-between border border-gray-100/50 transition-colors">
+                          <div>
+                            <p className="uppercase tracking-widest mb-1 text-[#6B7280]" style={{ fontSize: '10px', fontWeight: 500 }}>{item.label}</p>
+                            <p className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>{item.value}</p>
+                          </div>
+                          <i className={`fas ${item.icon} ${item.iconColor} text-lg opacity-85`} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <button
                     onClick={() => navigate('My Room')}
-                    className="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-3 rounded-xl transition-colors flex items-center justify-center space-x-2"
+                    className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-3.5 px-6 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 flex items-center justify-center space-x-2"
+                    style={{ fontSize: '17px' }}
                   >
                     <span>View Allocation Details</span>
                     <i className="fas fa-arrow-right text-xs" />
@@ -442,40 +553,45 @@ export default function StudentDashboard({ user, onLogout }) {
                 </div>
 
                 {/* Recent Announcements */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-bullhorn text-orange-500 text-sm" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-gray-900">Recent Announcements</h3>
-                    </div>
-                    <button className="text-gray-400 hover:text-gray-600 transition-colors p-1">
-                      <i className="fas fa-ellipsis-h text-sm" />
-                    </button>
-                  </div>
-
-                  {/* Empty state matching the screenshot */}
-                  <div className="flex-1 flex flex-col items-center justify-center py-6">
-                    <div className="relative w-24 h-24 mb-4">
-                      {/* Outer circle */}
-                      <div className="w-24 h-24 rounded-full bg-indigo-50 flex items-center justify-center">
-                        {/* Inner circle */}
-                        <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
-                          <i className="fas fa-bullhorn text-indigo-500 text-2xl" />
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+                          <i className="fas fa-bullhorn text-orange-500 text-sm" />
                         </div>
+                        <h3 className="font-semibold text-[#1F2937]" style={{ fontSize: '18px' }}>Recent Announcements</h3>
                       </div>
-                      {/* Decorative dots */}
-                      <span className="absolute top-1 right-0 w-2 h-2 bg-indigo-200 rounded-full" />
-                      <span className="absolute bottom-2 left-0 w-1.5 h-1.5 bg-indigo-100 rounded-full" />
                     </div>
-                    <p className="text-sm font-semibold text-gray-800 mb-1">No active announcements</p>
-                    <p className="text-xs text-indigo-500 font-normal">Check back later for important updates.</p>
+
+                    {announcements.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center py-8 text-center animate-fadeIn">
+                        <svg className="w-16 h-16 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                        </svg>
+                        <p className="text-sm font-semibold text-gray-800 mb-1">No announcements available</p>
+                        <p className="text-xs text-gray-400 font-normal max-w-xs leading-normal">Check back later for any official updates from the hostel management.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar mb-6">
+                        {announcements.map(ann => (
+                          <div key={ann.id} className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
+                            <div className="flex justify-between items-start mb-1.5">
+                              <h4 className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '13px' }}>{ann.title}</h4>
+                              <span className="text-[#6B7280] whitespace-nowrap ml-3" style={{ fontSize: '11px', fontWeight: 500 }}>{ann.date}</span>
+                            </div>
+                            <p className="font-semibold text-primary mb-1.5" style={{ fontSize: '11px' }}>By {ann.author}</p>
+                            <p className="text-[#374151] font-normal leading-relaxed line-clamp-2" style={{ fontSize: '13px' }}>{ann.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <button
                     onClick={() => navigate('Announcements')}
-                    className="mt-4 w-full border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center space-x-2"
+                    className="w-full border border-gray-200 text-[#374151] hover:bg-gray-50 font-semibold py-3 rounded-xl transition-colors flex items-center justify-center space-x-2"
+                    style={{ fontSize: '17px' }}
                   >
                     <span>View All Announcements</span>
                     <i className="fas fa-arrow-right text-xs" />
@@ -484,36 +600,32 @@ export default function StudentDashboard({ user, onLogout }) {
 
               </div>
 
-              {/* Footer */}
-              <p className="text-center text-xs text-gray-400 font-normal pt-2">
-                © 2025 HostelHub System. All rights reserved.
-              </p>
             </div>
           )}
 
           {/* ══ MY ROOM ════════════════════════════════════════════════════ */}
           {activeTab === 'My Room' && (
             <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-gray-900">Room Details</h2>
+              <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Room Details</h2>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-5">
                   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Roommates</h3>
+                    <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Roommates</h3>
                     <div className="flex items-center space-x-3 py-3">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-semibold text-sm">RS</div>
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs">RS</div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">Rohit Sharma</p>
-                        <p className="text-xs text-gray-400">Computer Science · 2nd Year</p>
+                        <p className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>Rohit Sharma</p>
+                        <p className="text-[#6B7280] font-normal" style={{ fontSize: '13px' }}>Computer Science · 2nd Year</p>
                       </div>
                     </div>
                   </div>
                   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Room Amenities</h3>
+                    <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Room Amenities</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {['Wi-Fi', 'Air Conditioning', 'Study Desk', 'Personal Locker', 'Attached Bathroom', 'Daily Housekeeping'].map((a, i) => (
                         <div key={i} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-xl">
                           <i className="fas fa-check-circle text-green-500 text-xs" />
-                          <span className="text-xs text-gray-700 font-medium">{a}</span>
+                          <span className="text-[#374151] font-medium" style={{ fontSize: '14px' }}>{a}</span>
                         </div>
                       ))}
                     </div>
@@ -521,32 +633,32 @@ export default function StudentDashboard({ user, onLogout }) {
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">File Complaint</h3>
+                    <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>File Complaint</h3>
                   <form onSubmit={submitComplaint} className="space-y-3">
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Category</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Category</label>
                       <select value={complaintType} onChange={e => setComplaintType(e.target.value)} className={inp}>
                         {['Maintenance','Electrical','Plumbing','Internet','Other'].map(o => <option key={o}>{o}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Description</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Description</label>
                       <textarea rows={3} placeholder="Describe the issue…" value={complaintDesc} onChange={e => setComplaintDesc(e.target.value)} className={`${inp} resize-none`} />
                     </div>
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-3 rounded-xl transition-all shadow-sm hover:shadow" style={{ fontSize: '17px' }}>
                       Submit Complaint
                     </button>
                   </form>
                   {complaints.length > 0 && (
                     <div className="mt-5 pt-5 border-t border-gray-100 space-y-2">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Recent</p>
+                      <p className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">Recent</p>
                       {complaints.map(c => (
                         <div key={c.id} className="p-3 bg-gray-50 rounded-xl text-xs">
                           <div className="flex justify-between mb-1">
-                            <span className="font-semibold text-gray-800">{c.type}</span>
+                            <span className="font-semibold text-[#1F2937]">{c.type}</span>
                             <span className={`px-2 py-0.5 rounded-full font-medium text-[9px] ${c.status === 'Pending' ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>{c.status}</span>
                           </div>
-                          <p className="text-gray-500">{c.description}</p>
+                          <p className="text-[#374151] font-normal leading-normal">{c.description}</p>
                         </div>
                       ))}
                     </div>
@@ -559,53 +671,57 @@ export default function StudentDashboard({ user, onLogout }) {
           {/* ══ APPLY LEAVE ════════════════════════════════════════════════ */}
           {activeTab === 'Apply Leave' && (
             <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-gray-900">Apply for Leave</h2>
+              <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Apply for Leave</h2>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Leave Request</h3>
+                    <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Leave Request</h3>
                   <form onSubmit={submitLeave} className="space-y-3">
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Leave Type</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Leave Type</label>
                       <select value={leaveType} onChange={e => setLeaveType(e.target.value)} className={inp}>
                         {['Weekend Outing','Medical Leave','Emergency Vacation','Holiday Outing'].map(o => <option key={o}>{o}</option>)}
                       </select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Start</label>
+                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Start</label>
                         <input type="date" value={leaveStart} onChange={e => setLeaveStart(e.target.value)} className={inp} />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">End</label>
+                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>End</label>
                         <input type="date" value={leaveEnd} onChange={e => setLeaveEnd(e.target.value)} className={inp} />
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Reason</label>
-                      <textarea rows={3} placeholder="Reason…" value={leaveReason} onChange={e => setLeaveReason(e.target.value)} className={`${inp} resize-none`} />
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Reason</label>
+                      <textarea rows={3} placeholder="Reason for leave…" value={leaveReason} onChange={e => setLeaveReason(e.target.value)} className={`${inp} resize-none`} />
                     </div>
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-3 rounded-xl transition-all shadow-sm hover:shadow" style={{ fontSize: '17px' }}>
                       Submit Request
                     </button>
                   </form>
                 </div>
 
                 <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Leave History</h3>
+                  <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Leave History</h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead><tr className="border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wider">
-                        <th className="pb-3 text-left">Type</th><th className="pb-3 text-left">Duration</th>
-                        <th className="pb-3 text-left">Reason</th><th className="pb-3 text-left">Status</th>
-                      </tr></thead>
+                    <table className="w-full" style={{ fontSize: '14px' }}>
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
+                          <th className="pb-3 text-left font-medium">Type</th>
+                          <th className="pb-3 text-left font-medium">Duration</th>
+                          <th className="pb-3 text-left font-medium">Reason</th>
+                          <th className="pb-3 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-gray-50">
                         {leaves.map(l => (
                           <tr key={l.id} className="hover:bg-gray-50/30 transition-colors">
-                            <td className="py-3.5 font-semibold text-gray-800">{l.type}</td>
-                            <td className="py-3.5 text-gray-500">{l.startDate} → {l.endDate}</td>
-                            <td className="py-3.5 text-gray-400 max-w-[120px] truncate">{l.reason}</td>
-                            <td className="py-3.5">
-                              <span className={`px-2 py-0.5 rounded-full font-medium text-[9px] uppercase ${l.status === 'Approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span>
+                            <td className="py-4 font-semibold text-[#1F2937]">{l.type}</td>
+                            <td className="py-4 text-[#374151] font-normal">{l.startDate} → {l.endDate}</td>
+                            <td className="py-4 text-[#6B7280] font-normal max-w-[120px] truncate">{l.reason}</td>
+                            <td className="py-4">
+                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${l.status === 'Approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span>
                             </td>
                           </tr>
                         ))}
@@ -621,63 +737,82 @@ export default function StudentDashboard({ user, onLogout }) {
           {activeTab === 'Announcements' && (
             <div className="space-y-6 animate-fadeIn">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Announcements</h2>
+                <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Announcements</h2>
               </div>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center mb-4">
-                  <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center">
-                    <i className="fas fa-bullhorn text-indigo-500 text-2xl" />
-                  </div>
+              
+              {announcements.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-16 flex flex-col items-center justify-center text-center animate-fadeIn">
+                  <svg className="w-20 h-20 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                  </svg>
+                  <p className="text-base font-semibold text-gray-800 mb-1">No announcements available</p>
+                  <p className="text-sm text-gray-400 font-normal max-w-sm leading-normal">Check back later for any official updates from the hostel management.</p>
                 </div>
-                <p className="text-base font-semibold text-gray-800 mb-1">No active announcements</p>
-                <p className="text-sm text-indigo-500 font-normal">Check back later for important updates.</p>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {announcements.map(ann => (
+                    <div key={ann.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '18px' }}>{ann.title}</h3>
+                        <span className="text-[#6B7280] whitespace-nowrap ml-4" style={{ fontSize: '13px', fontWeight: 500 }}>{ann.date}</span>
+                      </div>
+                      <p className="font-semibold text-primary mb-3" style={{ fontSize: '13px' }}>Posted by {ann.author}</p>
+                      <p className="text-[#374151] font-normal leading-relaxed" style={{ fontSize: '15px' }}>{ann.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* ══ MY VISITOR HISTORY ═════════════════════════════════════════ */}
           {activeTab === 'My Visitor History' && (
             <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-gray-900">Visitor History</h2>
+              <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Visitor History</h2>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Pre-Register Visitor</h3>
+                    <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Pre-Register Visitor</h3>
                   <form onSubmit={submitVisitor} className="space-y-3">
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Name</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Name</label>
                       <input type="text" placeholder="Visitor's name" value={visitorName} onChange={e => setVisitorName(e.target.value)} className={inp} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Relationship</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Relationship</label>
                       <input type="text" placeholder="Father / Mother / Friend…" value={visitorRel} onChange={e => setVisitorRel(e.target.value)} className={inp} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">Visit Date</label>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Visit Date</label>
                       <input type="date" value={visitorDate} onChange={e => setVisitorDate(e.target.value)} className={inp} />
                     </div>
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-3 rounded-xl transition-all shadow-sm hover:shadow" style={{ fontSize: '17px' }}>
                       Register Visitor
                     </button>
                   </form>
                 </div>
 
                 <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Visitor Logs</h3>
+                  <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Visitor Logs</h3>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead><tr className="border-b border-gray-100 text-[10px] text-gray-400 uppercase tracking-wider">
-                        <th className="pb-3 text-left">Name</th><th className="pb-3 text-left">Relation</th>
-                        <th className="pb-3 text-left">Date</th><th className="pb-3 text-left">Time</th><th className="pb-3 text-left">Status</th>
-                      </tr></thead>
+                    <table className="w-full" style={{ fontSize: '14px' }}>
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
+                          <th className="pb-3 text-left font-medium">Name</th>
+                          <th className="pb-3 text-left font-medium">Relation</th>
+                          <th className="pb-3 text-left font-medium">Date</th>
+                          <th className="pb-3 text-left font-medium">Time</th>
+                          <th className="pb-3 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
                       <tbody className="divide-y divide-gray-50">
                         {visitors.map(v => (
                           <tr key={v.id} className="hover:bg-gray-50/30 transition-colors">
-                            <td className="py-3.5 font-semibold text-gray-800">{v.name}</td>
-                            <td className="py-3.5 text-gray-500">{v.relation}</td>
-                            <td className="py-3.5 text-gray-500">{v.date}</td>
-                            <td className="py-3.5 text-gray-400">{v.timeIn} → {v.timeOut}</td>
-                            <td className="py-3.5">
-                              <span className={`px-2 py-0.5 rounded-full font-medium text-[9px] uppercase ${v.status === 'Checked Out' ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-600'}`}>{v.status}</span>
+                            <td className="py-4 font-semibold text-[#1F2937]">{v.name}</td>
+                            <td className="py-4 text-[#374151] font-normal">{v.relation}</td>
+                            <td className="py-4 text-[#374151] font-normal">{v.date}</td>
+                            <td className="py-4 text-[#6B7280] font-normal">{v.timeIn} → {v.timeOut}</td>
+                            <td className="py-4">
+                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${v.status === 'Checked Out' ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-600'}`}>{v.status}</span>
                             </td>
                           </tr>
                         ))}
@@ -689,94 +824,20 @@ export default function StudentDashboard({ user, onLogout }) {
             </div>
           )}
 
-          {/* ══ FEES & DUES ════════════════════════════════════════════════ */}
-          {activeTab === 'Fees & Dues' && (
-            <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-gray-900">Fees & Billing</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col">
-                  <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full font-medium text-xs w-fit">No Pending Dues</span>
-                  <p className="text-3xl font-bold text-gray-900 mt-4 mb-1">₹0.00</p>
-                  <p className="text-xs text-gray-400 mb-6">Current Outstanding Balance</p>
-                  <div className="border-t border-gray-100 pt-4 space-y-2 text-xs">
-                    <div className="flex justify-between"><span className="text-gray-400">Next mess bill:</span><span className="font-medium text-gray-800">July 05, 2026</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Hostel Rent:</span><span className="font-medium text-green-600">Paid</span></div>
-                  </div>
-                  <button className="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors mt-6">
-                    View Billing Policy
-                  </button>
-                </div>
 
-                <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Payments</h3>
-                  <div className="space-y-3">
-                    {[
-                      { id: 'TXN98124213', title: 'Spring 2026 Room Rent',   date: 'June 01, 2026', amt: '₹45,000.00' },
-                      { id: 'TXN97241243', title: 'June 2026 Mess Invoice',  date: 'June 01, 2026', amt: '₹6,500.00'  },
-                      { id: 'TXN96123498', title: 'May 2026 Mess Invoice',   date: 'May 02, 2026',  amt: '₹6,800.00'  },
-                    ].map(p => (
-                      <div key={p.id} className="flex justify-between items-center p-4 bg-gray-50/60 rounded-xl border border-gray-100">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-9 h-9 bg-white rounded-lg shadow-sm flex items-center justify-center text-green-500">
-                            <i className="fas fa-receipt text-sm" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-800">{p.title}</p>
-                            <p className="text-[10px] text-gray-400">{p.id} · {p.date}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900">{p.amt}</p>
-                          <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-full font-medium">Paid</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
 
-          {/* ══ QR GATE PASS ═══════════════════════════════════════════════ */}
-          {activeTab === 'QR Gate Pass' && (
-            <div className="space-y-6 animate-fadeIn">
-              <h2 className="text-xl font-bold text-gray-900">QR Gate Pass</h2>
-              <div className="max-w-sm mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center space-y-5">
-                <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full font-medium text-xs ring-2 ring-green-500/10">Active Pass</span>
-                <p className="text-base font-semibold text-gray-900">Hostel Entry / Exit Gatepass</p>
-                <p className="text-xs text-gray-400">Scan at the gate to register your entry or exit.</p>
-                <div className="relative w-44 h-44 mx-auto bg-gray-50 rounded-xl border border-gray-100 p-3 overflow-hidden">
-                  <div className="absolute left-0 right-0 h-0.5 bg-indigo-400/60 animate-bounce" style={{animationDuration:'3s'}} />
-                  <svg className="w-full h-full text-gray-900" viewBox="0 0 100 100" fill="currentColor">
-                    <rect x="0" y="0" width="24" height="24"/><rect x="3" y="3" width="18" height="18" fill="white"/><rect x="6" y="6" width="12" height="12"/>
-                    <rect x="76" y="0" width="24" height="24"/><rect x="79" y="3" width="18" height="18" fill="white"/><rect x="82" y="6" width="12" height="12"/>
-                    <rect x="0" y="76" width="24" height="24"/><rect x="3" y="79" width="18" height="18" fill="white"/><rect x="6" y="82" width="12" height="12"/>
-                    <rect x="32" y="4" width="8" height="8"/><rect x="48" y="0" width="12" height="4"/><rect x="64" y="8" width="4" height="8"/>
-                    <rect x="36" y="16" width="16" height="4"/><rect x="60" y="20" width="8" height="8"/>
-                    <rect x="0" y="32" width="8" height="8"/><rect x="16" y="36" width="16" height="4"/>
-                    <rect x="36" y="28" width="12" height="12"/><rect x="56" y="32" width="20" height="8"/>
-                    <rect x="12" y="48" width="12" height="12"/><rect x="32" y="48" width="8" height="20"/>
-                    <rect x="48" y="44" width="16" height="8"/><rect x="68" y="48" width="8" height="16"/>
-                    <rect x="48" y="64" width="12" height="12"/><rect x="68" y="72" width="16" height="4"/>
-                    <rect x="36" y="80" width="8" height="16"/><rect x="60" y="84" width="24" height="8"/>
-                  </svg>
-                </div>
-                <div className="text-xs text-left bg-gray-50 rounded-xl p-3 space-y-1.5 border border-gray-100">
-                  <div className="flex justify-between"><span className="text-gray-400">Authorized:</span><span className="font-medium text-gray-800">{name}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Room:</span><span className="font-medium text-gray-800">Room 101</span></div>
-                </div>
-                <button onClick={() => alert('QR refreshed.')} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
-                  Regenerate Pass
-                </button>
-              </div>
-            </div>
-          )}
-
+          {/* Global Footer */}
+          <footer className="mt-12 py-6 border-t border-gray-100 flex items-center justify-center shrink-0">
+            <p className="text-xs text-gray-400 font-normal">
+              © 2026 HostelHub System. All rights reserved.
+            </p>
+          </footer>
         </main>
       </div>
 
       {/* Floating chat button (matches screenshot) */}
-      <button className="fixed bottom-6 right-6 w-12 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all z-30 hover:scale-105">
+      <button className="fixed bottom-6 right-6 w-12 h-12 bg-primary hover:bg-primary-light text-white rounded-full shadow-lg flex items-center justify-center transition-all z-30 hover:scale-105">
         <i className="fas fa-comment text-base" />
       </button>
 
@@ -790,10 +851,10 @@ export default function StudentDashboard({ user, onLogout }) {
               <i className="fas fa-times" />
             </button>
             <div className="flex items-center space-x-4 mb-6">
-              <div className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xl font-bold">{initials}</div>
+              <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">{initials}</div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{name}</h3>
-                <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase rounded-full">{role}</span>
+                <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold uppercase rounded-full">{role}</span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
@@ -813,7 +874,7 @@ export default function StudentDashboard({ user, onLogout }) {
                 </div>
               ))}
             </div>
-            <button onClick={() => setShowProfileModal(false)} className="mt-7 w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Close</button>
+            <button onClick={() => setShowProfileModal(false)} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Close</button>
           </div>
         </div>
       )}
@@ -833,13 +894,13 @@ export default function StudentDashboard({ user, onLogout }) {
               ].map(s => (
                 <div key={s.label} className="flex items-center justify-between">
                   <div><p className="text-sm font-semibold text-gray-800">{s.label}</p><p className="text-xs text-gray-400">{s.sub}</p></div>
-                  <button onClick={() => s.set(!s.val)} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none ${s.val ? 'bg-indigo-600' : 'bg-gray-200'}`}>
+                  <button onClick={() => s.set(!s.val)} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none ${s.val ? 'bg-primary' : 'bg-gray-200'}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${s.val ? 'translate-x-5' : ''}`} />
                   </button>
                 </div>
               ))}
             </div>
-            <button onClick={() => setShowSettingsModal(false)} className="mt-7 w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
+            <button onClick={() => setShowSettingsModal(false)} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
           </div>
         </div>
       )}
@@ -852,13 +913,13 @@ export default function StudentDashboard({ user, onLogout }) {
             <button onClick={() => setShowPwModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times" /></button>
             <h3 className="text-lg font-bold text-gray-900 mb-6">Change Password</h3>
             <form onSubmit={submitPw} className="space-y-4">
-              {[['Old Password',confirmPw,setOldPw],['New Password',newPw,setNewPw],['Confirm Password',confirmPw,setConfirmPw]].map(([label,,setter],i) => (
+              {[['Old Password',oldPw,setOldPw],['New Password',newPw,setNewPw],['Confirm Password',confirmPw,setConfirmPw]].map(([label,val,setter]) => (
                 <div key={label}>
                   <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">{label}</label>
-                  <input type="password" placeholder="••••••••" value={[oldPw,newPw,confirmPw][i]} onChange={e=>setter(e.target.value)} className={inp} />
+                  <input type="password" placeholder="••••••••" value={val} onChange={e => setter(e.target.value)} className={inp} />
                 </div>
               ))}
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors mt-2">Update Password</button>
+              <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors mt-2">Update Password</button>
             </form>
           </div>
         </div>

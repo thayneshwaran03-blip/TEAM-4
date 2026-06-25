@@ -44,6 +44,11 @@ const userSchema = new mongoose.Schema(
       enum: ['student', 'warden', 'admin'],
       default: 'student',
     },
+    room: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Room',
+      default: null,
+    },
     parentName: {
       type: String,
       trim: true,
