@@ -16,6 +16,5 @@
             "password": "4466",
             "connectionTimeout": 60
         }
-    ],
-    "css.lint.unknownAtRules": "ignore"
+    ]
 }

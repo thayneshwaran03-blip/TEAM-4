@@ -75,3 +75,12 @@ CREATE TABLE Occupancy_Report (
     FOREIGN KEY (room_id)
     REFERENCES Room(room_id)
 );
+CREATE TABLE Announcement (
+    announcement_id INT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(100) NOT NULL,
+    message TEXT NOT NULL,
+    created_date DATE NOT NULL,
+    admin_id INT,
+    FOREIGN KEY (admin_id)
+    REFERENCES Admin(admin_id)
+);
