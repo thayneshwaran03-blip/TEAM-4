@@ -28,3 +28,9 @@ WHERE room_id = 1;
 UPDATE Student
 SET student_id = 4
 WHERE student_id = 104;
+SELECT a.title,
+       a.message,
+       ad.name
+FROM Announcement a
+JOIN Admin ad
+ON a.admin_id = ad.admin_id;
