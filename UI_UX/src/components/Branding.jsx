@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Branding() {
+export default function Branding({ className = "hidden lg:flex w-1/2 min-h-screen" }) {
   const features = [
     { title: 'Student Room Allocation', icon: 'fa-bed' },
     { title: 'Visitor Entry Logs',       icon: 'fa-address-book' },
@@ -9,7 +9,7 @@ export default function Branding() {
   ];
 
   return (
-    <div className="hidden lg:flex w-1/2 min-h-screen bg-primary-gradient flex-col justify-center items-center px-14 py-14 text-white relative overflow-hidden select-none">
+    <div className={`${className} bg-primary-gradient flex-col justify-center items-center px-14 py-14 text-white relative overflow-hidden select-none`}>
       
       {/* Animated floating glow */}
       <div className="absolute -top-1/2 -right-1/3 w-[80%] h-[150%] bg-[radial-gradient(circle,_rgba(255,255,255,0.07)_0%,_transparent_70%)] animate-float-glow pointer-events-none" />

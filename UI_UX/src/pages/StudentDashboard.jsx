@@ -7,12 +7,10 @@ export default function StudentDashboard({ user, onLogout }) {
     ? user.fullName.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase()
     : 'AM';
   const email      = user?.email      || 'alex.mercer@hostel.com';
-  const roomNumber = '101';
-  const blockName  = 'Block A';
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [isMobileDrawerOpen,  setIsMobileDrawerOpen]  = useState(false);
-  const [isSidebarExpanded,   setIsSidebarExpanded]   = useState(false);
+  const [isSidebarExpanded,   setIsSidebarExpanded]   = useState(true);
   const [isProfileOpen,       setIsProfileOpen]       = useState(false);
   const [isNotifOpen,         setIsNotifOpen]         = useState(false);
   const [activeTab,           setActiveTab]           = useState('Dashboard');
@@ -29,6 +27,10 @@ export default function StudentDashboard({ user, onLogout }) {
   const [leaves, setLeaves] = useState([]);
   const [complaints, setComplaints] = useState([]);
   const [visitors, setVisitors] = useState([]);
+  const [profile, setProfile] = useState(null);
+
+  const roomNumber = profile?.room?.roomNumber || 'N/A';
+  const blockName  = profile?.room?.blockName || 'N/A';
 
   // form fields
   const [leaveType,      setLeaveType]      = useState('Weekend Outing');
@@ -39,6 +41,7 @@ export default function StudentDashboard({ user, onLogout }) {
   const [complaintDesc,  setComplaintDesc]  = useState('');
   const [visitorName,    setVisitorName]    = useState('');
   const [visitorRel,     setVisitorRel]     = useState('');
+  const [visitorPhone,   setVisitorPhone]   = useState('');
   const [visitorDate,    setVisitorDate]    = useState('');
   const [oldPw,          setOldPw]          = useState('');
   const [newPw,          setNewPw]          = useState('');
@@ -46,6 +49,15 @@ export default function StudentDashboard({ user, onLogout }) {
   const [emailNotifs,    setEmailNotifs]    = useState(true);
   const [smsNotifs,      setSmsNotifs]      = useState(false);
   const [autoQr,         setAutoQr]         = useState(true);
+
+  // Edit profile states
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [editYear, setEditYear] = useState('');
+  const [editParentName, setEditParentName] = useState('');
+  const [editParentContact, setEditParentContact] = useState('');
+  const [editGender, setEditGender] = useState('');
 
   // ── click-outside refs ────────────────────────────────────────────────────
   const profileRef = useRef(null);
@@ -85,7 +97,15 @@ export default function StudentDashboard({ user, onLogout }) {
       ]);
 
       if (profileResp && profileResp.student) {
-        // profileResp.student is available here if needed
+        const s = profileResp.student;
+        setProfile(s);
+        setEditName(s.fullName || '');
+        setEditPhone(s.phoneNumber || '');
+        setEditDept(s.department || '');
+        setEditYear(s.year || '');
+        setEditParentName(s.parentName || '');
+        setEditParentContact(s.parentContact || '');
+        setEditGender(s.gender || '');
       }
 
       setLeaves(leaveResp.leaveHistory || []);
@@ -151,10 +171,10 @@ export default function StudentDashboard({ user, onLogout }) {
   const submitVisitor = async e => {
     e.preventDefault();
     try {
-      if (!visitorName.trim() || !visitorRel.trim() || !visitorDate) { showToast('Please fill all visitor details.', 'error'); return; }
-      const payload = { visitorName, relationship: visitorRel, phoneNumber: '', visitDate: visitorDate, expectedArrivalTime: '00:00' };
+      if (!visitorName.trim() || !visitorRel.trim() || !visitorPhone.trim() || !visitorDate) { showToast('Please fill all visitor details.', 'error'); return; }
+      const payload = { visitorName, relationship: visitorRel, phoneNumber: visitorPhone.trim(), visitDate: visitorDate, expectedArrivalTime: '00:00' };
       await apiFetch('/student/visitor', { method: 'POST', body: JSON.stringify(payload) });
-      setVisitorName(''); setVisitorRel(''); setVisitorDate('');
+      setVisitorName(''); setVisitorRel(''); setVisitorPhone(''); setVisitorDate('');
       await fetchAll();
       showToast('Visitor registered successfully!');
     } catch (err) {
@@ -162,14 +182,49 @@ export default function StudentDashboard({ user, onLogout }) {
       showToast('Unable to register visitor.', 'error');
     }
   };
-  const submitPw = e => {
+
+  const handleProfileUpdate = async e => {
+    e.preventDefault();
+    if (!editName.trim()) { showToast('Full name is required.', 'error'); return; }
+    try {
+      await apiFetch('/student/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          fullName: editName,
+          phoneNumber: editPhone,
+          department: editDept,
+          year: editYear,
+          parentName: editParentName,
+          parentContact: editParentContact,
+          gender: editGender
+        })
+      });
+      showToast('Profile updated successfully!');
+      await fetchAll();
+      setShowProfileModal(false);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update profile.', 'error');
+    }
+  };
+
+  const submitPw = async e => {
     e.preventDefault();
     if (!oldPw || !newPw || !confirmPw) { showToast('Please fill all password fields.', 'error'); return; }
     if (newPw.length < 6) { showToast('New password must be at least 6 characters.', 'error'); return; }
     if (newPw !== confirmPw) { showToast('New password and confirm password do not match.', 'error'); return; }
-    showToast('Password updated successfully!');
-    setOldPw(''); setNewPw(''); setConfirmPw('');
-    setShowPwModal(false);
+    try {
+      await apiFetch('/student/change-password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword: oldPw, newPassword: newPw })
+      });
+      showToast('Password updated successfully!');
+      setOldPw(''); setNewPw(''); setConfirmPw('');
+      setShowPwModal(false);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update password. Please check your current password.', 'error');
+    }
   };
   const navigate = id => { setActiveTab(id); setIsMobileDrawerOpen(false); };
 
@@ -187,7 +242,7 @@ export default function StudentDashboard({ user, onLogout }) {
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex w-full min-h-screen bg-[#F5F7FB] font-sans antialiased text-gray-800 overflow-x-hidden">
+    <div className="flex w-full h-screen bg-[#F5F7FB] font-sans antialiased text-gray-800 overflow-hidden" style={{ fontFamily: "'Poppins', 'Outfit', sans-serif" }}>
 
       {/* ── TOAST NOTIFICATION ───────────────────────────────────────────── */}
       {toast && (
@@ -204,158 +259,269 @@ export default function StudentDashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* Mobile overlay */}
+      {/* ── Mobile overlay ─────────────────────────────────────────────────── */}
       {isMobileDrawerOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] lg:hidden"
           onClick={() => setIsMobileDrawerOpen(false)}
-
         />
       )}
 
-      {/* ── SIDEBAR ──────────────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════
+           SIDEBAR — Premium SaaS design
+           Architecture: flex sibling of main wrapper so CSS width-transition
+           automatically pushes content — no JS marginLeft needed.
+      ══════════════════════════════════════════════════════════════════════ */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-gray-100
-          transition-all duration-300 ease-in-out overflow-hidden
-          lg:static lg:h-screen lg:flex
+          flex-shrink-0 flex flex-col bg-white border-r border-gray-100/80 h-screen
+          shadow-[1px_0_20px_rgba(0,0,0,0.04)]
+          transition-[width] duration-[280ms] ease-in-out
+          fixed lg:relative inset-y-0 left-0 z-50
           ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          transition-[width,transform] duration-[280ms] ease-in-out
         `}
         style={{ width: isMobileDrawerOpen ? '256px' : (isSidebarExpanded ? '256px' : '72px') }}
       >
-        {/* ── Sidebar top: logo row (always visible) ── */}
+        {/* ── Header: Logo only (hamburger moved to topbar) ─────────────── */}
         <div
-          className="flex items-center border-b border-gray-100 shrink-0"
-          style={{ height: '64px', padding: isSidebarExpanded || isMobileDrawerOpen ? '0 16px' : '0', justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'flex-start' : 'center' }}
+          className="flex items-center shrink-0 border-b border-gray-100"
+          style={{ height: '64px', padding: '0 14px', justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'space-between' : 'center' }}
         >
-          <div className="w-9 h-9 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
-            <i className="fas fa-home text-primary text-base" />
+          {/* Logo mark + wordmark */}
+          <div className="flex items-center min-w-0 overflow-hidden">
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+              <i className="fas fa-home text-primary" style={{ fontSize: '15px' }} />
+            </div>
+            <span
+              className="font-bold text-gray-900 tracking-tight select-none whitespace-nowrap transition-all duration-[280ms] ease-in-out overflow-hidden"
+              style={{
+                fontSize: '15px',
+                marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '10px' : '0px',
+                maxWidth: isSidebarExpanded || isMobileDrawerOpen ? '140px' : '0px',
+                opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              }}
+            >
+              Hostel<span className="text-primary">Hub</span>
+            </span>
           </div>
-          <span
-            className="font-bold text-gray-900 text-base tracking-tight select-none ml-2.5 whitespace-nowrap overflow-hidden transition-all duration-300"
-            style={{ opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0, maxWidth: isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px' }}
+
+          {/* Mobile close ✕ — only on mobile when drawer is open */}
+          <button
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-150 shrink-0"
           >
-            Hostel<span className="text-primary">Hub</span>
-          </span>
+            <i className="fas fa-times" style={{ fontSize: '14px' }} />
+          </button>
         </div>
 
-        {/* ── Profile card (only when expanded) ── */}
-        <div
-          className="mx-3 mt-4 mb-2 p-4 bg-primary/5 rounded-2xl border border-primary/10 overflow-hidden transition-all duration-300"
-          style={{
-            opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
-            maxHeight: isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px',
-            marginTop: isSidebarExpanded || isMobileDrawerOpen ? '16px' : '0px',
-            marginBottom: isSidebarExpanded || isMobileDrawerOpen ? '8px' : '0px',
-            padding: isSidebarExpanded || isMobileDrawerOpen ? '16px' : '0px',
-            pointerEvents: isSidebarExpanded || isMobileDrawerOpen ? 'auto' : 'none',
-          }}
-        >
-          <div className="flex flex-col items-center text-center">
-            <div className="w-11 h-11 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-md mb-2" style={{ fontSize: '16px' }}>
+        {/* ── Profile section ──────────────────────────────────────────── */}
+        {/* Expanded: full card. Collapsed: mini avatar centered. */}
+        <div className="shrink-0">
+          {/* EXPANDED profile card */}
+          <div
+            className="overflow-hidden transition-all duration-[280ms] ease-in-out"
+            style={{
+              maxHeight: isSidebarExpanded || isMobileDrawerOpen ? '150px' : '0px',
+              opacity:   isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              margin:    isSidebarExpanded || isMobileDrawerOpen ? '14px 12px 6px' : '0 12px',
+            }}
+          >
+            <div className="bg-primary/5 rounded-2xl border border-primary/10 p-4 flex flex-col items-center text-center">
+              <div
+                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
+                style={{ fontSize: '15px' }}
+              >
+                {initials.charAt(0)}
+              </div>
+              <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '13px' }}>{name}</p>
+              <span
+                className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
+                style={{ fontSize: '9px', letterSpacing: '0.08em' }}
+              >Student</span>
+              <p className="mt-1 text-[#9CA3AF] whitespace-nowrap" style={{ fontSize: '10.5px', fontWeight: 500 }}>Room {roomNumber}, {blockName}</p>
+            </div>
+          </div>
+
+          {/* COLLAPSED mini avatar */}
+          <div
+            className="flex justify-center transition-all duration-[280ms] ease-in-out overflow-hidden"
+            style={{
+              maxHeight: !isSidebarExpanded && !isMobileDrawerOpen ? '56px' : '0px',
+              opacity:   !isSidebarExpanded && !isMobileDrawerOpen ? 1 : 0,
+              paddingTop:    !isSidebarExpanded && !isMobileDrawerOpen ? '12px' : '0px',
+              paddingBottom: !isSidebarExpanded && !isMobileDrawerOpen ? '4px' : '0px',
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
+              style={{ fontSize: '13px' }}
+              title={name}
+            >
               {initials.charAt(0)}
             </div>
-            <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '14px' }}>{name}</p>
-            <span className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap" style={{ fontSize: '9px', letterSpacing: '0.08em' }}>Student</span>
-            <p className="mt-1.5 text-[#6B7280] font-medium whitespace-nowrap" style={{ fontSize: '11px' }}>Room {roomNumber}, {blockName}</p>
           </div>
         </div>
 
-        {/* ── Navigation ── */}
-        <nav className="flex-1 flex flex-col py-2 overflow-y-auto overflow-x-hidden" style={{ padding: '8px 10px' }}>
+        {/* ── Navigation ───────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-1" style={{ padding: '6px 8px' }}>
           {mainNav.map(item => {
-            const active = activeTab === item.id;
+            const active   = activeTab === item.id;
             const expanded = isSidebarExpanded || isMobileDrawerOpen;
             return (
-              <button
-                key={item.id}
-                onClick={() => navigate(item.id)}
-                title={!expanded ? item.label : undefined}
-                className={`flex items-center rounded-xl w-full text-left transition-all duration-150 mb-0.5
-                  ${active ? 'bg-primary/10 text-primary' : 'text-[#6B7280] hover:bg-gray-50 hover:text-[#1F2937]'}`}
-                style={{
-                  padding: expanded ? '10px 14px' : '10px 0',
-                  justifyContent: expanded ? 'flex-start' : 'center',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                }}
-              >
-                <i className={`fas ${item.icon} shrink-0 text-center transition-colors ${ active ? 'text-primary' : 'text-gray-400' }`}
-                  style={{ width: '20px', fontSize: '16px' }}
-                />
-                <span
-                  className="whitespace-nowrap overflow-hidden transition-all duration-300"
-                  style={{ opacity: expanded ? 1 : 0, maxWidth: expanded ? '180px' : '0px', marginLeft: expanded ? '12px' : '0px' }}
+              <div key={item.id} className="relative group">
+                <button
+                  onClick={() => navigate(item.id)}
+                  className={`relative flex items-center w-full rounded-xl mb-0.5 transition-all duration-150
+                    ${active
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                    }`}
+                  style={{
+                    height: '42px',
+                    padding: expanded ? '0 14px' : '0',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                  }}
                 >
-                  {item.label}
-                </span>
-              </button>
+                  {/* Active indicator bar */}
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                  )}
+
+                  {/* Icon — always rendered, perfectly centered when collapsed */}
+                  <span
+                    className="flex items-center justify-center shrink-0"
+                    style={{ width: '22px', height: '22px' }}
+                  >
+                    <i
+                      className={`fas ${item.icon} transition-colors`}
+                      style={{
+                        fontSize: '15px',
+                        color: active ? 'var(--tw-color-primary, #1a237e)' : undefined,
+                      }}
+                    />
+                  </span>
+
+                  {/* Label */}
+                  <span
+                    className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out"
+                    style={{
+                      marginLeft: expanded ? '11px' : '0px',
+                      maxWidth:   expanded ? '160px' : '0px',
+                      opacity:    expanded ? 1 : 0,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+
+                {/* CSS Tooltip (collapsed only) */}
+                {!expanded && (
+                  <div
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                      bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                      whitespace-nowrap z-[999] shadow-lg"
+                    style={{ fontSize: '12px' }}
+                  >
+                    {item.label}
+                    {/* Tooltip arrow */}
+                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
 
-        {/* ── Sign Out ── */}
-        <div className="border-t border-gray-100 shrink-0" style={{ padding: '10px 10px' }}>
-          {(() => {
-            const expanded = isSidebarExpanded || isMobileDrawerOpen;
-            return (
-              <button
-                onClick={onLogout}
-                title={!expanded ? 'Sign Out' : undefined}
-                className="flex items-center rounded-xl w-full text-left text-red-500 hover:bg-red-50 transition-colors"
+        {/* ── Sign Out — always pinned at bottom ───────────────────────── */}
+        <div className="shrink-0 border-t border-gray-100 py-2" style={{ padding: '8px 8px' }}>
+          <div className="relative group">
+            <button
+              onClick={onLogout}
+              className="flex items-center w-full rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 transition-all duration-150"
+              style={{
+                height: '42px',
+                padding: isSidebarExpanded || isMobileDrawerOpen ? '0 14px' : '0',
+                justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'flex-start' : 'center',
+                fontWeight: 600,
+                fontSize: '14px',
+              }}
+            >
+              <span className="flex items-center justify-center shrink-0" style={{ width: '22px', height: '22px' }}>
+                <i className="fas fa-sign-out-alt" style={{ fontSize: '15px' }} />
+              </span>
+              <span
+                className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out"
                 style={{
-                  padding: expanded ? '10px 14px' : '10px 0',
-                  justifyContent: expanded ? 'flex-start' : 'center',
-                  fontSize: '14px',
-                  fontWeight: 600,
+                  marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '11px' : '0px',
+                  maxWidth:   isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px',
+                  opacity:    isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
                 }}
               >
-                <i className="fas fa-sign-out-alt shrink-0 text-center" style={{ width: '20px', fontSize: '16px' }} />
-                <span
-                  className="whitespace-nowrap overflow-hidden transition-all duration-300"
-                  style={{ opacity: expanded ? 1 : 0, maxWidth: expanded ? '180px' : '0px', marginLeft: expanded ? '12px' : '0px' }}
-                >
-                  Sign Out
-                </span>
-              </button>
-            );
-          })()}
+                Sign Out
+              </span>
+            </button>
+
+            {/* Sign Out tooltip (collapsed only) */}
+            {!isSidebarExpanded && !isMobileDrawerOpen && (
+              <div
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                  bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                  opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                  whitespace-nowrap z-[999] shadow-lg"
+              >
+                Sign Out
+                <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
-      {/* ── MAIN WRAPPER ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+      {/* ════════════════════════════════════════════════════════════════════
+           MAIN WRAPPER — Flex sibling; automatically resizes as sidebar changes
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
 
         {/* ── TOP NAVBAR ───────────────────────────────────────────────── */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-5 flex items-center justify-between" style={{ height: '64px' }}>
-          {/* Left: Logo + Hamburger + Breadcrumb */}
-          <div className="flex items-center">
-            {/* HostelHub Logo (visible on mobile when sidebar is hidden) */}
-            <div className="flex items-center space-x-2 lg:hidden mr-3">
-              <div className="w-8 h-8 bg-primary/15 rounded-lg flex items-center justify-center">
-                <i className="fas fa-home text-primary text-sm" />
-              </div>
-              <span className="font-bold text-gray-900 text-base tracking-tight select-none">
-                Hostel<span className="text-primary">Hub</span>
-              </span>
-            </div>
-            {/* Hamburger — between logo and breadcrumb */}
+        <header
+          className="shrink-0 bg-white border-b border-gray-100 flex items-center justify-between"
+          style={{ height: '64px', zIndex: 30, padding: '0 20px' }}
+        >
+          {/* Left: hamburger (always visible) + mobile logo + page title */}
+          <div className="flex items-center gap-3">
+            {/* ══ HAMBURGER — always in topbar, always visible ══
+                Desktop: toggles isSidebarExpanded (collapse/expand)
+                Mobile:  toggles isMobileDrawerOpen (overlay drawer) */}
             <button
               onClick={() => {
-                if (window.innerWidth < 1024) {
-                  setIsMobileDrawerOpen(!isMobileDrawerOpen);
+                if (window.innerWidth >= 1024) {
+                  setIsSidebarExpanded(prev => !prev);
                 } else {
-                  setIsSidebarExpanded(!isSidebarExpanded);
+                  setIsMobileDrawerOpen(prev => !prev);
                 }
               }}
-              className="w-9 h-9 flex items-center justify-center rounded-lg text-[#374151] hover:bg-gray-100 transition-colors mr-3"
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-150 shrink-0"
+              aria-label="Toggle sidebar"
             >
               <i className="fas fa-bars" style={{ fontSize: '16px' }} />
             </button>
-            {/* Page Breadcrumb */}
-            <div className="hidden sm:flex items-center">
-              <span className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>{activeTab}</span>
+
+            {/* Logo — mobile only (desktop logo lives in sidebar) */}
+            <div className="flex items-center gap-2 lg:hidden">
+              <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
+                <i className="fas fa-home text-primary text-xs" />
+              </div>
+              <span className="font-bold text-gray-900 text-sm tracking-tight select-none">
+                Hostel<span className="text-primary">Hub</span>
+              </span>
             </div>
+
+            {/* Page title — desktop */}
+            <span className="hidden sm:block font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>{activeTab}</span>
           </div>
 
           {/* Right: bell + profile */}
@@ -441,7 +607,7 @@ export default function StudentDashboard({ user, onLogout }) {
         </header>
 
         {/* ── MAIN BODY ─────────────────────────────────────────────────── */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto flex flex-col justify-between">
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col">
           <div className="flex-1 space-y-6">
 
           {/* ══ DASHBOARD ══════════════════════════════════════════════════ */}
@@ -575,13 +741,13 @@ export default function StudentDashboard({ user, onLogout }) {
                     ) : (
                       <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar mb-6">
                         {announcements.map(ann => (
-                          <div key={ann.id} className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
+                          <div key={ann._id || ann.id} className="p-4 bg-gray-50/50 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
                             <div className="flex justify-between items-start mb-1.5">
                               <h4 className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '13px' }}>{ann.title}</h4>
-                              <span className="text-[#6B7280] whitespace-nowrap ml-3" style={{ fontSize: '11px', fontWeight: 500 }}>{ann.date}</span>
+                              <span className="text-[#6B7280] whitespace-nowrap ml-3" style={{ fontSize: '11px', fontWeight: 500 }}>{new Date(ann.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <p className="font-semibold text-primary mb-1.5" style={{ fontSize: '11px' }}>By {ann.author}</p>
-                            <p className="text-[#374151] font-normal leading-relaxed line-clamp-2" style={{ fontSize: '13px' }}>{ann.content}</p>
+                            <p className="font-semibold text-primary mb-1.5" style={{ fontSize: '11px' }}>By {ann.postedBy?.fullName || 'Warden'}</p>
+                            <p className="text-[#374151] font-normal leading-relaxed line-clamp-2" style={{ fontSize: '13px' }}>{ann.description}</p>
                           </div>
                         ))}
                       </div>
@@ -653,10 +819,10 @@ export default function StudentDashboard({ user, onLogout }) {
                     <div className="mt-5 pt-5 border-t border-gray-100 space-y-2">
                       <p className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">Recent</p>
                       {complaints.map(c => (
-                        <div key={c.id} className="p-3 bg-gray-50 rounded-xl text-xs">
+                        <div key={c._id || c.id} className="p-3 bg-gray-50 rounded-xl text-xs">
                           <div className="flex justify-between mb-1">
-                            <span className="font-semibold text-[#1F2937]">{c.type}</span>
-                            <span className={`px-2 py-0.5 rounded-full font-medium text-[9px] ${c.status === 'Pending' ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'}`}>{c.status}</span>
+                            <span className="font-semibold text-[#1F2937]">{c.category}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-medium text-[9px] ${c.status === 'Pending' ? 'bg-amber-50 text-amber-600' : c.status === 'Resolved' ? 'bg-green-50 text-green-600' : c.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>{c.status}</span>
                           </div>
                           <p className="text-[#374151] font-normal leading-normal">{c.description}</p>
                         </div>
@@ -716,12 +882,12 @@ export default function StudentDashboard({ user, onLogout }) {
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {leaves.map(l => (
-                          <tr key={l.id} className="hover:bg-gray-50/30 transition-colors">
-                            <td className="py-4 font-semibold text-[#1F2937]">{l.type}</td>
-                            <td className="py-4 text-[#374151] font-normal">{l.startDate} → {l.endDate}</td>
+                          <tr key={l._id || l.id} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="py-4 font-semibold text-[#1F2937]">{l.leaveType}</td>
+                            <td className="py-4 text-[#374151] font-normal">{new Date(l.fromDate).toLocaleDateString()} → {new Date(l.toDate).toLocaleDateString()}</td>
                             <td className="py-4 text-[#6B7280] font-normal max-w-[120px] truncate">{l.reason}</td>
                             <td className="py-4">
-                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${l.status === 'Approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>{l.status}</span>
+                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${l.status === 'Approved' ? 'bg-green-50 text-green-600' : l.status === 'Pending' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>{l.status}</span>
                             </td>
                           </tr>
                         ))}
@@ -751,13 +917,13 @@ export default function StudentDashboard({ user, onLogout }) {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {announcements.map(ann => (
-                    <div key={ann.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300">
+                    <div key={ann._id || ann.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '18px' }}>{ann.title}</h3>
-                        <span className="text-[#6B7280] whitespace-nowrap ml-4" style={{ fontSize: '13px', fontWeight: 500 }}>{ann.date}</span>
+                        <span className="text-[#6B7280] whitespace-nowrap ml-4" style={{ fontSize: '13px', fontWeight: 500 }}>{new Date(ann.createdAt).toLocaleDateString()}</span>
                       </div>
-                      <p className="font-semibold text-primary mb-3" style={{ fontSize: '13px' }}>Posted by {ann.author}</p>
-                      <p className="text-[#374151] font-normal leading-relaxed" style={{ fontSize: '15px' }}>{ann.content}</p>
+                      <p className="font-semibold text-primary mb-3" style={{ fontSize: '13px' }}>Posted by {ann.postedBy?.fullName || 'Warden'}</p>
+                      <p className="text-[#374151] font-normal leading-relaxed" style={{ fontSize: '15px' }}>{ann.description}</p>
                     </div>
                   ))}
                 </div>
@@ -782,6 +948,10 @@ export default function StudentDashboard({ user, onLogout }) {
                       <input type="text" placeholder="Father / Mother / Friend…" value={visitorRel} onChange={e => setVisitorRel(e.target.value)} className={inp} />
                     </div>
                     <div>
+                      <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Phone Number</label>
+                      <input type="tel" placeholder="Visitor's phone number" value={visitorPhone} onChange={e => setVisitorPhone(e.target.value)} className={inp} />
+                    </div>
+                    <div>
                       <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Visit Date</label>
                       <input type="date" value={visitorDate} onChange={e => setVisitorDate(e.target.value)} className={inp} />
                     </div>
@@ -800,19 +970,17 @@ export default function StudentDashboard({ user, onLogout }) {
                           <th className="pb-3 text-left font-medium">Name</th>
                           <th className="pb-3 text-left font-medium">Relation</th>
                           <th className="pb-3 text-left font-medium">Date</th>
-                          <th className="pb-3 text-left font-medium">Time</th>
                           <th className="pb-3 text-left font-medium">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {visitors.map(v => (
-                          <tr key={v.id} className="hover:bg-gray-50/30 transition-colors">
-                            <td className="py-4 font-semibold text-[#1F2937]">{v.name}</td>
-                            <td className="py-4 text-[#374151] font-normal">{v.relation}</td>
-                            <td className="py-4 text-[#374151] font-normal">{v.date}</td>
-                            <td className="py-4 text-[#6B7280] font-normal">{v.timeIn} → {v.timeOut}</td>
+                          <tr key={v._id || v.id} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="py-4 font-semibold text-[#1F2937]">{v.visitorName}</td>
+                            <td className="py-4 text-[#374151] font-normal">{v.relationship}</td>
+                            <td className="py-4 text-[#374151] font-normal">{new Date(v.visitDate).toLocaleDateString()}</td>
                             <td className="py-4">
-                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${v.status === 'Checked Out' ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-600'}`}>{v.status}</span>
+                              <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${v.status === 'Approved' ? 'bg-green-50 text-green-600' : v.status === 'Pending' ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'}`}>{v.status}</span>
                             </td>
                           </tr>
                         ))}
@@ -857,24 +1025,54 @@ export default function StudentDashboard({ user, onLogout }) {
                 <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold uppercase rounded-full">{role}</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
-              {[
-                ['Email',        user?.email        || 'alex.mercer@gmail.com'],
-                ['Phone',        user?.phoneNumber   || '+91 96295 62900'],
-                ['Department',   user?.department    || 'Computer Science'],
-                ['Year',         user?.year          || '2nd Year'],
-                ['Parent Name',  user?.parentName    || 'Balasubramaniam'],
-                ['Parent Phone', user?.parentContact || '+91 99763 99893'],
-                ['Gender',       user?.gender        || 'Female'],
-                ['Room',         `Room ${roomNumber} (${blockName})`],
-              ].map(([k, v]) => (
-                <div key={k}>
-                  <p className="text-gray-400 uppercase tracking-wider text-[9px] mb-0.5">{k}</p>
-                  <p className="font-medium text-gray-800">{v}</p>
+            <form onSubmit={handleProfileUpdate} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="col-span-2">
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Full Name</label>
+                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className={inp} />
                 </div>
-              ))}
-            </div>
-            <button onClick={() => setShowProfileModal(false)} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Close</button>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Email (Read Only)</label>
+                  <input type="text" value={email} disabled className={`${inp} opacity-60 cursor-not-allowed`} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Phone Number</label>
+                  <input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Department</label>
+                  <input type="text" value={editDept} onChange={e => setEditDept(e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Year</label>
+                  <input type="text" value={editYear} onChange={e => setEditYear(e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Parent Name</label>
+                  <input type="text" value={editParentName} onChange={e => setEditParentName(e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Parent Contact</label>
+                  <input type="text" value={editParentContact} onChange={e => setEditParentContact(e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Gender</label>
+                  <select value={editGender} onChange={e => setEditGender(e.target.value)} className={inp}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-400 uppercase tracking-wider text-[9px] block mb-1">Room (Read Only)</label>
+                  <input type="text" value={`Room ${roomNumber} (${blockName})`} disabled className={`${inp} opacity-60 cursor-not-allowed`} />
+                </div>
+              </div>
+              <div className="flex space-x-3 pt-3">
+                <button type="button" onClick={() => setShowProfileModal(false)} className="w-1/2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl transition-all">Cancel</button>
+                <button type="submit" className="w-1/2 bg-primary hover:bg-primary-light text-white font-semibold py-2.5 rounded-xl transition-all shadow-sm hover:shadow">Save Changes</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
