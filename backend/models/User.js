@@ -26,12 +26,10 @@ const userSchema = new mongoose.Schema(
     },
     department: {
       type: String,
-      required: [true, 'Department is required'],
       trim: true,
     },
     year: {
       type: String,
-      required: [true, 'Year is required'],
       trim: true,
     },
     gender: {
@@ -56,6 +54,65 @@ const userSchema = new mongoose.Schema(
     parentContact: {
       type: String,
       trim: true,
+    },
+    // New fields for Student
+    registerNumber: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+    rollNumber: {
+      type: String,
+      trim: true,
+    },
+    hostelName: {
+      type: String,
+      trim: true,
+    },
+    block: {
+      type: String,
+      trim: true,
+    },
+    floor: {
+      type: String,
+      trim: true,
+    },
+    roomNumber: {
+      type: String,
+      trim: true,
+    },
+    bedNumber: {
+      type: String,
+      trim: true,
+    },
+    emergencyContact: {
+      type: String,
+      trim: true,
+    },
+    // New fields for Warden
+    employeeId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+    assignedHostel: {
+      type: String,
+      trim: true,
+    },
+    assignedBlocks: {
+      type: [String],
+      default: [],
+    },
+    // Status and Setup fields
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
     },
     password: {
       type: String,

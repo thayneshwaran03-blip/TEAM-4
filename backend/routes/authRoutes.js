@@ -1,19 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
 const {
-  registerUser,
   loginUser,
   forgotPassword,
   verifyOtp,
   resetPassword,
+  firstLoginChangePassword,
 } = require('../controllers/authController');
 
 // ── Auth Routes ──────────────────────────────────────────────────────────────
-
-// @route   POST /api/auth/register
-// @desc    Register a new user
-// @access  Public
-router.post('/register', registerUser);
 
 // @route   POST /api/auth/login
 // @desc    Login user & return JWT token
@@ -34,5 +30,10 @@ router.post('/verify-otp', verifyOtp);
 // @desc    Reset password after OTP verification (Step 3)
 // @access  Public
 router.post('/reset-password', resetPassword);
+
+// @route   PUT /api/auth/first-login-change-password
+// @desc    Change password on first login
+// @access  Private
+router.put('/first-login-change-password', protect, firstLoginChangePassword);
 
 module.exports = router;

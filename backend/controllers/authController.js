@@ -78,55 +78,6 @@ const sendOtpEmail = async (toEmail, otp, userName) => {
 // ════════════════════════════════════════════════════════════════════════════
 // REGISTER
 // ════════════════════════════════════════════════════════════════════════════
-/**
- * @desc    Register a new user
- * @route   POST /api/auth/register
- * @access  Public
- */
-const registerUser = async (req, res) => {
-  try {
-    const {
-      fullName, email, phoneNumber, department, year,
-      gender, role, parentName, parentContact, password,
-    } = req.body;
-
-    if (!fullName || !email || !phoneNumber || !department || !year || !gender || !password) {
-      return res.status(400).json({
-        message: 'Please provide all required fields: fullName, email, phoneNumber, department, year, gender, and password.',
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
-    }
-
-    const userExists = await User.findOne({ email: email.toLowerCase() });
-    if (userExists) {
-      return res.status(400).json({ message: 'A user with this email already exists.' });
-    }
-
-    const user = await User.create({
-      fullName, email: email.toLowerCase(), phoneNumber,
-      department, year, gender,
-      role: role || 'student',
-      parentName, parentContact, password,
-    });
-
-    if (user) {
-      return res.status(201).json({
-        success: true,
-        message: 'User registered successfully',
-        user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role },
-      });
-    } else {
-      return res.status(400).json({ message: 'Invalid user data' });
-    }
-  } catch (error) {
-    console.error('Registration Error:', error);
-    return res.status(500).json({ message: 'Server error during registration.', error: error.message });
-  }
-};
-
 // ════════════════════════════════════════════════════════════════════════════
 // LOGIN
 // ════════════════════════════════════════════════════════════════════════════
@@ -146,6 +97,10 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Your account has been deactivated. Please contact the Hostel Administration.' });
     }
 
     const isMatch = await user.matchPassword(password);
@@ -170,6 +125,7 @@ const loginUser = async (req, res) => {
         role: user.role,
         parentName: user.parentName,
         parentContact: user.parentContact,
+        mustChangePassword: user.mustChangePassword,
       },
     });
   } catch (error) {
@@ -336,10 +292,58 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// FIRST LOGIN CHANGE PASSWORD
+// ════════════════════════════════════════════════════════════════════════════
+/**
+ * @desc    Change password on first login
+ * @route   PUT /api/auth/first-login-change-password
+ * @access  Private
+ */
+const firstLoginChangePassword = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.password = newPassword;
+    user.mustChangePassword = false;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully. Redirecting to dashboard...',
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        department: user.department,
+        year: user.year,
+        gender: user.gender,
+        role: user.role,
+        parentName: user.parentName,
+        parentContact: user.parentContact,
+        mustChangePassword: false,
+      }
+    });
+  } catch (error) {
+    console.error('First Login Password Change Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to change password', error: error.message });
+  }
+};
+
 module.exports = {
-  registerUser,
   loginUser,
   forgotPassword,
   verifyOtp,
   resetPassword,
+  firstLoginChangePassword,
 };
