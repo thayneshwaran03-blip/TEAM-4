@@ -44,6 +44,11 @@ const userSchema = new mongoose.Schema(
       enum: ['student', 'warden', 'admin'],
       default: 'student',
     },
+    room: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Room',
+      default: null,
+    },
     parentName: {
       type: String,
       trim: true,
@@ -56,6 +61,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters long'],
+    },
+    // OTP fields for password reset
+    resetOtp: {
+      type: String,
+      default: null,
+    },
+    resetOtpExpiry: {
+      type: Date,
+      default: null,
     },
   },
   {
