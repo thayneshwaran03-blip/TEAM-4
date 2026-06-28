@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Branding from './Branding.jsx';
+import Branding from '../components/Branding.jsx';
 
 // ── Step indicator ──────────────────────────────────────────────────────────
 function StepIndicator({ currentStep }) {

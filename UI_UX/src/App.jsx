@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import Login from './components/Login.jsx';
-import Signup from './components/Signup.jsx';
-import ForgotPassword from './components/ForgotPassword.jsx';
-import StudentDashboard from './components/StudentDashboard.jsx';
-import AdminDashboard from './components/AdminDashboard.jsx';
-import WardenDashboard from './components/WardenDashboard.jsx';
+import Login from './pages/Login.jsx';
+import ForgotPassword from './pages/ForgotPassword.jsx';
+import StudentDashboard from './pages/StudentDashboard.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
+import WardenDashboard from './pages/WardenDashboard.jsx';
+import FirstLoginChangePassword from './pages/FirstLoginChangePassword.jsx';
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('token'));
@@ -13,7 +13,7 @@ export default function App() {
     try { return savedUser ? JSON.parse(savedUser) : null; }
     catch { return null; }
   });
-  // 'login' | 'signup' | 'forgot-password'
+  // 'login' | 'forgot-password'
   const [authView, setAuthView] = useState('login');
 
   // Sync auth across tabs
@@ -45,6 +45,19 @@ export default function App() {
 
   // ── Role-based dashboard routing ─────────────────────────────────────────
   if (token && user) {
+    if (user.mustChangePassword) {
+      return (
+        <FirstLoginChangePassword
+          user={user}
+          onLogout={handleLogout}
+          onPasswordChanged={(updatedUser) => {
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            setUser(updatedUser);
+          }}
+        />
+      );
+    }
+
     switch (user.role) {
       case 'student':
         return <StudentDashboard user={user} onLogout={handleLogout} />;
@@ -60,18 +73,8 @@ export default function App() {
   if (authView === 'login') {
     return (
       <Login
-        onToggle={() => setAuthView('signup')}
         onForgotPassword={() => setAuthView('forgot-password')}
         onLoginSuccess={handleLoginSuccess}
-      />
-    );
-  }
-
-  if (authView === 'signup') {
-    return (
-      <Signup
-        onToggle={() => setAuthView('login')}
-        onSignupSuccess={() => setAuthView('login')}
       />
     );
   }

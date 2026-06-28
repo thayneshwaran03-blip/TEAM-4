@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import Branding from './Branding.jsx';
+import Branding from '../components/Branding.jsx';
 
-export default function Login({ onToggle, onForgotPassword, onLoginSuccess }) {
+export default function Login({ onForgotPassword, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -93,8 +93,8 @@ export default function Login({ onToggle, onForgotPassword, onLoginSuccess }) {
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight font-outfit leading-tight mb-2">
               Welcome Back
             </h2>
-            <p className="text-lg text-gray-500 font-sans font-normal">
-              Sign in with your registered college email account.
+            <p className="text-base text-gray-500 font-sans font-normal leading-relaxed">
+              Sign in using the credentials provided by the Hostel Administration.
             </p>
           </div>
 
@@ -201,15 +201,8 @@ export default function Login({ onToggle, onForgotPassword, onLoginSuccess }) {
 
           {/* Footer */}
           <div className="mt-8 text-center space-y-4">
-            <p className="text-base text-gray-600 font-sans">
-              Don't have an account?{' '}
-              <button
-                type="button"
-                onClick={onToggle}
-                className="text-primary hover:text-primary-light font-bold underline underline-offset-2 focus:outline-none transition-colors"
-              >
-                Sign Up
-              </button>
+            <p className="text-sm text-gray-500 font-sans leading-relaxed">
+              Accounts are created and managed by the Hostel Administration. Please contact the Admin office if you need login credentials.
             </p>
             <div className="w-full h-px bg-gray-100" />
             <p className="text-xs text-gray-400 font-sans tracking-wide">
