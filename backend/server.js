@@ -22,11 +22,15 @@ app.get('/', (req, res) => {
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
-const dashboardRoutes = require('./routes/dashboardRoutes');
+const studentRoutes = require('./routes/studentRoutes');
+const wardenRoutes = require('./routes/wardenRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
-app.use('/api', dashboardRoutes);
+app.use('/api/student', studentRoutes);
+app.use('/api/warden', wardenRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
