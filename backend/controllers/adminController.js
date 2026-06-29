@@ -1,6 +1,92 @@
 const Announcement = require('../models/Announcement');
 const Room = require('../models/Room');
 const User = require('../models/User');
+const nodemailer = require('nodemailer');
+
+// ── Helper: Send credentials email via nodemailer ───────────────────────────
+const sendCredentialsEmail = async (toEmail, tempPassword, userName, role) => {
+  const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
+  const loginUrl = 'http://localhost:5173/login';
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: `"HostelHub Administration" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: 'Welcome to HostelHub – Your Account Credentials',
+      html: `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; background: #f8f9fa; padding: 32px; border-radius: 16px;">
+          <div style="background: linear-gradient(135deg, #1a237e, #3949ab); padding: 28px; border-radius: 12px; text-align: center; margin-bottom: 28px;">
+            <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">
+              Hostel<span style="color: #ffa726;">Hub</span>
+            </h1>
+            <p style="color: rgba(255,255,255,0.75); margin: 8px 0 0; font-size: 14px;">Centralized Hostel Management System</p>
+          </div>
+
+          <div style="background: white; padding: 28px; border-radius: 12px; border: 1px solid #e8ecf0; color: #333;">
+            <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
+              Dear <strong>${userName}</strong>,
+            </p>
+            <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
+              Your HostelHub account has been created successfully.
+            </p>
+
+            <div style="background: #f0f4ff; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #d0daf7;">
+              <h3 style="color: #1a237e; margin: 0 0 12px; font-size: 16px; font-weight: 700; border-bottom: 1px solid #d0daf7; padding-bottom: 8px;">
+                Login Details
+              </h3>
+              <p style="margin: 6px 0; color: #444; font-size: 14px;">
+                <strong>Role:</strong> ${displayRole}
+              </p>
+              <p style="margin: 6px 0; color: #444; font-size: 14px;">
+                <strong>Email:</strong> <a href="mailto:${toEmail}" style="color: #3949ab; text-decoration: none;">${toEmail}</a>
+              </p>
+              <p style="margin: 6px 0; color: #444; font-size: 14px;">
+                <strong>Temporary Password:</strong> <code style="background: #e3ebff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #1a237e;">${tempPassword}</code>
+              </p>
+            </div>
+
+            <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6;">
+              Please log in and change your password immediately.
+            </p>
+
+            <div style="text-align: center; margin: 28px 0 10px;">
+              <a href="${loginUrl}" style="background: linear-gradient(135deg, #1a237e, #3949ab); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; box-shadow: 0 4px 12px rgba(26,35,126,0.2);">
+                Login to HostelHub
+              </a>
+            </div>
+            <p style="text-align: center; margin-top: 10px; font-size: 13px; color: #666;">
+              Login URL: <a href="${loginUrl}" style="color: #3949ab;">${loginUrl}</a>
+            </p>
+          </div>
+
+          <p style="text-align: center; color: #aaa; font-size: 12px; margin-top: 20px;">
+            Hostel Administration
+          </p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Credentials email sent successfully to ${toEmail}`);
+  } catch (error) {
+    console.error('Nodemailer Error. Logging credentials email content instead:');
+    console.log('==================================================');
+    console.log(`TO: ${toEmail}`);
+    console.log(`SUBJECT: Welcome to HostelHub – Your Account Credentials`);
+    console.log(`BODY:\nDear ${userName},\n\nYour HostelHub account has been created successfully.\n\nLogin Details\nEmail: ${toEmail}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password immediately.\n\nLogin URL: ${loginUrl}\n\nHostel Administration`);
+    console.log('==================================================');
+    throw error;
+  }
+};
+
 
 const createAnnouncement = async (req, res) => {
   try {
@@ -164,6 +250,7 @@ const createStudent = async (req, res) => {
       role: 'student',
       isActive: status !== 'Inactive',
       mustChangePassword: true,
+      isFirstLogin: true,
       password: tempPassword,
       room: studentRoomId
     });
@@ -182,6 +269,12 @@ const createStudent = async (req, res) => {
           await room.save();
         }
       }
+    }
+
+    try {
+      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student');
+    } catch (mailErr) {
+      console.error('Failed to send credentials email to student:', mailErr);
     }
 
     return res.status(201).json({ 
@@ -411,6 +504,7 @@ const resetStudentPassword = async (req, res) => {
 
     student.password = temporaryPassword;
     student.mustChangePassword = true;
+    student.isFirstLogin = true;
     await student.save();
 
     return res.status(200).json({ success: true, message: 'Password reset successfully. The student will be forced to change it on their next login.' });
@@ -465,10 +559,18 @@ const createWarden = async (req, res) => {
       role: 'warden',
       isActive: status !== 'Inactive',
       mustChangePassword: true,
+      isFirstLogin: true,
       password: tempPassword
     });
 
     await warden.save();
+
+    try {
+      await sendCredentialsEmail(warden.email, tempPassword, warden.fullName, 'warden');
+    } catch (mailErr) {
+      console.error('Failed to send credentials email to warden:', mailErr);
+    }
+
     return res.status(201).json({ 
       success: true, 
       message: 'Warden created successfully', 
@@ -613,6 +715,7 @@ const resetWardenPassword = async (req, res) => {
 
     warden.password = temporaryPassword;
     warden.mustChangePassword = true;
+    warden.isFirstLogin = true;
     await warden.save();
 
     return res.status(200).json({ success: true, message: 'Password reset successfully. The warden will be forced to change it on their next login.' });
