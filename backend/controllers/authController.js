@@ -126,6 +126,7 @@ const loginUser = async (req, res) => {
         parentName: user.parentName,
         parentContact: user.parentContact,
         mustChangePassword: user.mustChangePassword,
+        isFirstLogin: user.isFirstLogin,
       },
     });
   } catch (error) {
@@ -315,6 +316,7 @@ const firstLoginChangePassword = async (req, res) => {
 
     user.password = newPassword;
     user.mustChangePassword = false;
+    user.isFirstLogin = false;
     await user.save();
 
     return res.status(200).json({
@@ -332,6 +334,7 @@ const firstLoginChangePassword = async (req, res) => {
         parentName: user.parentName,
         parentContact: user.parentContact,
         mustChangePassword: false,
+        isFirstLogin: false,
       }
     });
   } catch (error) {
