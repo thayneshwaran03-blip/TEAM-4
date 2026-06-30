@@ -55,11 +55,13 @@ export default function AdminDashboard({ user, onLogout }) {
   }, []);
 
   // ── Common API helper ─────────────────────────────────────────────────────
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
     const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`http://localhost:5000/api${path}`, Object.assign({}, opts, { headers }));
+    const res = await fetch(`${API}/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
@@ -175,7 +177,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [reportYear, setReportYear] = useState('');
   const [reportGender, setReportGender] = useState('');
   const [reportStatus, setReportStatus] = useState('');
-  
+
   const [sortField, setSortField] = useState('roomNumber');
   const [sortOrder, setSortOrder] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -304,7 +306,7 @@ export default function AdminDashboard({ user, onLogout }) {
       } else {
         occupiedBeds = 14; // Fallback aggregation from mock rooms
       }
-      
+
       const totalCapacity = 384; // 192 + 144 + 48
       const availableBeds = totalCapacity - occupiedBeds;
 
@@ -801,7 +803,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
   return (
     <div className="flex w-full min-h-screen bg-gray-50 font-sans text-gray-800">
-      
+
       {/* Toast Messages Overlay */}
       {toast && (
         <>
@@ -814,16 +816,15 @@ export default function AdminDashboard({ user, onLogout }) {
               animation: toastFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
             }
           `}</style>
-          <div className={`fixed top-6 right-6 z-[9999] flex items-center justify-between space-x-3 px-5 py-4 rounded-2xl shadow-2xl animate-toast-in transition-all duration-300 max-w-sm md:max-w-md ${
-            toast.type === 'success' ? 'bg-emerald-500 text-white' : toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-blue-500 text-white'
-          }`}>
+          <div className={`fixed top-6 right-6 z-[9999] flex items-center justify-between space-x-3 px-5 py-4 rounded-2xl shadow-2xl animate-toast-in transition-all duration-300 max-w-sm md:max-w-md ${toast.type === 'success' ? 'bg-emerald-500 text-white' : toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
             <div className="flex items-center space-x-3">
               <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'} text-lg`} />
               <span className="text-sm md:text-base font-medium">{toast.message}</span>
             </div>
-            <button 
+            <button
               type="button"
-              onClick={() => setToast(null)} 
+              onClick={() => setToast(null)}
               className="ml-3 hover:opacity-85 transition-opacity p-1 text-white/95 hover:text-white focus:outline-none"
               title="Close Notification"
             >
@@ -834,10 +835,9 @@ export default function AdminDashboard({ user, onLogout }) {
       )}
 
       {/* ── SIDEBAR Collapsible Navigation ──────────────────────────────────── */}
-      <aside 
-        className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${
-          isSidebarExpanded ? 'w-64' : 'w-20'
-        } ${isMobileDrawerOpen ? 'translate-x-0 fixed z-40' : 'fixed lg:relative -translate-x-full lg:translate-x-0'}`}
+      <aside
+        className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${isSidebarExpanded ? 'w-64' : 'w-20'
+          } ${isMobileDrawerOpen ? 'translate-x-0 fixed z-40' : 'fixed lg:relative -translate-x-full lg:translate-x-0'}`}
       >
         <div className="space-y-6">
           {/* Logo brand */}
@@ -853,7 +853,7 @@ export default function AdminDashboard({ user, onLogout }) {
               )}
             </div>
             {isSidebarExpanded && (
-              <button 
+              <button
                 onClick={() => setIsSidebarExpanded(false)}
                 className="hidden lg:flex w-7 h-7 bg-gray-50 border border-gray-150 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                 title="Collapse Sidebar"
@@ -887,13 +887,11 @@ export default function AdminDashboard({ user, onLogout }) {
                     setActiveTab(item.tab);
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none ${
-                    isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-                  } ${
-                    isSelected
+                  className={`w-full flex items-center rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
+                    } ${isSelected
                       ? 'bg-primary text-white shadow-sm'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
+                    }`}
                   title={item.label}
                 >
                   <i className={`fas ${item.icon} w-5 text-center ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
@@ -908,9 +906,8 @@ export default function AdminDashboard({ user, onLogout }) {
         <div className="pt-6 border-t border-gray-100">
           <button
             onClick={onLogout}
-            className={`w-full flex items-center rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none ${
-              isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-            }`}
+            className={`w-full flex items-center rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
+              }`}
             title="Sign Out"
           >
             <i className="fas fa-sign-out-alt w-5 text-center" />
@@ -921,7 +918,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* Mobile Drawer Overlay */}
       {isMobileDrawerOpen && (
-        <div 
+        <div
           onClick={() => setIsMobileDrawerOpen(false)}
           className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[2px] lg:hidden"
         />
@@ -929,18 +926,18 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MAIN CONTENT PANE ────────────────────────────────────────────────── */}
       <main className="flex-1 p-6 md:p-8 overflow-y-auto h-screen custom-scrollbar flex flex-col justify-start">
-        
+
         {/* Top Navbar Header */}
         <header className="flex justify-between items-center pb-5 border-b border-gray-200 mb-8 select-none">
           <div className="flex items-center space-x-4">
-            <button 
+            <button
               onClick={() => setIsMobileDrawerOpen(true)}
               className="lg:hidden w-10 h-10 border border-gray-200 bg-white hover:bg-gray-55 rounded-xl flex items-center justify-center text-gray-500 focus:outline-none"
             >
               <i className="fas fa-bars text-lg" />
             </button>
             {!isSidebarExpanded && (
-              <button 
+              <button
                 onClick={() => setIsSidebarExpanded(true)}
                 className="hidden lg:flex w-8 h-8 bg-white border border-gray-250 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50"
                 title="Expand Sidebar"
@@ -966,7 +963,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="flex items-center space-x-4 text-xs font-semibold text-gray-600">
             {/* Notifications Button */}
             <div className="relative" ref={notifDropdownRef}>
-              <button 
+              <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
                 className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-50 shadow-sm relative focus:outline-none"
               >
@@ -980,7 +977,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div className="absolute right-0 mt-3 bg-white border border-gray-150 rounded-2xl shadow-xl w-72 py-3 z-50 text-left">
                   <div className="px-4 pb-2 border-b border-gray-100 flex justify-between items-center">
                     <span className="font-bold text-gray-800">Notifications</span>
-                    <button 
+                    <button
                       onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
                       className="text-[10px] text-primary hover:underline"
                     >
@@ -1005,7 +1002,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* Profile Dropdown */}
             <div className="relative" ref={profileDropdownRef}>
-              <button 
+              <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex items-center space-x-2.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm focus:outline-none"
               >
@@ -1022,14 +1019,14 @@ export default function AdminDashboard({ user, onLogout }) {
                     <p className="font-bold text-gray-800">{name}</p>
                     <p className="text-[10px] text-gray-400 truncate">{user?.email || 'admin@hostelhub.com'}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => { setActiveTab('settings'); setIsProfileOpen(false); }}
                     className="w-full text-left px-4 py-2 hover:bg-gray-55 text-gray-700 flex items-center space-x-2"
                   >
                     <i className="fas fa-cog text-gray-400 w-4" />
                     <span>Settings</span>
                   </button>
-                  <button 
+                  <button
                     onClick={onLogout}
                     className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 flex items-center space-x-2 border-t border-gray-50"
                   >
@@ -1043,11 +1040,11 @@ export default function AdminDashboard({ user, onLogout }) {
         </header>
 
         {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
-        
+
         {/* ── TAB: DASHBOARD OVERVIEW ────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fadeIn text-left">
-            
+
             {/* Welcome banner card */}
             <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
               <div>
@@ -1086,35 +1083,35 @@ export default function AdminDashboard({ user, onLogout }) {
                 Dashboard Quick Actions
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <button 
+                <button
                   onClick={openStudentAddModal}
                   className="bg-primary/5 hover:bg-primary/10 border border-primary/20 text-primary px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
                 >
                   <i className="fas fa-user-plus text-sm" />
                   <span>Add Student</span>
                 </button>
-                <button 
+                <button
                   onClick={openWardenAddModal}
                   className="bg-amber-50 hover:bg-amber-100 border border-amber-200/50 text-amber-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
                 >
                   <i className="fas fa-user-tie text-sm" />
                   <span>Add Warden</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setShowRoomAddModal(true)}
                   className="bg-rose-50 hover:bg-rose-100 border border-rose-200/50 text-rose-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
                 >
                   <i className="fas fa-door-closed text-sm" />
                   <span>Add Room</span>
                 </button>
-                <button 
+                <button
                   onClick={() => setShowHostelAddModal(true)}
                   className="bg-purple-50 hover:bg-purple-100 border border-purple-200/50 text-purple-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
                 >
                   <i className="fas fa-building text-sm" />
                   <span>Add Hostel</span>
                 </button>
-                <button 
+                <button
                   onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
                   className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50 text-emerald-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2 col-span-2 md:col-span-1"
                 >
@@ -1126,7 +1123,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* Dashboard Lists Row (Recent Registrations / Leaves / Complaints) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-              
+
               {/* Recent Student & Warden Registrations */}
               <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between h-96">
                 <div className="flex justify-between items-center mb-4">
@@ -1185,9 +1182,8 @@ export default function AdminDashboard({ user, onLogout }) {
                         <p className="text-xs font-bold text-gray-800 truncate">Leave Request: {l.student?.fullName}</p>
                         <p className="text-[10px] text-gray-450 truncate mt-0.5">{l.reason}</p>
                       </div>
-                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                        l.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-700'
-                      }`}>{l.status}</span>
+                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${l.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-700'
+                        }`}>{l.status}</span>
                     </div>
                   ))}
                   {complaints.slice(0, 2).map(c => (
@@ -1196,9 +1192,8 @@ export default function AdminDashboard({ user, onLogout }) {
                         <p className="text-xs font-bold text-gray-800 truncate">Complaint: {c.title}</p>
                         <p className="text-[10px] text-gray-450 truncate mt-0.5">{c.description}</p>
                       </div>
-                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                        c.status === 'Pending' ? 'bg-red-50 text-red-600' : c.status === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                      }`}>{c.status}</span>
+                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${c.status === 'Pending' ? 'bg-red-50 text-red-600' : c.status === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                        }`}>{c.status}</span>
                     </div>
                   ))}
                 </div>
@@ -1326,11 +1321,10 @@ export default function AdminDashboard({ user, onLogout }) {
                           <button
                             onClick={() => toggleStudentStatus(student)}
                             title="Click to toggle status"
-                            className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                              student.isActive
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
+                            className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${student.isActive
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                              }`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${student.isActive ? 'bg-emerald-600' : 'bg-rose-600'}`} />
                             <span>{student.isActive ? 'Active' : 'Inactive'}</span>
@@ -1479,11 +1473,10 @@ export default function AdminDashboard({ user, onLogout }) {
                           <button
                             onClick={() => toggleWardenStatus(warden)}
                             title="Click to toggle status"
-                            className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                              warden.isActive
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
+                            className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${warden.isActive
+                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                              : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                              }`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${warden.isActive ? 'bg-emerald-600' : 'bg-rose-600'}`} />
                             <span>{warden.isActive ? 'Active' : 'Inactive'}</span>
@@ -1593,11 +1586,10 @@ export default function AdminDashboard({ user, onLogout }) {
                   <div key={room._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition duration-200">
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-bold text-gray-900">{room.blockName} - Room {room.roomNumber}</span>
-                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                        room.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : room.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                      }`}>{room.status}</span>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${room.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : room.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
+                        }`}>{room.status}</span>
                     </div>
-                    
+
                     <div className="text-xs text-gray-500 space-y-1.5 pt-2">
                       <div className="flex justify-between">
                         <span>Floor Level:</span>
@@ -1612,14 +1604,13 @@ export default function AdminDashboard({ user, onLogout }) {
                         <span className="font-bold text-gray-800">{room.occupiedBeds} Beds</span>
                       </div>
                     </div>
-                    
+
                     {/* Capacity progress bar */}
                     <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         style={{ width: `${(room.occupiedBeds / room.capacity) * 100}%` }}
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          room.occupiedBeds >= room.capacity ? 'bg-indigo-600' : 'bg-primary'
-                        }`}
+                        className={`h-full rounded-full transition-all duration-300 ${room.occupiedBeds >= room.capacity ? 'bg-indigo-600' : 'bg-primary'
+                          }`}
                       />
                     </div>
                   </div>
@@ -1719,7 +1710,7 @@ export default function AdminDashboard({ user, onLogout }) {
                           " {leave.reason} "
                         </p>
                       </div>
-                      
+
                       <div className="flex items-center space-x-3 shrink-0">
                         {leave.status === 'Pending' ? (
                           <>
@@ -1737,9 +1728,8 @@ export default function AdminDashboard({ user, onLogout }) {
                             </button>
                           </>
                         ) : (
-                          <span className={`text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider ${
-                            leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                          }`}>{leave.status}</span>
+                          <span className={`text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider ${leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            }`}>{leave.status}</span>
                         )}
                       </div>
                     </div>
@@ -1767,21 +1757,19 @@ export default function AdminDashboard({ user, onLogout }) {
                       <h4 className="font-extrabold text-gray-900 text-base">{comp.title}</h4>
                       <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Category: {comp.category} · Room {comp.student?.roomNumber} ({comp.student?.block})</p>
                     </div>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                      comp.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
-                    }`}>{comp.priority} Priority</span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${comp.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                      }`}>{comp.priority} Priority</span>
                   </div>
 
                   <p className="text-xs text-gray-650 leading-relaxed font-sans">{comp.description}</p>
-                  
+
                   <div className="pt-2 border-t border-gray-50 flex justify-between items-center text-xs">
                     <div className="flex items-center space-x-1">
                       <span className="text-gray-400">Status:</span>
-                      <span className={`font-bold uppercase text-[10px] ${
-                        comp.status === 'Pending' ? 'text-red-500' : comp.status === 'In Progress' ? 'text-amber-500' : 'text-emerald-500'
-                      }`}>{comp.status}</span>
+                      <span className={`font-bold uppercase text-[10px] ${comp.status === 'Pending' ? 'text-red-500' : comp.status === 'In Progress' ? 'text-amber-500' : 'text-emerald-500'
+                        }`}>{comp.status}</span>
                     </div>
-                    
+
                     <div className="flex space-x-1">
                       {comp.status !== 'Resolved' && (
                         <>
@@ -1839,9 +1827,8 @@ export default function AdminDashboard({ user, onLogout }) {
                       </td>
                       <td className="px-6 py-4 text-left font-bold text-gray-700">{visitor.visitDate} ({visitor.expectedArrivalTime})</td>
                       <td className="px-6 py-4 text-left">
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                          visitor.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : visitor.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                        }`}>{visitor.status}</span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${visitor.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : visitor.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                          }`}>{visitor.status}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         {visitor.status === 'Pending' ? (
@@ -1899,16 +1886,15 @@ export default function AdminDashboard({ user, onLogout }) {
                   )}
                   <div className="flex items-center space-x-3 text-left">
                     <span className="text-base font-extrabold text-gray-900">{ann.title}</span>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                      ann.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
-                    }`}>{ann.priority} Priority</span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${ann.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
+                      }`}>{ann.priority} Priority</span>
                   </div>
-                  
+
                   <p className="text-xs text-gray-650 leading-relaxed font-sans">{ann.description}</p>
-                  
+
                   <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400 font-medium">
                     <span>Target Audience: <strong className="text-gray-600 capitalize">{ann.visibleTo}</strong> · Posted on {ann.createdAt}</span>
-                    
+
                     <div className="flex space-x-1">
                       <button
                         onClick={() => toggleAnnPin(ann)}
@@ -1943,7 +1929,7 @@ export default function AdminDashboard({ user, onLogout }) {
         {/* ── TAB: OCCUPANCY REPORTS ─────────────────────────────────────────── */}
         {activeTab === 'occupancy_reports' && (
           <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
-            
+
             {/* KPI Metrics Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
@@ -2001,7 +1987,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <h3 className="text-xs font-bold text-primary uppercase tracking-widest">
                   Intelligence Report Filter Criteria
                 </h3>
-                <button 
+                <button
                   onClick={() => {
                     setReportHostel(''); setReportBlock(''); setReportFloor('');
                     setReportDept(''); setReportYear(''); setReportGender('');
@@ -2016,8 +2002,8 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-sans">
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Select Hostel</label>
-                  <select 
-                    value={reportHostel} 
+                  <select
+                    value={reportHostel}
                     onChange={e => setReportHostel(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2030,8 +2016,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Select Block</label>
-                  <select 
-                    value={reportBlock} 
+                  <select
+                    value={reportBlock}
                     onChange={e => setReportBlock(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2046,8 +2032,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Select Floor</label>
-                  <select 
-                    value={reportFloor} 
+                  <select
+                    value={reportFloor}
                     onChange={e => setReportFloor(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2060,8 +2046,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Department</label>
-                  <select 
-                    value={reportDept} 
+                  <select
+                    value={reportDept}
                     onChange={e => setReportDept(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2075,8 +2061,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Academic Year</label>
-                  <select 
-                    value={reportYear} 
+                  <select
+                    value={reportYear}
                     onChange={e => setReportYear(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2090,8 +2076,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Gender</label>
-                  <select 
-                    value={reportGender} 
+                  <select
+                    value={reportGender}
                     onChange={e => setReportGender(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2103,8 +2089,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Room Status</label>
-                  <select 
-                    value={reportStatus} 
+                  <select
+                    value={reportStatus}
                     onChange={e => setReportStatus(e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
                   >
@@ -2132,21 +2118,21 @@ export default function AdminDashboard({ user, onLogout }) {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm">
               <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">{sortedOccupancy.length} Rooms Filtered</span>
               <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <button 
+                <button
                   onClick={triggerPrint}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-print" />
                   <span>Print Report</span>
                 </button>
-                <button 
+                <button
                   onClick={() => mockExport('PDF')}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-file-pdf text-rose-500" />
                   <span>Export PDF</span>
                 </button>
-                <button 
+                <button
                   onClick={() => mockExport('Excel')}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
@@ -2200,9 +2186,8 @@ export default function AdminDashboard({ user, onLogout }) {
                         <td className="px-6 py-4 text-center font-bold text-primary">{row.occupiedBeds}</td>
                         <td className="px-6 py-4 text-center font-bold text-emerald-600">{row.availableBeds}</td>
                         <td className="px-6 py-4 text-left">
-                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                            row.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                          }`}>{row.status}</span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${row.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
+                            }`}>{row.status}</span>
                         </td>
                         <td className="px-6 py-4 text-left font-semibold text-gray-700 flex items-center space-x-1.5 mt-2.5">
                           <i className="fas fa-user-tie text-gray-400 text-xs" />
@@ -2246,10 +2231,10 @@ export default function AdminDashboard({ user, onLogout }) {
         {/* ── TAB: SYSTEM SETTINGS ───────────────────────────────────────────── */}
         {activeTab === 'settings' && (
           <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
-            
+
             {/* Setting Panels */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-sans">
-              
+
               {/* Account Security */}
               <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
                 <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
@@ -2258,35 +2243,35 @@ export default function AdminDashboard({ user, onLogout }) {
                 <form onSubmit={submitPw} className="space-y-4">
                   <div className="flex flex-col space-y-1.5 text-xs">
                     <label className="font-bold text-gray-600">Current Administrator Password</label>
-                    <input 
-                      type="password" 
-                      value={oldPw} 
+                    <input
+                      type="password"
+                      value={oldPw}
                       onChange={e => setOldPw(e.target.value)}
-                      placeholder="Enter current password" 
+                      placeholder="Enter current password"
                       className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
                     />
                   </div>
                   <div className="flex flex-col space-y-1.5 text-xs">
                     <label className="font-bold text-gray-600">New Password</label>
-                    <input 
-                      type="password" 
-                      value={newPw} 
+                    <input
+                      type="password"
+                      value={newPw}
                       onChange={e => setNewPw(e.target.value)}
-                      placeholder="Min 6 characters" 
+                      placeholder="Min 6 characters"
                       className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
                     />
                   </div>
                   <div className="flex flex-col space-y-1.5 text-xs">
                     <label className="font-bold text-gray-600">Confirm New Password</label>
-                    <input 
-                      type="password" 
-                      value={confirmPw} 
+                    <input
+                      type="password"
+                      value={confirmPw}
                       onChange={e => setConfirmPw(e.target.value)}
-                      placeholder="Re-enter password" 
+                      placeholder="Re-enter password"
                       className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
                     />
                   </div>
-                  <button 
+                  <button
                     type="submit"
                     className="w-full bg-primary hover:bg-primary-light text-white font-bold text-xs py-3.5 rounded-xl shadow-md transition"
                   >
@@ -2300,29 +2285,29 @@ export default function AdminDashboard({ user, onLogout }) {
                 <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
                   Campus System Configuration
                 </h3>
-                
+
                 <div className="space-y-4 text-xs">
                   <div className="flex justify-between items-center py-2.5">
                     <div>
                       <span className="font-bold text-gray-800 block">Email Alerts Notifications</span>
                       <span className="text-gray-400 font-medium">Broadcast admin system notices to email accounts.</span>
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={emailNotifs} 
+                    <input
+                      type="checkbox"
+                      checked={emailNotifs}
                       onChange={e => { setEmailNotifs(e.target.checked); showToastMsg('Email preferences updated.'); }}
                       className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
                     />
                   </div>
-                  
+
                   <div className="flex justify-between items-center py-2.5 border-t border-gray-50">
                     <div>
                       <span className="font-bold text-gray-800 block">SMS Gateway Broadcasts</span>
                       <span className="text-gray-400 font-medium">Auto-dispatch entry logs & OTP pins via SMS.</span>
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={smsNotifs} 
+                    <input
+                      type="checkbox"
+                      checked={smsNotifs}
                       onChange={e => { setSmsNotifs(e.target.checked); showToastMsg('SMS preferences updated.'); }}
                       className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
                     />
@@ -2333,17 +2318,17 @@ export default function AdminDashboard({ user, onLogout }) {
                       <span className="font-bold text-gray-800 block text-rose-600">Maintenance & Offline Mode</span>
                       <span className="text-gray-400 font-medium">Disables warden room assignments temporarily.</span>
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={maintenanceMode} 
+                    <input
+                      type="checkbox"
+                      checked={maintenanceMode}
                       onChange={e => { setMaintenanceMode(e.target.checked); showToastMsg(e.target.checked ? 'Campus maintenance mode activated.' : 'Campus maintenance mode disabled.'); }}
                       className="w-9 h-5 bg-gray-200 checked:bg-rose-500 text-rose-500 border-gray-300 rounded-full cursor-pointer focus:outline-none"
                     />
                   </div>
 
                   <div className="pt-4 border-t border-gray-50 flex flex-col space-y-2">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => { showToastMsg('Backing up MongoDB atlas cluster...'); setTimeout(() => showToastMsg('Backup package generated and saved successfully!'), 1500); }}
                       className="w-full border border-primary hover:bg-primary/5 text-primary font-bold text-xs py-3 rounded-xl transition"
                     >
@@ -2364,7 +2349,7 @@ export default function AdminDashboard({ user, onLogout }) {
       {showStudentAddEditModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[90vh]">
-            
+
             {/* Modal Header */}
             <div className="px-8 py-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <div>
@@ -2383,7 +2368,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* Modal Body / Form */}
             <form onSubmit={handleStudentFormSubmit} className="p-8 overflow-y-auto space-y-8 flex-1 custom-scrollbar">
-              
+
               {/* Profile Fields */}
               <div>
                 <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
@@ -2647,7 +2632,7 @@ export default function AdminDashboard({ user, onLogout }) {
       {showWardenAddEditModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[90vh]">
-            
+
             {/* Modal Header */}
             <div className="px-8 py-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <div>
@@ -2666,7 +2651,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* Modal Body / Form */}
             <form onSubmit={handleWardenFormSubmit} className="p-8 overflow-y-auto space-y-8 flex-1 custom-scrollbar">
-              
+
               {/* Profile Details */}
               <div>
                 <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
@@ -3140,9 +3125,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
                 <div>
                   <h4 className="text-xl font-bold text-gray-900">{viewStudent.fullName}</h4>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewStudent.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                  }`}>
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${viewStudent.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
                     {viewStudent.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -3220,9 +3204,8 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
                 <div>
                   <h4 className="text-xl font-bold text-gray-900">{viewWarden.fullName}</h4>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    viewWarden.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                  }`}>
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${viewWarden.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
                     {viewWarden.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -3346,7 +3329,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <h3 className="text-xl font-extrabold text-gray-900 font-outfit">Account Created Successfully</h3>
               <p className="text-xs text-gray-400 mt-1">Copy and share these temporary login credentials with the user.</p>
             </div>
-            
+
             <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 text-left space-y-3 font-mono text-sm relative">
               <button
                 type="button"
