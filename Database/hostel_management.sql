@@ -1,12 +1,14 @@
 CREATE DATABASE IF NOT EXISTS hostel_management;
 USE hostel_management;
-CREATE DATABASE Hostel_Management;
-use Hostel_Management;
-CREATE TABLE admin (
-    Admin_id INT PRIMARY KEY AUTO_INCREMENT,
-    Name VARCHAR(50) NOT NULL,
-    Email VARCHAR(50) UNIQUE NOT NULL,
-    Password VARCHAR(50) NOT NULL
+
+CREATE TABLE Admin (
+    admin_id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    phone VARCHAR(15),
+    role VARCHAR(20) DEFAULT 'ADMIN',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE Warden (
     warden_id INT PRIMARY KEY AUTO_INCREMENT,
