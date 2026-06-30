@@ -12,7 +12,13 @@ connectDB();
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://team-4-beryl.vercel.app'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // Base Route
