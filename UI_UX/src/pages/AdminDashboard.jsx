@@ -793,7 +793,7 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   return (
-    <div className="flex w-full min-h-screen bg-gray-50 font-sans text-gray-800">
+    <div className="flex w-full min-h-screen bg-gray-50 font-sans text-gray-800 overflow-x-hidden">
 
       {/* Toast Messages Overlay */}
       {toast && (
@@ -916,7 +916,7 @@ export default function AdminDashboard({ user, onLogout }) {
       )}
 
       {/* ── MAIN CONTENT PANE ────────────────────────────────────────────────── */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto h-screen custom-scrollbar flex flex-col justify-start">
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto overflow-x-hidden h-screen custom-scrollbar flex flex-col justify-start max-w-full">
 
         {/* Top Navbar Header */}
         <header className="flex justify-between items-center pb-5 border-b border-gray-200 mb-8 select-none">
@@ -1037,7 +1037,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="space-y-8 animate-fadeIn text-left">
 
             {/* Welcome banner card */}
-            <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+            <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 w-full max-w-full">
               <div>
                 <h2 className="text-2xl md:text-3xl font-extrabold font-outfit">Welcome Back, {name}</h2>
                 <p className="text-white/80 text-sm mt-1.5 font-sans">
