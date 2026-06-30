@@ -27,8 +27,6 @@ export default function AdminDashboard({ user, onLogout }) {
     { icon: 'fa-th-large', label: 'Dashboard', tab: 'dashboard' },
     { icon: 'fa-user-graduate', label: 'Student Management', tab: 'students' },
     { icon: 'fa-user-tie', label: 'Warden Management', tab: 'wardens' },
-    { icon: 'fa-door-open', label: 'Room Management', tab: 'rooms' },
-    { icon: 'fa-building', label: 'Hostel Management', tab: 'hostels' },
     { icon: 'fa-calendar-check', label: 'Leave Requests', tab: 'leaves' },
     { icon: 'fa-exclamation-triangle', label: 'Complaints', tab: 'complaints' },
     { icon: 'fa-address-book', label: 'Visitor Management', tab: 'visitors' },
@@ -73,7 +71,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [students, setStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [studentFilterBlock, setStudentFilterBlock] = useState('');
-  const [studentFilterGender, setStudentFilterGender] = useState('');
+  const [studentFilterHostel, setStudentFilterHostel] = useState('');
   const [studentFilterStatus, setStudentFilterStatus] = useState('');
 
   const [wardens, setWardens] = useState([]);
@@ -146,9 +144,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // ── Realistic Mock Data (Hostels, Leaves, Complaints, Visitors) ───────────
   const [hostels, setHostels] = useState([
-    { _id: 'h1', name: 'Boys Hostel', blockCount: 3, floorCount: 4, roomCount: 48, capacity: 192, occupiedBeds: 144, availableBeds: 48, status: 'Active', warden: ' Thayaneshwaran s' },
-    { _id: 'h2', name: 'Girls Hostel', blockCount: 2, floorCount: 3, roomCount: 36, capacity: 144, occupiedBeds: 108, availableBeds: 36, status: 'Active', warden: 'Devaroopa' },
-    { _id: 'h3', name: 'PG Hostel', blockCount: 1, floorCount: 2, roomCount: 12, capacity: 48, occupiedBeds: 32, availableBeds: 16, status: 'Active', warden: 'Dharshi' },
+    { _id: 'h1', name: 'Boys Hostel', blockCount: 4, floorCount: 2, roomCount: 32, capacity: 128, occupiedBeds: 96, availableBeds: 32, status: 'Active', warden: 'Thayaneshwaran s' },
+    { _id: 'h2', name: 'Girls Hostel', blockCount: 4, floorCount: 2, roomCount: 32, capacity: 128, occupiedBeds: 80, availableBeds: 48, status: 'Active', warden: 'Devaroopa' }
   ]);
 
   const [leaves, setLeaves] = useState([
@@ -175,7 +172,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [reportFloor, setReportFloor] = useState('');
   const [reportDept, setReportDept] = useState('');
   const [reportYear, setReportYear] = useState('');
-  const [reportGender, setReportGender] = useState('');
+
   const [reportStatus, setReportStatus] = useState('');
 
   const [sortField, setSortField] = useState('roomNumber');
@@ -189,10 +186,8 @@ export default function AdminDashboard({ user, onLogout }) {
     { hostelName: 'Boys Hostel', block: 'Block A', floor: '1', roomNumber: '102', capacity: 4, occupiedBeds: 4, availableBeds: 0, status: 'Occupied', warden: 'Thayaneshwaran s', gender: 'Male', dept: 'CSE', year: 'II' },
     { hostelName: 'Boys Hostel', block: 'Block B', floor: '2', roomNumber: '204', capacity: 4, occupiedBeds: 2, availableBeds: 2, status: 'Available', warden: 'Thayaneshwaran s', gender: 'Male', dept: 'ECE', year: 'IV' },
     { hostelName: 'Girls Hostel', block: 'Block C', floor: '1', roomNumber: '105', capacity: 4, occupiedBeds: 4, availableBeds: 0, status: 'Occupied', warden: 'Devaroopa', gender: 'Female', dept: 'CSE', year: 'II' },
-    { hostelName: 'Girls Hostel', block: 'Block C', floor: '2', roomNumber: '206', capacity: 4, occupiedBeds: 0, availableBeds: 4, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'IT', year: 'I' },
-    { hostelName: 'Girls Hostel', block: 'Block D', floor: '3', roomNumber: '310', capacity: 4, occupiedBeds: 1, availableBeds: 3, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'EEE', year: 'III' },
-    { hostelName: 'PG Hostel', block: 'Block E', floor: '1', roomNumber: '101', capacity: 2, occupiedBeds: 2, availableBeds: 0, status: 'Occupied', warden: 'Dharshi', gender: 'Female', dept: 'CSE', year: 'IV' },
-    { hostelName: 'PG Hostel', block: 'Block E', floor: '2', roomNumber: '201', capacity: 2, occupiedBeds: 1, availableBeds: 1, status: 'Maintenance', warden: 'Dharshi', gender: 'Female', dept: 'ECE', year: 'I' }
+    { hostelName: 'Girls Hostel', block: 'Block D', floor: '1', roomNumber: '106', capacity: 4, occupiedBeds: 0, availableBeds: 4, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'IT', year: 'I' },
+    { hostelName: 'Girls Hostel', block: 'Block D', floor: '2', roomNumber: '210', capacity: 4, occupiedBeds: 1, availableBeds: 3, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'EEE', year: 'III' }
   ]);
 
   // ── Settings States ──────────────────────────────────────────────────────
@@ -228,10 +223,10 @@ export default function AdminDashboard({ user, onLogout }) {
     try {
       const searchParam = studentSearch ? `&search=${encodeURIComponent(studentSearch)}` : '';
       const blockParam = studentFilterBlock ? `&block=${encodeURIComponent(studentFilterBlock)}` : '';
-      const genderParam = studentFilterGender ? `&gender=${encodeURIComponent(studentFilterGender)}` : '';
+      const hostelParam = studentFilterHostel ? `&hostel=${encodeURIComponent(studentFilterHostel)}` : '';
       const statusParam = studentFilterStatus ? `&status=${encodeURIComponent(studentFilterStatus)}` : '';
 
-      const data = await apiFetch(`/admin/students?${searchParam}${blockParam}${genderParam}${statusParam}`);
+      const data = await apiFetch(`/admin/students?${searchParam}${blockParam}${hostelParam}${statusParam}`);
       if (data.success) {
         setStudents(data.students);
       }
@@ -307,16 +302,12 @@ export default function AdminDashboard({ user, onLogout }) {
         occupiedBeds = 14; // Fallback aggregation from mock rooms
       }
 
-      const totalCapacity = 384; // 192 + 144 + 48
+      const totalCapacity = 256; // 128 + 128
       const availableBeds = totalCapacity - occupiedBeds;
 
       setStats([
         { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600' },
         { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600' },
-        { icon: 'fa-building', label: 'Total Hostels', value: hostels.length.toString(), colorBg: 'bg-purple-50 text-purple-600' },
-        { icon: 'fa-door-open', label: 'Total Rooms', value: roomCount.toString(), colorBg: 'bg-rose-50 text-rose-600' },
-        { icon: 'fa-bed', label: 'Occupied Beds', value: occupiedBeds.toString(), colorBg: 'bg-emerald-50 text-emerald-600' },
-        { icon: 'fa-check-circle', label: 'Available Beds', value: availableBeds.toString(), colorBg: 'bg-teal-50 text-teal-600' },
         { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: leaves.filter(l => l.status === 'Pending').length.toString(), colorBg: 'bg-orange-50 text-orange-600' },
         { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: complaints.filter(c => c.status === 'Pending').length.toString(), colorBg: 'bg-red-50 text-red-600' },
         { icon: 'fa-address-card', label: 'Visitors Today', value: visitors.length.toString(), colorBg: 'bg-indigo-50 text-indigo-600' },
@@ -333,7 +324,7 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchRooms();
     fetchAnnouncements();
     fetchStats();
-  }, [studentSearch, studentFilterBlock, studentFilterGender, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
+  }, [studentSearch, studentFilterBlock, studentFilterHostel, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
 
   // ── Open Modals Handlers ──────────────────────────────────────────────────
   const openStudentAddModal = () => {
@@ -769,10 +760,10 @@ export default function AdminDashboard({ user, onLogout }) {
     const floorMatch = reportFloor ? item.floor === reportFloor : true;
     const deptMatch = reportDept ? item.dept === reportDept : true;
     const yearMatch = reportYear ? item.year === reportYear : true;
-    const genderMatch = reportGender ? item.gender === reportGender : true;
+
     const statusMatch = reportStatus ? item.status === reportStatus : true;
 
-    return searchMatch && hostelMatch && blockMatch && floorMatch && deptMatch && yearMatch && genderMatch && statusMatch;
+    return searchMatch && hostelMatch && blockMatch && floorMatch && deptMatch && yearMatch && statusMatch;
   });
 
   const sortedOccupancy = [...filteredOccupancy].sort((a, b) => {
@@ -1059,19 +1050,19 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
             </div>
 
-            {/* Expanded Stats Grid (10 Summary Cards) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+            {/* Expanded Stats Grid (3 columns, large items) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {stats.map((stat, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between items-start cursor-pointer hover:-translate-y-0.5"
+                  className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between items-start cursor-pointer hover:-translate-y-1"
                 >
-                  <div className={`w-9 h-9 rounded-xl ${stat.colorBg} flex items-center justify-center text-sm mb-4 shadow-inner`}>
+                  <div className={`w-14 h-14 rounded-2xl ${stat.colorBg} flex items-center justify-center text-2xl mb-6 shadow-inner`}>
                     <i className={`fas ${stat.icon}`} />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-gray-900 mb-0.5">{stat.value}</h3>
-                    <p className="text-[9px] font-extrabold text-gray-500 uppercase tracking-widest leading-none">{stat.label}</p>
+                    <h3 className="text-4xl font-black text-gray-900 mb-2">{stat.value}</h3>
+                    <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest leading-relaxed">{stat.label}</p>
                   </div>
                 </div>
               ))}
@@ -1082,7 +1073,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-3 mb-5">
                 Dashboard Quick Actions
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <button
                   onClick={openStudentAddModal}
                   className="bg-primary/5 hover:bg-primary/10 border border-primary/20 text-primary px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
@@ -1098,22 +1089,8 @@ export default function AdminDashboard({ user, onLogout }) {
                   <span>Add Warden</span>
                 </button>
                 <button
-                  onClick={() => setShowRoomAddModal(true)}
-                  className="bg-rose-50 hover:bg-rose-100 border border-rose-200/50 text-rose-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
-                >
-                  <i className="fas fa-door-closed text-sm" />
-                  <span>Add Room</span>
-                </button>
-                <button
-                  onClick={() => setShowHostelAddModal(true)}
-                  className="bg-purple-50 hover:bg-purple-100 border border-purple-200/50 text-purple-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
-                >
-                  <i className="fas fa-building text-sm" />
-                  <span>Add Hostel</span>
-                </button>
-                <button
                   onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
-                  className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50 text-emerald-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2 col-span-2 md:col-span-1"
+                  className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50 text-emerald-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
                 >
                   <i className="fas fa-bullhorn text-sm" />
                   <span>Post Notice</span>
@@ -1247,13 +1224,13 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
               <div>
                 <select
-                  value={studentFilterGender}
-                  onChange={(e) => setStudentFilterGender(e.target.value)}
+                  value={studentFilterHostel}
+                  onChange={(e) => setStudentFilterHostel(e.target.value)}
                   className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
-                  <option value="">All Genders</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
+                  <option value="">All Hostels</option>
+                  <option value="Boys Hostel">Boys Hostel</option>
+                  <option value="Girls Hostel">Girls Hostel</option>
                 </select>
               </div>
               <div>
@@ -1462,7 +1439,7 @@ export default function AdminDashboard({ user, onLogout }) {
                             <>
                               <p className="font-bold text-gray-850">{warden.assignedHostel}</p>
                               {warden.assignedBlocks && warden.assignedBlocks.length > 0 && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">Blocks: {warden.assignedBlocks.join(', ')}</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Floor: {warden.assignedBlocks.join(', ')}</p>
                               )}
                             </>
                           ) : (
@@ -1990,7 +1967,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <button
                   onClick={() => {
                     setReportHostel(''); setReportBlock(''); setReportFloor('');
-                    setReportDept(''); setReportYear(''); setReportGender('');
+                    setReportDept(''); setReportYear('');
                     setReportStatus(''); setReportSearch('');
                   }}
                   className="text-xs font-bold text-gray-450 hover:text-primary transition border-none bg-transparent"
@@ -2074,18 +2051,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   </select>
                 </div>
 
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-bold text-gray-600">Gender</label>
-                  <select
-                    value={reportGender}
-                    onChange={e => setReportGender(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
-                  >
-                    <option value="">All Genders</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                  </select>
-                </div>
+
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Room Status</label>
@@ -2397,16 +2363,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     />
                     {studentErrors.registerNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.registerNumber}</p>}
                   </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Roll Number (Optional)</label>
-                    <input
-                      type="text"
-                      value={studentForm.rollNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, rollNumber: e.target.value })}
-                      placeholder="e.g. 20IT402"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
-                    />
-                  </div>
+
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Email Address *</label>
                     <input
@@ -2521,56 +2478,62 @@ export default function AdminDashboard({ user, onLogout }) {
                 <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
                   Hostel & Room allocation
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Hostel Name</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.hostelName}
                       onChange={(e) => setStudentForm({ ...studentForm, hostelName: e.target.value })}
-                      placeholder="Boys / Girls Hostel"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Select Hostel</option>
+                      <option value="Boys Hostel">Boys Hostel</option>
+                      <option value="Girls Hostel">Girls Hostel</option>
+                    </select>
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Block</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.block}
                       onChange={(e) => setStudentForm({ ...studentForm, block: e.target.value })}
-                      placeholder="A / B / C Block"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Select Block</option>
+                      <option value="Block A">Block A</option>
+                      <option value="Block B">Block B</option>
+                      <option value="Block C">Block C</option>
+                      <option value="Block D">Block D</option>
+                    </select>
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Floor</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.floor}
                       onChange={(e) => setStudentForm({ ...studentForm, floor: e.target.value })}
-                      placeholder="e.g. 1 / 2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Select Floor</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Room Number</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.roomNumber}
                       onChange={(e) => setStudentForm({ ...studentForm, roomNumber: e.target.value })}
-                      placeholder="e.g. 101"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1 col-span-2 md:col-span-1">
-                    <label className="text-xs font-bold text-gray-600">Bed Number</label>
-                    <input
-                      type="text"
-                      value={studentForm.bedNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, bedNumber: e.target.value })}
-                      placeholder="e.g. B1 / B2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Select Room</option>
+                      <option value="101">101</option>
+                      <option value="102">102</option>
+                      <option value="103">103</option>
+                      <option value="104">104</option>
+                      <option value="201">201</option>
+                      <option value="202">202</option>
+                      <option value="203">203</option>
+                      <option value="204">204</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -2746,18 +2709,19 @@ export default function AdminDashboard({ user, onLogout }) {
                       <option value="">Select Hostel</option>
                       <option value="Boys Hostel">Boys Hostel</option>
                       <option value="Girls Hostel">Girls Hostel</option>
-                      <option value="PG Hostel">PG Hostel</option>
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Assigned Block(s) (Comma separated)</label>
-                    <input
-                      type="text"
+                    <label className="text-xs font-bold text-gray-600">Assigned Floor</label>
+                    <select
                       value={wardenForm.assignedBlocks}
                       onChange={(e) => setWardenForm({ ...wardenForm, assignedBlocks: e.target.value })}
-                      placeholder="e.g. Block A, Block B"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
+                    >
+                      <option value="">Select Floor</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -3238,7 +3202,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Managed Block(s)</p>
                 <p className="text-xs font-semibold text-gray-800">
                   {viewWarden.assignedBlocks && viewWarden.assignedBlocks.length > 0
-                    ? viewWarden.assignedBlocks.join(', ')
+                    ? "Floor " + viewWarden.assignedBlocks.join(', ')
                     : 'No blocks assigned'}
                 </p>
               </div>
