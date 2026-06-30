@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Branding from '../components/Branding.jsx';
 
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export default function Login({ onForgotPassword, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +38,7 @@ export default function Login({ onForgotPassword, onLoginSuccess }) {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password: password.trim() })
