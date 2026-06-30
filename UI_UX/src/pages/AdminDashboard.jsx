@@ -8,6 +8,9 @@ export default function AdminDashboard({ user, onLogout }) {
   // State to manage active panel: 'dashboard' | 'students' | 'wardens'
   const [activeTab, setActiveTab] = useState('dashboard');
   const [toast, setToast] = useState(null);
+  // Validation error state for forms
+  const [studentErrors, setStudentErrors] = useState({});
+  const [wardenErrors, setWardenErrors] = useState({});
 
   const showToastMsg = (message, type = 'success') => {
     setToast({ message, type });
@@ -22,7 +25,6 @@ export default function AdminDashboard({ user, onLogout }) {
     { icon: 'fa-door-open', label: 'Manage Rooms', tab: 'rooms_mock' },
     { icon: 'fa-calendar-check', label: 'Leave Requests', tab: 'leaves_mock' },
     { icon: 'fa-exclamation-triangle', label: 'Complaints', tab: 'complaints_mock' },
-    { icon: 'fa-credit-card', label: 'Fee Records', tab: 'fees_mock' },
     { icon: 'fa-address-book', label: 'Visitor Logs', tab: 'visitors_mock' },
   ];
 
@@ -269,15 +271,32 @@ export default function AdminDashboard({ user, onLogout }) {
     e.preventDefault();
     setToast(null);
 
-    // Basic Validation
-    if (!studentForm.fullName || !studentForm.registerNumber || !studentForm.email || !studentForm.phoneNumber || !studentForm.gender) {
-      showToastMsg('All mandatory fields are required.', 'error');
+    // Per-field validation (all non-optional fields)
+    const errs = {};
+    if (!studentForm.fullName || studentForm.fullName.trim() === '') errs.fullName = 'Please enter full name';
+    if (!studentForm.registerNumber || studentForm.registerNumber.trim() === '') errs.registerNumber = 'Please enter register number';
+    if (!studentForm.email || studentForm.email.trim() === '') errs.email = 'Please enter email';
+    if (!studentForm.phoneNumber || studentForm.phoneNumber.trim() === '') errs.phoneNumber = 'Please enter phone number';
+    if (!studentForm.gender || studentForm.gender.trim() === '') errs.gender = 'Please select gender';
+    if (!studentForm.department || studentForm.department.trim() === '') errs.department = 'Please enter department';
+    if (!studentForm.year || studentForm.year.trim() === '') errs.year = 'Please select year';
+
+    // Parent / guardian fields (required)
+    if (!studentForm.parentName || studentForm.parentName.trim() === '') errs.parentName = 'Please enter parent/guardian name';
+    if (!studentForm.parentContact || studentForm.parentContact.trim() === '') errs.parentContact = 'Please enter parent contact number';
+    if (!studentForm.emergencyContact || studentForm.emergencyContact.trim() === '') errs.emergencyContact = 'Please enter emergency contact number';
+
+    // Hostel & room allocation (required)
+    if (!studentForm.hostelName || studentForm.hostelName.trim() === '') errs.hostelName = 'Please enter hostel name';
+    if (!studentForm.block || studentForm.block.trim() === '') errs.block = 'Please provide block';
+    if (!studentForm.floor || studentForm.floor.trim() === '') errs.floor = 'Please provide floor';
+    if (!studentForm.roomNumber || studentForm.roomNumber.trim() === '') errs.roomNumber = 'Please enter room number';
+
+    if (Object.keys(errs).length) {
+      setStudentErrors(errs);
       return;
     }
-    if (studentForm.roomNumber && (!studentForm.block || !studentForm.floor)) {
-      showToastMsg('Block and Floor are required when assigning a room.', 'error');
-      return;
-    }
+    setStudentErrors({});
 
     const payload = { ...studentForm };
     if (selectedStudent) {
@@ -401,10 +420,21 @@ export default function AdminDashboard({ user, onLogout }) {
     e.preventDefault();
     setToast(null);
 
-    if (!wardenForm.fullName || !wardenForm.employeeId || !wardenForm.email || !wardenForm.phoneNumber || !wardenForm.gender) {
-      showToastMsg('All mandatory fields are required.', 'error');
+    // Per-field validation for warden
+    const wErrs = {};
+    if (!wardenForm.fullName || wardenForm.fullName.trim() === '') wErrs.fullName = 'Please enter full name';
+    if (!wardenForm.employeeId || wardenForm.employeeId.trim() === '') wErrs.employeeId = 'Please enter employee ID';
+    if (!wardenForm.email || wardenForm.email.trim() === '') wErrs.email = 'Please enter email';
+    if (!wardenForm.phoneNumber || wardenForm.phoneNumber.trim() === '') wErrs.phoneNumber = 'Please enter phone number';
+    if (!wardenForm.gender || wardenForm.gender.trim() === '') wErrs.gender = 'Please select gender';
+    if (!wardenForm.assignedHostel || wardenForm.assignedHostel.trim() === '') wErrs.assignedHostel = 'Please select assigned hostel';
+    if (!wardenForm.assignedBlocks || wardenForm.assignedBlocks.trim() === '') wErrs.assignedBlocks = 'Please provide assigned blocks';
+
+    if (Object.keys(wErrs).length) {
+      setWardenErrors(wErrs);
       return;
     }
+    setWardenErrors({});
 
     const blocksArray = wardenForm.assignedBlocks
       ? wardenForm.assignedBlocks.split(',').map(b => b.trim()).filter(Boolean)
@@ -697,27 +727,6 @@ export default function AdminDashboard({ user, onLogout }) {
                     </span>
                   </div>
                 </div>
-              </div>
-
-              {/* Bar Fee Collection Chart */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-left flex flex-col justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">
-                  Fee Collection
-                </h3>
-                <div className="flex items-end justify-between h-44 px-4">
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month, idx) => (
-                    <div key={idx} className="flex-1 flex flex-col items-center space-y-2 group">
-                      <div
-                        style={{ height: `${40 + idx * 20}px` }}
-                        className="w-8/12 bg-primary hover:bg-primary-light rounded-t-md transition-all duration-200 cursor-pointer"
-                      />
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{month}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-center text-xs font-bold text-gray-600 tracking-wide mt-6 border-t border-gray-50 pt-4">
-                  Total: ₹45,00,000
-                </p>
               </div>
 
             </div>
@@ -1109,20 +1118,22 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="text"
                       value={studentForm.fullName}
-                      onChange={(e) => setStudentForm({ ...studentForm, fullName: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, fullName: e.target.value }); if (studentErrors.fullName) setStudentErrors(prev => ({ ...prev, fullName: undefined })); }}
                       placeholder="e.g. John Doe"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.fullName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.fullName && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.fullName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Register Number *</label>
                     <input
                       type="text"
                       value={studentForm.registerNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, registerNumber: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, registerNumber: e.target.value }); if (studentErrors.registerNumber) setStudentErrors(prev => ({ ...prev, registerNumber: undefined })); }}
                       placeholder="e.g. 311520104001"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.registerNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.registerNumber && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.registerNumber}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Roll Number (Optional)</label>
@@ -1139,49 +1150,53 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="email"
                       value={studentForm.email}
-                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, email: e.target.value }); if (studentErrors.email) setStudentErrors(prev => ({ ...prev, email: undefined })); }}
                       placeholder="john.doe@college.edu"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.email ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.email && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.email}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Phone Number *</label>
                     <input
                       type="text"
                       value={studentForm.phoneNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, phoneNumber: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, phoneNumber: e.target.value }); if (studentErrors.phoneNumber) setStudentErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
                       placeholder="e.g. 9876543210"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.phoneNumber && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.phoneNumber}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Gender *</label>
                     <select
                       value={studentForm.gender}
-                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      onChange={(e) => { setStudentForm({ ...studentForm, gender: e.target.value }); if (studentErrors.gender) setStudentErrors(prev => ({ ...prev, gender: undefined })); }}
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.gender ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                     </select>
+                    {studentErrors.gender && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.gender}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Department *</label>
                     <input
                       type="text"
                       value={studentForm.department}
-                      onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, department: e.target.value }); if (studentErrors.department) setStudentErrors(prev => ({ ...prev, department: undefined })); }}
                       placeholder="e.g. Information Technology"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.department ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.department && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.department}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Year *</label>
                     <select
                       value={studentForm.year}
-                      onChange={(e) => setStudentForm({ ...studentForm, year: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      onChange={(e) => { setStudentForm({ ...studentForm, year: e.target.value }); if (studentErrors.year) setStudentErrors(prev => ({ ...prev, year: undefined })); }}
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.year ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     >
                       <option value="">Select Year</option>
                       <option value="I">I Year</option>
@@ -1189,6 +1204,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       <option value="III">III Year</option>
                       <option value="IV">IV Year</option>
                     </select>
+                    {studentErrors.year && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.year}</p>}
                   </div>
                   {!selectedStudent && (
                     <div className="flex flex-col space-y-1">
@@ -1216,30 +1232,33 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="text"
                       value={studentForm.parentName}
-                      onChange={(e) => setStudentForm({ ...studentForm, parentName: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, parentName: e.target.value }); if (studentErrors.parentName) setStudentErrors(prev => ({ ...prev, parentName: undefined })); }}
                       placeholder="e.g. Richard Doe"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.parentName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.parentName && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.parentName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Parent Contact Number</label>
                     <input
                       type="text"
                       value={studentForm.parentContact}
-                      onChange={(e) => setStudentForm({ ...studentForm, parentContact: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, parentContact: e.target.value }); if (studentErrors.parentContact) setStudentErrors(prev => ({ ...prev, parentContact: undefined })); }}
                       placeholder="e.g. 9876501234"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.parentContact ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.parentContact && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.parentContact}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Emergency Contact Number</label>
                     <input
                       type="text"
                       value={studentForm.emergencyContact}
-                      onChange={(e) => setStudentForm({ ...studentForm, emergencyContact: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, emergencyContact: e.target.value }); if (studentErrors.emergencyContact) setStudentErrors(prev => ({ ...prev, emergencyContact: undefined })); }}
                       placeholder="e.g. 9876598765"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${studentErrors.emergencyContact ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.emergencyContact && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.emergencyContact}</p>}
                   </div>
                 </div>
               </div>
@@ -1252,53 +1271,71 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Hostel Name</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.hostelName}
-                      onChange={(e) => setStudentForm({ ...studentForm, hostelName: e.target.value })}
-                      placeholder="Boys / Girls Hostel"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
+                      onChange={(e) => { setStudentForm({ ...studentForm, hostelName: e.target.value }); if (studentErrors.hostelName) setStudentErrors(prev => ({ ...prev, hostelName: undefined })); }}
+                      className={`px-3 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.hostelName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                    >
+                      <option value="">Select Hostel</option>
+                      <option value="Girls Hostel">Girls Hostel</option>
+                      <option value="Boys Hostel">Boys Hostel</option>
+                    </select>
+                    {studentErrors.hostelName && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.hostelName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Block</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.block}
-                      onChange={(e) => setStudentForm({ ...studentForm, block: e.target.value })}
-                      placeholder="A / B / C Block"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
+                      onChange={(e) => { setStudentForm({ ...studentForm, block: e.target.value }); if (studentErrors.block) setStudentErrors(prev => ({ ...prev, block: undefined })); }}
+                      className={`px-3 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.block ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                    >
+                      <option value="">Select Block</option>
+                      <option value="Block A">Block A</option>
+                      <option value="Block B">Block B</option>
+                      <option value="Block C">Block C</option>
+                    </select>
+                    {studentErrors.block && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.block}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Floor</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.floor}
-                      onChange={(e) => setStudentForm({ ...studentForm, floor: e.target.value })}
-                      placeholder="e.g. 1 / 2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
+                      onChange={(e) => { setStudentForm({ ...studentForm, floor: e.target.value, roomNumber: '' }); if (studentErrors.floor) setStudentErrors(prev => ({ ...prev, floor: undefined })); }}
+                      className={`px-3 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.floor ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                    >
+                      <option value="">Select Floor</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
+                    {studentErrors.floor && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.floor}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Room Number</label>
-                    <input
-                      type="text"
+                    <select
                       value={studentForm.roomNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, roomNumber: e.target.value })}
-                      placeholder="e.g. 101"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Bed Number</label>
-                    <input
-                      type="text"
-                      value={studentForm.bedNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, bedNumber: e.target.value })}
-                      placeholder="e.g. B1 / B2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
+                      onChange={(e) => { setStudentForm({ ...studentForm, roomNumber: e.target.value }); if (studentErrors.roomNumber) setStudentErrors(prev => ({ ...prev, roomNumber: undefined })); if (studentErrors.block) setStudentErrors(prev => ({ ...prev, block: undefined })); if (studentErrors.floor) setStudentErrors(prev => ({ ...prev, floor: undefined })); }}
+                      className={`px-3 py-2 rounded-xl text-sm focus:outline-none bg-white ${studentErrors.roomNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                      disabled={!studentForm.floor}
+                    >
+                      <option value="">Select Room</option>
+                      {studentForm.floor === '1' && (
+                        <>
+                          <option value="101">101</option>
+                          <option value="102">102</option>
+                          <option value="103">103</option>
+                          <option value="104">104</option>
+                        </>
+                      )}
+                      {studentForm.floor === '2' && (
+                        <>
+                          <option value="201">201</option>
+                          <option value="202">202</option>
+                          <option value="203">203</option>
+                          <option value="204">204</option>
+                        </>
+                      )}
+                    </select>
+                    {studentErrors.roomNumber && <p className="text-[11px] text-rose-600 mt-1">{studentErrors.roomNumber}</p>}
                   </div>
                 </div>
               </div>
@@ -1392,52 +1429,57 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="text"
                       value={wardenForm.fullName}
-                      onChange={(e) => setWardenForm({ ...wardenForm, fullName: e.target.value })}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, fullName: e.target.value }); if (wardenErrors.fullName) setWardenErrors(prev => ({ ...prev, fullName: undefined })); }}
                       placeholder="e.g. Robert Smith"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${wardenErrors.fullName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.fullName && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.fullName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Employee ID *</label>
                     <input
                       type="text"
                       value={wardenForm.employeeId}
-                      onChange={(e) => setWardenForm({ ...wardenForm, employeeId: e.target.value })}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, employeeId: e.target.value }); if (wardenErrors.employeeId) setWardenErrors(prev => ({ ...prev, employeeId: undefined })); }}
                       placeholder="e.g. EMP4002"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${wardenErrors.employeeId ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.employeeId && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.employeeId}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Gender *</label>
                     <select
                       value={wardenForm.gender}
-                      onChange={(e) => setWardenForm({ ...wardenForm, gender: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      onChange={(e) => { setWardenForm({ ...wardenForm, gender: e.target.value }); if (wardenErrors.gender) setWardenErrors(prev => ({ ...prev, gender: undefined })); }}
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none bg-white ${wardenErrors.gender ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                     </select>
+                    {wardenErrors.gender && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.gender}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Email Address *</label>
                     <input
                       type="email"
                       value={wardenForm.email}
-                      onChange={(e) => setWardenForm({ ...wardenForm, email: e.target.value })}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, email: e.target.value }); if (wardenErrors.email) setWardenErrors(prev => ({ ...prev, email: undefined })); }}
                       placeholder="warden.rs@college.edu"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${wardenErrors.email ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.email && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.email}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Phone Number *</label>
                     <input
                       type="text"
                       value={wardenForm.phoneNumber}
-                      onChange={(e) => setWardenForm({ ...wardenForm, phoneNumber: e.target.value })}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, phoneNumber: e.target.value }); if (wardenErrors.phoneNumber) setWardenErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
                       placeholder="e.g. 9845012345"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none ${wardenErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.phoneNumber && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.phoneNumber}</p>}
                   </div>
                   {!selectedWarden && (
                     <div className="flex flex-col space-y-1">
@@ -1464,23 +1506,27 @@ export default function AdminDashboard({ user, onLogout }) {
                     <label className="text-xs font-bold text-gray-600">Assigned Hostel</label>
                     <select
                       value={wardenForm.assignedHostel}
-                      onChange={(e) => setWardenForm({ ...wardenForm, assignedHostel: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      onChange={(e) => { setWardenForm({ ...wardenForm, assignedHostel: e.target.value }); if (wardenErrors.assignedHostel) setWardenErrors(prev => ({ ...prev, assignedHostel: undefined })); }}
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none bg-white ${wardenErrors.assignedHostel ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     >
                       <option value="">Select Hostel</option>
                       <option value="Boys Hostel">Boys Hostel</option>
                       <option value="Girls Hostel">Girls Hostel</option>
                     </select>
+                    {wardenErrors.assignedHostel && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.assignedHostel}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Assigned Block(s) (Comma separated)</label>
-                    <input
-                      type="text"
+                    <label className="text-xs font-bold text-gray-600">Assigned Floor(s)</label>
+                    <select
                       value={wardenForm.assignedBlocks}
-                      onChange={(e) => setWardenForm({ ...wardenForm, assignedBlocks: e.target.value })}
-                      placeholder="e.g. Block A, Block B"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
-                    />
+                      onChange={(e) => { setWardenForm({ ...wardenForm, assignedBlocks: e.target.value }); if (wardenErrors.assignedBlocks) setWardenErrors(prev => ({ ...prev, assignedBlocks: undefined })); }}
+                      className={`px-4 py-2 rounded-xl text-sm focus:outline-none bg-white ${wardenErrors.assignedBlocks ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                    >
+                      <option value="">Select Floor</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                    </select>
+                    {wardenErrors.assignedBlocks && <p className="text-[11px] text-rose-600 mt-1">{wardenErrors.assignedBlocks}</p>}
                   </div>
                 </div>
               </div>
