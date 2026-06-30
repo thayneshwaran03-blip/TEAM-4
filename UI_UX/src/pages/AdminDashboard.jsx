@@ -828,7 +828,7 @@ export default function AdminDashboard({ user, onLogout }) {
       {/* ── SIDEBAR Collapsible Navigation ──────────────────────────────────── */}
       <aside
         className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${isSidebarExpanded ? 'w-64' : 'w-20'
-          } ${isMobileDrawerOpen ? 'translate-x-0 fixed z-40' : 'fixed lg:relative -translate-x-full lg:translate-x-0'}`}
+          } fixed lg:relative z-40 ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         <div className="space-y-6">
           {/* Logo brand */}
