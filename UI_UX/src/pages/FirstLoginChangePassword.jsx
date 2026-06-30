@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import Branding from '../components/Branding.jsx';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+
 
 export default function FirstLoginChangePassword({ user, onLogout, onPasswordChanged }) {
   const [newPassword, setNewPassword] = useState('');
@@ -55,7 +58,7 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/auth/first-login-change-password', {
+      const response = await fetch(`${API}/api/auth/first-login-change-password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -88,12 +91,11 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
 
       {/* Right Pane - Form */}
       <div className="w-full lg:w-1/2 min-h-screen flex justify-center items-center px-6 md:px-14 bg-gray-50 relative font-sans">
-        
+
         {/* Toast Notification */}
         {toast && (
-          <div className={`fixed top-6 right-6 z-50 flex items-center space-x-3 px-5 py-4 rounded-2xl shadow-2xl transition-all duration-300 ${
-            toast.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
-          }`}>
+          <div className={`fixed top-6 right-6 z-50 flex items-center space-x-3 px-5 py-4 rounded-2xl shadow-2xl transition-all duration-300 ${toast.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+            }`}>
             <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-lg`} />
             <span className="text-base font-medium">{toast.message}</span>
           </div>
@@ -101,7 +103,7 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
 
         {/* Main Card */}
         <div className="w-full max-w-lg bg-white rounded-3xl border border-gray-100 shadow-[0_20px_60px_rgba(0,0,0,0.06)] p-10 md:p-12 transition-all duration-300 hover:shadow-[0_25px_70px_rgba(0,0,0,0.09)]">
-          
+
           {/* Card Header */}
           <div className="mb-8 text-left">
             <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight font-outfit leading-tight mb-3">
@@ -113,7 +115,7 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            
+
             {/* New Password field */}
             <div className="flex flex-col space-y-2 text-left">
               <label className="text-sm font-bold text-gray-700 uppercase tracking-widest flex items-center space-x-2">
@@ -130,11 +132,10 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
                     if (newPasswordError) validateNewPassword(e.target.value);
                   }}
                   onBlur={() => validateNewPassword(newPassword)}
-                  className={`w-full pl-5 pr-14 py-4 rounded-2xl border-2 font-sans text-base outline-none transition-all duration-200 placeholder:text-gray-400 ${
-                    newPasswordError
+                  className={`w-full pl-5 pr-14 py-4 rounded-2xl border-2 font-sans text-base outline-none transition-all duration-200 placeholder:text-gray-400 ${newPasswordError
                       ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500/10'
                       : 'border-gray-200 bg-white focus:border-primary focus:ring-4 focus:ring-primary/10'
-                  }`}
+                    }`}
                 />
                 <button
                   type="button"
@@ -168,11 +169,10 @@ export default function FirstLoginChangePassword({ user, onLogout, onPasswordCha
                     if (confirmPasswordError) validateConfirmPassword(e.target.value);
                   }}
                   onBlur={() => validateConfirmPassword(confirmPassword)}
-                  className={`w-full pl-5 pr-14 py-4 rounded-2xl border-2 font-sans text-base outline-none transition-all duration-200 placeholder:text-gray-400 ${
-                    confirmPasswordError
+                  className={`w-full pl-5 pr-14 py-4 rounded-2xl border-2 font-sans text-base outline-none transition-all duration-200 placeholder:text-gray-400 ${confirmPasswordError
                       ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500/10'
                       : 'border-gray-200 bg-white focus:border-primary focus:ring-4 focus:ring-primary/10'
-                  }`}
+                    }`}
                 />
                 <button
                   type="button"
