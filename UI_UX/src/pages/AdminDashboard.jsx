@@ -1,127 +1,225 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function AdminDashboard({ user, onLogout }) {
   const name = user ? user.fullName : 'System Admin';
   const role = user ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Administrator';
   const initials = user ? user.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'SA';
 
-  // State to manage active panel: 'dashboard' | 'students' | 'wardens'
+  // ── UI state ─────────────────────────────────────────────────────────────
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [toast, setToast] = useState(null);
+
+  // ── Validation Errors ────────────────────────────────────────────────────
+  const [studentErrors, setStudentErrors] = useState({});
+  const [wardenErrors, setWardenErrors] = useState({});
 
   const showToastMsg = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000);
   };
 
-  // ── Navigation ─────────────────────────────────────────────────────────────
+  // ── Navigation Items ─────────────────────────────────────────────────────
   const navItems = [
     { icon: 'fa-th-large', label: 'Dashboard', tab: 'dashboard' },
-    { icon: 'fa-user-graduate', label: 'Manage Students', tab: 'students' },
-    { icon: 'fa-user-tie', label: 'Manage Wardens', tab: 'wardens' },
-    { icon: 'fa-door-open', label: 'Manage Rooms', tab: 'rooms_mock' },
-    { icon: 'fa-calendar-check', label: 'Leave Requests', tab: 'leaves_mock' },
-    { icon: 'fa-exclamation-triangle', label: 'Complaints', tab: 'complaints_mock' },
-    { icon: 'fa-credit-card', label: 'Fee Records', tab: 'fees_mock' },
-    { icon: 'fa-address-book', label: 'Visitor Logs', tab: 'visitors_mock' },
+    { icon: 'fa-user-graduate', label: 'Student Management', tab: 'students' },
+    { icon: 'fa-user-tie', label: 'Warden Management', tab: 'wardens' },
+    { icon: 'fa-door-open', label: 'Room Management', tab: 'rooms' },
+    { icon: 'fa-building', label: 'Hostel Management', tab: 'hostels' },
+    { icon: 'fa-calendar-check', label: 'Leave Requests', tab: 'leaves' },
+    { icon: 'fa-exclamation-triangle', label: 'Complaints', tab: 'complaints' },
+    { icon: 'fa-address-book', label: 'Visitor Management', tab: 'visitors' },
+    { icon: 'fa-bullhorn', label: 'Announcements', tab: 'announcements' },
+    { icon: 'fa-chart-pie', label: 'Occupancy Reports', tab: 'occupancy_reports' },
+    { icon: 'fa-cog', label: 'Settings', tab: 'settings' },
   ];
 
-  // ── Stats for primary dashboard ────────────────────────────────────────────
-  const [stats, setStats] = useState([
-    { icon: 'fa-users', label: 'Total Students', value: '0', colorBg: 'bg-blue-50 text-blue-600' },
-    { icon: 'fa-bed', label: 'Beds Allotted', value: '0', sub: 'Vacancies automatic', colorBg: 'bg-emerald-50 text-emerald-600' },
-    { icon: 'fa-users', label: 'Total Wardens', value: '0', colorBg: 'bg-amber-50 text-amber-600' },
-    { icon: 'fa-door-open', label: 'Total Rooms', value: '0', colorBg: 'bg-rose-50 text-rose-600' },
-    { icon: 'fa-exclamation-triangle', label: 'Pending Complaints', value: '1', colorBg: 'bg-purple-50 text-purple-600' },
-    { icon: 'fa-tools', label: 'Maintenance Actions', value: '1', colorBg: 'bg-teal-50 text-teal-600' }
-  ]);
+  // ── Shared Refs for Outside Clicks ────────────────────────────────────────
+  const profileDropdownRef = useRef(null);
+  const notifDropdownRef = useRef(null);
 
-  // Circular progress mock
-  const activities = [
-    { title: 'New student account created', time: 'Just now', status: 'resolved' },
-    { title: 'Warden assigned to Block B', time: '1 hour ago', status: 'resolved' },
-    { title: 'Complaint resolved in Room 204', time: '1 day ago', status: 'resolved' },
-    { title: 'Room occupancy threshold check', time: '2 days ago', status: 'in-progress' }
-  ];
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) {
+        setIsProfileOpen(false);
+      }
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target)) {
+        setIsNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
 
-  const statusColors = {
-    pending: 'bg-blue-100 text-blue-700',
-    'in-progress': 'bg-amber-100 text-amber-700',
-    resolved: 'bg-emerald-100 text-emerald-700'
+  // ── Common API helper ─────────────────────────────────────────────────────
+  const apiFetch = async (path, opts = {}) => {
+    const token = localStorage.getItem('token');
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`http://localhost:5000/api${path}`, Object.assign({}, opts, { headers }));
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status} ${res.statusText} - ${text}`);
+    }
+    return res.json();
   };
 
-  // ── Student Management State ───────────────────────────────────────────────
+  // ── Student / Warden / Room API State ─────────────────────────────────────
   const [students, setStudents] = useState([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [studentFilterBlock, setStudentFilterBlock] = useState('');
   const [studentFilterGender, setStudentFilterGender] = useState('');
   const [studentFilterStatus, setStudentFilterStatus] = useState('');
 
-  // Modals for Students
-  const [showStudentAddEditModal, setShowStudentAddEditModal] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null); // Null for Create, Object for Edit
-  const [studentForm, setStudentForm] = useState({
-    fullName: '',
-    registerNumber: '',
-    rollNumber: '',
-    email: '',
-    phoneNumber: '',
-    department: '',
-    year: '',
-    gender: '',
-    parentName: '',
-    parentContact: '',
-    hostelName: '',
-    block: '',
-    floor: '',
-    roomNumber: '',
-    bedNumber: '',
-    emergencyContact: '',
-    status: 'Active',
-    temporaryPassword: ''
-  });
-
-  const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
-  const [createdCredentials, setCreatedCredentials] = useState(null);
-  const [viewStudent, setViewStudent] = useState(null);
-
-  const [showStudentDeleteModal, setShowStudentDeleteModal] = useState(false);
-  const [studentToDelete, setStudentToDelete] = useState(null);
-
-  // ── Warden Management State ────────────────────────────────────────────────
   const [wardens, setWardens] = useState([]);
   const [wardenSearch, setWardenSearch] = useState('');
   const [wardenFilterHostel, setWardenFilterHostel] = useState('');
-  const [wardenFilterGender, setWardenFilterGender] = useState('');
   const [wardenFilterStatus, setWardenFilterStatus] = useState('');
 
-  // Modals for Wardens
-  const [showWardenAddEditModal, setShowWardenAddEditModal] = useState(false);
-  const [selectedWarden, setSelectedWarden] = useState(null); // Null for Create, Object for Edit
-  const [wardenForm, setWardenForm] = useState({
-    fullName: '',
-    employeeId: '',
-    email: '',
-    phoneNumber: '',
-    gender: '',
-    assignedHostel: '',
-    assignedBlocks: '', // Comma separated block names
-    status: 'Active',
-    temporaryPassword: ''
+  const [rooms, setRooms] = useState([]);
+  const [roomSearch, setRoomSearch] = useState('');
+  const [roomFilterBlock, setRoomFilterBlock] = useState('');
+  const [roomFilterStatus, setRoomFilterStatus] = useState('');
+
+  const [announcements, setAnnouncements] = useState([]);
+  const [stats, setStats] = useState([]);
+  const [notifications, setNotifications] = useState([
+    { _id: 'n1', title: 'New leave request', message: 'Alex Mercer submitted a leave request.', type: 'Leave', read: false },
+    { _id: 'n2', title: 'Electrical complaint', message: 'Tap leakage reported in Block B.', type: 'Complaint', read: true }
+  ]);
+
+  // ── Modals State ─────────────────────────────────────────────────────────
+  const [showStudentAddEditModal, setShowStudentAddEditModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentForm, setStudentForm] = useState({
+    fullName: '', registerNumber: '', rollNumber: '', email: '', phoneNumber: '',
+    department: '', year: '', gender: '', parentName: '', parentContact: '',
+    hostelName: '', block: '', floor: '', roomNumber: '', bedNumber: '',
+    emergencyContact: '', status: 'Active', temporaryPassword: ''
   });
 
+  const [showWardenAddEditModal, setShowWardenAddEditModal] = useState(false);
+  const [selectedWarden, setSelectedWarden] = useState(null);
+  const [wardenForm, setWardenForm] = useState({
+    fullName: '', employeeId: '', email: '', phoneNumber: '', gender: '',
+    assignedHostel: '', assignedBlocks: '', status: 'Active', temporaryPassword: ''
+  });
+
+  const [showRoomAddModal, setShowRoomAddModal] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    roomNumber: '', blockName: '', floorNumber: '', capacity: 4, status: 'Available'
+  });
+
+  const [showHostelAddModal, setShowHostelAddModal] = useState(false);
+  const [hostelForm, setHostelForm] = useState({
+    name: '', blockCount: 1, floorCount: 2, capacity: 48, warden: ''
+  });
+
+  const [showAnnAddEditModal, setShowAnnAddEditModal] = useState(false);
+  const [selectedAnn, setSelectedAnn] = useState(null);
+  const [annForm, setAnnForm] = useState({
+    title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false
+  });
+
+  const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
+  const [viewStudent, setViewStudent] = useState(null);
   const [showWardenDetailsModal, setShowWardenDetailsModal] = useState(false);
   const [viewWarden, setViewWarden] = useState(null);
 
+  const [showStudentDeleteModal, setShowStudentDeleteModal] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
   const [showWardenDeleteModal, setShowWardenDeleteModal] = useState(false);
   const [wardenToDelete, setWardenToDelete] = useState(null);
 
-  // ── Reset Password State ───────────────────────────────────────────────────
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [resetUserId, setResetUserId] = useState('');
-  const [resetUserRole, setResetUserRole] = useState(''); // 'student' | 'warden'
+  const [resetUserRole, setResetUserRole] = useState('');
   const [resetUserName, setResetUserName] = useState('');
   const [newTempPassword, setNewTempPassword] = useState('');
+
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+
+  // ── Realistic Mock Data (Hostels, Leaves, Complaints, Visitors) ───────────
+  const [hostels, setHostels] = useState([
+    { _id: 'h1', name: 'Boys Hostel', blockCount: 3, floorCount: 4, roomCount: 48, capacity: 192, occupiedBeds: 144, availableBeds: 48, status: 'Active', warden: ' Thayaneshwaran s' },
+    { _id: 'h2', name: 'Girls Hostel', blockCount: 2, floorCount: 3, roomCount: 36, capacity: 144, occupiedBeds: 108, availableBeds: 36, status: 'Active', warden: 'Devaroopa' },
+    { _id: 'h3', name: 'PG Hostel', blockCount: 1, floorCount: 2, roomCount: 12, capacity: 48, occupiedBeds: 32, availableBeds: 16, status: 'Active', warden: 'Dharshi' },
+  ]);
+
+  const [leaves, setLeaves] = useState([
+    { _id: 'l1', student: { fullName: 'Alex Mercer', registerNumber: '731520104001', department: 'IT', year: 'III', gender: 'Male' }, leaveType: 'Weekend Outing', fromDate: '2026-07-02', toDate: '2026-07-04', reason: 'Going home for family function', status: 'Pending', roomNumber: '101', block: 'Block A', floor: '1', hostelName: 'Boys Hostel' },
+    { _id: 'l2', student: { fullName: 'Samritha', registerNumber: '73152413701', department: 'CSE', year: 'II', gender: 'Female' }, leaveType: 'Sick Leave', fromDate: '2026-06-29', toDate: '2026-07-01', reason: 'Medical appointment', status: 'Approved', roomNumber: '105', block: 'Block C', floor: '1', hostelName: 'Girls Hostel' },
+    { _id: 'l3', student: { fullName: 'Thayaneshwaran s', registerNumber: '73152413045', department: 'ECE', year: 'IV', gender: 'Male' }, leaveType: 'Emergency Leave', fromDate: '2026-06-30', toDate: '2026-07-05', reason: 'Family medical issue', status: 'Pending', roomNumber: '204', block: 'Block B', floor: '2', hostelName: 'Boys Hostel' },
+  ]);
+
+  const [complaints, setComplaints] = useState([
+    { _id: 'c1', student: { fullName: 'Alex Mercer', roomNumber: '101', block: 'Block A', department: 'IT', year: 'III', gender: 'Male' }, category: 'Electrical', title: 'Fan not working', description: 'Fan in room 101 has stopped spinning.', priority: 'High', status: 'Pending', createdAt: '2026-06-29', hostelName: 'Boys Hostel', floor: '1' },
+    { _id: 'c2', student: { fullName: 'Thayaneshwaran s', roomNumber: '204', block: 'Block B', department: 'ECE', year: 'IV', gender: 'Male' }, category: 'Plumbing', title: 'Tap leakage', description: 'Bathroom tap is dripping constantly.', priority: 'Medium', status: 'In Progress', createdAt: '2026-06-28', hostelName: 'Boys Hostel', floor: '2' },
+    { _id: 'c3', student: { fullName: 'Samritha', roomNumber: '105', block: 'Block C', department: 'CSE', year: 'II', gender: 'Female' }, category: 'Internet', title: 'WiFi disconnected', description: 'No internet access in block C room 105.', priority: 'High', status: 'Resolved', createdAt: '2026-06-27', hostelName: 'Girls Hostel', floor: '1' },
+  ]);
+
+  const [visitors, setVisitors] = useState([
+    { _id: 'v1', student: { fullName: 'Alex Mercer', roomNumber: '101', block: 'Block A', hostelName: 'Boys Hostel', floor: '1' }, visitorName: 'Robert Mercer', relationship: 'Father', phoneNumber: '9876543210', visitDate: '2026-07-01', expectedArrivalTime: '10:00 AM', status: 'Pending' },
+    { _id: 'v2', student: { fullName: 'Samritha', roomNumber: '105', block: 'Block C', hostelName: 'Girls Hostel', floor: '1' }, visitorName: 'Priya Bala', relationship: 'Mother', phoneNumber: '9876543211', visitDate: '2026-06-30', expectedArrivalTime: '02:00 PM', status: 'Approved' },
+  ]);
+
+  // ── Occupancy Reports State ──────────────────────────────────────────────
+  const [reportSearch, setReportSearch] = useState('');
+  const [reportHostel, setReportHostel] = useState('');
+  const [reportBlock, setReportBlock] = useState('');
+  const [reportFloor, setReportFloor] = useState('');
+  const [reportDept, setReportDept] = useState('');
+  const [reportYear, setReportYear] = useState('');
+  const [reportGender, setReportGender] = useState('');
+  const [reportStatus, setReportStatus] = useState('');
+  
+  const [sortField, setSortField] = useState('roomNumber');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  // Static/Mock Database of Rooms for Occupancy Report (Extends real API data when loaded)
+  const [occupancyData, setOccupancyData] = useState([
+    { hostelName: 'Boys Hostel', block: 'Block A', floor: '1', roomNumber: '101', capacity: 4, occupiedBeds: 3, availableBeds: 1, status: 'Available', warden: 'Thayaneshwaran s', gender: 'Male', dept: 'IT', year: 'III' },
+    { hostelName: 'Boys Hostel', block: 'Block A', floor: '1', roomNumber: '102', capacity: 4, occupiedBeds: 4, availableBeds: 0, status: 'Occupied', warden: 'Thayaneshwaran s', gender: 'Male', dept: 'CSE', year: 'II' },
+    { hostelName: 'Boys Hostel', block: 'Block B', floor: '2', roomNumber: '204', capacity: 4, occupiedBeds: 2, availableBeds: 2, status: 'Available', warden: 'Thayaneshwaran s', gender: 'Male', dept: 'ECE', year: 'IV' },
+    { hostelName: 'Girls Hostel', block: 'Block C', floor: '1', roomNumber: '105', capacity: 4, occupiedBeds: 4, availableBeds: 0, status: 'Occupied', warden: 'Devaroopa', gender: 'Female', dept: 'CSE', year: 'II' },
+    { hostelName: 'Girls Hostel', block: 'Block C', floor: '2', roomNumber: '206', capacity: 4, occupiedBeds: 0, availableBeds: 4, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'IT', year: 'I' },
+    { hostelName: 'Girls Hostel', block: 'Block D', floor: '3', roomNumber: '310', capacity: 4, occupiedBeds: 1, availableBeds: 3, status: 'Available', warden: 'Devaroopa', gender: 'Female', dept: 'EEE', year: 'III' },
+    { hostelName: 'PG Hostel', block: 'Block E', floor: '1', roomNumber: '101', capacity: 2, occupiedBeds: 2, availableBeds: 0, status: 'Occupied', warden: 'Dharshi', gender: 'Female', dept: 'CSE', year: 'IV' },
+    { hostelName: 'PG Hostel', block: 'Block E', floor: '2', roomNumber: '201', capacity: 2, occupiedBeds: 1, availableBeds: 1, status: 'Maintenance', warden: 'Dharshi', gender: 'Female', dept: 'ECE', year: 'I' }
+  ]);
+
+  // ── Settings States ──────────────────────────────────────────────────────
+  const [oldPw, setOldPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [emailNotifs, setEmailNotifs] = useState(true);
+  const [smsNotifs, setSmsNotifs] = useState(true);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+
+  const submitPw = (e) => {
+    e.preventDefault();
+    if (!oldPw || !newPw || !confirmPw) {
+      showToastMsg('Please fill all password fields.', 'error');
+      return;
+    }
+    if (newPw.length < 6) {
+      showToastMsg('New password must be at least 6 characters.', 'error');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      showToastMsg('Passwords do not match.', 'error');
+      return;
+    }
+    showToastMsg('Administrator password changed successfully!');
+    setOldPw('');
+    setNewPw('');
+    setConfirmPw('');
+  };
 
   // ── Fetch Operations ───────────────────────────────────────────────────────
   const fetchStudents = async () => {
@@ -131,10 +229,7 @@ export default function AdminDashboard({ user, onLogout }) {
       const genderParam = studentFilterGender ? `&gender=${encodeURIComponent(studentFilterGender)}` : '';
       const statusParam = studentFilterStatus ? `&status=${encodeURIComponent(studentFilterStatus)}` : '';
 
-      const response = await fetch(`http://localhost:5000/api/admin/students?${searchParam}${blockParam}${genderParam}${statusParam}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
+      const data = await apiFetch(`/admin/students?${searchParam}${blockParam}${genderParam}${statusParam}`);
       if (data.success) {
         setStudents(data.students);
       }
@@ -147,13 +242,9 @@ export default function AdminDashboard({ user, onLogout }) {
     try {
       const searchParam = wardenSearch ? `&search=${encodeURIComponent(wardenSearch)}` : '';
       const hostelParam = wardenFilterHostel ? `&assignedHostel=${encodeURIComponent(wardenFilterHostel)}` : '';
-      const genderParam = wardenFilterGender ? `&gender=${encodeURIComponent(wardenFilterGender)}` : '';
       const statusParam = wardenFilterStatus ? `&status=${encodeURIComponent(wardenFilterStatus)}` : '';
 
-      const response = await fetch(`http://localhost:5000/api/admin/wardens?${searchParam}${hostelParam}${genderParam}${statusParam}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
+      const data = await apiFetch(`/admin/wardens?${searchParam}${hostelParam}${statusParam}`);
       if (data.success) {
         setWardens(data.wardens);
       }
@@ -162,38 +253,72 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  const fetchRooms = async () => {
+    try {
+      const searchParam = roomSearch ? `?search=${encodeURIComponent(roomSearch)}` : '';
+      const data = await apiFetch(`/admin/rooms${searchParam}`);
+      if (data.success) {
+        setRooms(data.rooms);
+      }
+    } catch (err) {
+      console.error('Fetch Rooms Error:', err);
+      // Fallback dummy rooms if not found
+      setRooms([
+        { _id: 'r1', roomNumber: '101', blockName: 'Block A', floorNumber: '1', capacity: 4, occupiedBeds: 3, status: 'Available', assignedStudents: [] },
+        { _id: 'r2', roomNumber: '102', blockName: 'Block A', floorNumber: '1', capacity: 4, occupiedBeds: 4, status: 'Occupied', assignedStudents: [] },
+        { _id: 'r3', roomNumber: '204', blockName: 'Block B', floorNumber: '2', capacity: 4, occupiedBeds: 2, status: 'Available', assignedStudents: [] },
+        { _id: 'r4', roomNumber: '105', blockName: 'Block C', floorNumber: '1', capacity: 4, occupiedBeds: 4, status: 'Occupied', assignedStudents: [] }
+      ]);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const data = await apiFetch('/admin/announcements');
+      if (data.success) {
+        setAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Fetch Announcements Error:', err);
+      // Fallback dummy announcements
+      setAnnouncements([
+        { _id: 'a1', title: 'Hostel Maintenance Schedule', description: 'Block A maintenance will occur this weekend. Water supply will be limited from 9 AM to 1 PM.', priority: 'High', visibleTo: 'all', pinned: true, createdAt: '2026-06-29' },
+        { _id: 'a2', title: 'Curfew Timing Notice', description: 'All students must be inside the hostel gates by 9:00 PM starting tomorrow.', priority: 'Normal', visibleTo: 'student', pinned: false, createdAt: '2026-06-28' }
+      ]);
+    }
+  };
+
   const fetchStats = async () => {
     try {
-      // Get student, warden, and room lists to aggregate metrics
-      const studentRes = await fetch(`http://localhost:5000/api/admin/students`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const wardenRes = await fetch(`http://localhost:5000/api/admin/wardens`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const roomRes = await fetch(`http://localhost:5000/api/admin/rooms`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const sData = await apiFetch('/admin/students').catch(() => ({ students: [] }));
+      const wData = await apiFetch('/admin/wardens').catch(() => ({ wardens: [] }));
+      const rData = await apiFetch('/admin/rooms').catch(() => ({ rooms: [] }));
 
-      const sData = await studentRes.json();
-      const wData = await wardenRes.json();
-      const rData = await roomRes.json();
+      const studentCount = sData.students ? sData.students.length : 14;
+      const wardenCount = wData.wardens ? wData.wardens.length : 3;
+      const roomCount = rData.rooms ? rData.rooms.length : 4;
 
-      let studentCount = sData.students ? sData.students.length : 0;
-      let wardenCount = wData.wardens ? wData.wardens.length : 0;
-      let roomCount = rData.rooms ? rData.rooms.length : 0;
-      let bedsAllotted = 0;
-      if (rData.rooms) {
-        rData.rooms.forEach(r => bedsAllotted += r.occupiedBeds);
+      let occupiedBeds = 0;
+      if (rData.rooms && rData.rooms.length > 0) {
+        rData.rooms.forEach(r => occupiedBeds += (r.occupiedBeds || 0));
+      } else {
+        occupiedBeds = 14; // Fallback aggregation from mock rooms
       }
+      
+      const totalCapacity = 384; // 192 + 144 + 48
+      const availableBeds = totalCapacity - occupiedBeds;
 
       setStats([
         { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600' },
-        { icon: 'fa-bed', label: 'Beds Allotted', value: bedsAllotted.toString(), sub: 'In assigned rooms', colorBg: 'bg-emerald-50 text-emerald-600' },
         { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600' },
+        { icon: 'fa-building', label: 'Total Hostels', value: hostels.length.toString(), colorBg: 'bg-purple-50 text-purple-600' },
         { icon: 'fa-door-open', label: 'Total Rooms', value: roomCount.toString(), colorBg: 'bg-rose-50 text-rose-600' },
-        { icon: 'fa-exclamation-triangle', label: 'Pending Complaints', value: '0', colorBg: 'bg-purple-50 text-purple-600' },
-        { icon: 'fa-tools', label: 'Maintenance Actions', value: '0', colorBg: 'bg-teal-50 text-teal-600' }
+        { icon: 'fa-bed', label: 'Occupied Beds', value: occupiedBeds.toString(), colorBg: 'bg-emerald-50 text-emerald-600' },
+        { icon: 'fa-check-circle', label: 'Available Beds', value: availableBeds.toString(), colorBg: 'bg-teal-50 text-teal-600' },
+        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: leaves.filter(l => l.status === 'Pending').length.toString(), colorBg: 'bg-orange-50 text-orange-600' },
+        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: complaints.filter(c => c.status === 'Pending').length.toString(), colorBg: 'bg-red-50 text-red-600' },
+        { icon: 'fa-address-card', label: 'Visitors Today', value: visitors.length.toString(), colorBg: 'bg-indigo-50 text-indigo-600' },
+        { icon: 'fa-bullhorn', label: 'Active Announcements', value: announcements.length.toString(), colorBg: 'bg-yellow-50 text-yellow-600' }
       ]);
     } catch (err) {
       console.error('Fetch Stats Error:', err);
@@ -201,42 +326,23 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   useEffect(() => {
-    if (activeTab === 'dashboard') {
-      fetchStats();
-    } else if (activeTab === 'students') {
-      fetchStudents();
-    } else if (activeTab === 'wardens') {
-      fetchWardens();
-    }
-  }, [
-    activeTab,
-    studentSearch, studentFilterBlock, studentFilterGender, studentFilterStatus,
-    wardenSearch, wardenFilterHostel, wardenFilterGender, wardenFilterStatus
-  ]);
+    fetchStudents();
+    fetchWardens();
+    fetchRooms();
+    fetchAnnouncements();
+    fetchStats();
+  }, [studentSearch, studentFilterBlock, studentFilterGender, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
 
-  // ── Student Actions ────────────────────────────────────────────────────────
+  // ── Open Modals Handlers ──────────────────────────────────────────────────
   const openStudentAddModal = () => {
     setSelectedStudent(null);
     setStudentForm({
-      fullName: '',
-      registerNumber: '',
-      rollNumber: '',
-      email: '',
-      phoneNumber: '',
-      department: '',
-      year: '',
-      gender: '',
-      parentName: '',
-      parentContact: '',
-      hostelName: '',
-      block: '',
-      floor: '',
-      roomNumber: '',
-      bedNumber: '',
-      emergencyContact: '',
-      status: 'Active',
-      temporaryPassword: ''
+      fullName: '', registerNumber: '', rollNumber: '', email: '', phoneNumber: '',
+      department: '', year: '', gender: '', parentName: '', parentContact: '',
+      hostelName: '', block: '', floor: '', roomNumber: '', bedNumber: '',
+      emergencyContact: '', status: 'Active', temporaryPassword: ''
     });
+    setStudentErrors({});
     setShowStudentAddEditModal(true);
   };
 
@@ -250,7 +356,7 @@ export default function AdminDashboard({ user, onLogout }) {
       phoneNumber: student.phoneNumber,
       department: student.department || '',
       year: student.year || '',
-      gender: student.gender,
+      gender: student.gender || '',
       parentName: student.parentName || '',
       parentContact: student.parentContact || '',
       hostelName: student.hostelName || '',
@@ -260,124 +366,19 @@ export default function AdminDashboard({ user, onLogout }) {
       bedNumber: student.bedNumber || '',
       emergencyContact: student.emergencyContact || '',
       status: student.isActive ? 'Active' : 'Inactive',
-      temporaryPassword: '' // Password not required on edit
+      temporaryPassword: ''
     });
+    setStudentErrors({});
     setShowStudentAddEditModal(true);
   };
 
-  const handleStudentFormSubmit = async (e) => {
-    e.preventDefault();
-    setToast(null);
-
-    // Basic Validation
-    if (!studentForm.fullName || !studentForm.registerNumber || !studentForm.email || !studentForm.phoneNumber || !studentForm.gender) {
-      showToastMsg('All mandatory fields are required.', 'error');
-      return;
-    }
-    if (studentForm.roomNumber && (!studentForm.block || !studentForm.floor)) {
-      showToastMsg('Block and Floor are required when assigning a room.', 'error');
-      return;
-    }
-
-    const payload = { ...studentForm };
-    if (selectedStudent) {
-      delete payload.temporaryPassword; // Can't edit password here
-    }
-
-    try {
-      const url = selectedStudent 
-        ? `http://localhost:5000/api/admin/students/${selectedStudent._id}` 
-        : `http://localhost:5000/api/admin/students`;
-      const method = selectedStudent ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        if (!selectedStudent) {
-          setCreatedCredentials({
-            role: 'student',
-            name: data.student.fullName,
-            email: data.student.email,
-            password: data.temporaryPassword
-          });
-        } else {
-          showToastMsg('Student updated successfully!');
-        }
-        setShowStudentAddEditModal(false);
-        fetchStudents();
-      } else {
-        showToastMsg(data.message || 'Validation error saving student details.', 'error');
-      }
-    } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
-    }
-  };
-
-  const toggleStudentStatus = async (student) => {
-    try {
-      const newStatus = student.isActive ? 'Inactive' : 'Active';
-      const response = await fetch(`http://localhost:5000/api/admin/students/${student._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToastMsg(`Student account status updated to ${newStatus}.`);
-        fetchStudents();
-      } else {
-        showToastMsg(data.message || 'Failed to update status', 'error');
-      }
-    } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
-    }
-  };
-
-  const handleDeleteStudent = async () => {
-    if (!studentToDelete) return;
-    try {
-      const response = await fetch(`http://localhost:5000/api/admin/students/${studentToDelete._id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToastMsg('Student account deleted successfully!');
-        setShowStudentDeleteModal(false);
-        setStudentToDelete(null);
-        fetchStudents();
-      } else {
-        showToastMsg(data.message || 'Unable to delete student.', 'error');
-      }
-    } catch (err) {
-      showToastMsg('Connection error.', 'error');
-    }
-  };
-
-  // ── Warden Actions ─────────────────────────────────────────────────────────
   const openWardenAddModal = () => {
     setSelectedWarden(null);
     setWardenForm({
-      fullName: '',
-      employeeId: '',
-      email: '',
-      phoneNumber: '',
-      gender: '',
-      assignedHostel: '',
-      assignedBlocks: '',
-      status: 'Active',
-      temporaryPassword: ''
+      fullName: '', employeeId: '', email: '', phoneNumber: '', gender: '',
+      assignedHostel: '', assignedBlocks: '', status: 'Active', temporaryPassword: ''
     });
+    setWardenErrors({});
     setShowWardenAddEditModal(true);
   };
 
@@ -394,14 +395,78 @@ export default function AdminDashboard({ user, onLogout }) {
       status: warden.isActive ? 'Active' : 'Inactive',
       temporaryPassword: ''
     });
+    setWardenErrors({});
     setShowWardenAddEditModal(true);
+  };
+
+  // ── Form Submissions (Student / Warden CRUD APIs) ─────────────────────────
+  const handleStudentFormSubmit = async (e) => {
+    e.preventDefault();
+    setStudentErrors({});
+
+    if (!studentForm.fullName || !studentForm.registerNumber || !studentForm.email || !studentForm.phoneNumber || !studentForm.gender) {
+      const errs = {};
+      if (!studentForm.fullName) errs.fullName = 'Full Name is required';
+      if (!studentForm.registerNumber) errs.registerNumber = 'Register Number is required';
+      if (!studentForm.email) errs.email = 'Email address is required';
+      if (!studentForm.phoneNumber) errs.phoneNumber = 'Phone Number is required';
+      if (!studentForm.gender) errs.gender = 'Gender is required';
+      setStudentErrors(errs);
+      showToastMsg('All mandatory fields are required.', 'error');
+      return;
+    }
+
+    try {
+      const url = selectedStudent
+        ? `/admin/students/${selectedStudent._id}`
+        : `/admin/students`;
+      const method = selectedStudent ? 'PUT' : 'POST';
+
+      const payload = { ...studentForm };
+      if (selectedStudent) {
+        delete payload.temporaryPassword;
+      }
+
+      const data = await apiFetch(url, {
+        method,
+        body: JSON.stringify(payload)
+      });
+
+      if (data.success) {
+        if (!selectedStudent) {
+          setCreatedCredentials({
+            role: 'student',
+            name: data.student.fullName,
+            email: data.student.email,
+            password: data.temporaryPassword
+          });
+          showToastMsg('Student profile created successfully!');
+        } else {
+          showToastMsg('Student details updated successfully!');
+        }
+        setShowStudentAddEditModal(false);
+        fetchStudents();
+        fetchStats();
+      } else {
+        showToastMsg(data.message || 'Error occurred saving details.', 'error');
+      }
+    } catch (err) {
+      showToastMsg('Server connection failed.', 'error');
+    }
   };
 
   const handleWardenFormSubmit = async (e) => {
     e.preventDefault();
-    setToast(null);
+    setWardenErrors({});
 
     if (!wardenForm.fullName || !wardenForm.employeeId || !wardenForm.email || !wardenForm.phoneNumber || !wardenForm.gender) {
+      const errs = {};
+      if (!wardenForm.fullName) errs.fullName = 'Full Name is required';
+      if (!wardenForm.employeeId) errs.employeeId = 'Employee ID is required';
+      if (!wardenForm.email) errs.email = 'Email address is required';
+      if (!wardenForm.phoneNumber) errs.phoneNumber = 'Phone Number is required';
+      if (!wardenForm.gender) errs.gender = 'Gender is required';
+      setWardenErrors(errs);
       showToastMsg('All mandatory fields are required.', 'error');
       return;
     }
@@ -420,20 +485,16 @@ export default function AdminDashboard({ user, onLogout }) {
 
     try {
       const url = selectedWarden
-        ? `http://localhost:5000/api/admin/wardens/${selectedWarden._id}`
-        : `http://localhost:5000/api/admin/wardens`;
+        ? `/admin/wardens/${selectedWarden._id}`
+        : `/admin/wardens`;
       const method = selectedWarden ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const data = await apiFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
+
+      if (data.success) {
         if (!selectedWarden) {
           setCreatedCredentials({
             role: 'warden',
@@ -441,64 +502,85 @@ export default function AdminDashboard({ user, onLogout }) {
             email: data.warden.email,
             password: data.temporaryPassword
           });
+          showToastMsg('Warden profile created successfully!');
         } else {
-          showToastMsg('Warden updated successfully!');
+          showToastMsg('Warden details updated successfully!');
         }
         setShowWardenAddEditModal(false);
         fetchWardens();
+        fetchStats();
       } else {
-        showToastMsg(data.message || 'Validation error saving warden details.', 'error');
+        showToastMsg(data.message || 'Validation error saving warden.', 'error');
       }
     } catch (err) {
       showToastMsg('Server connection failed.', 'error');
+    }
+  };
+
+  const toggleStudentStatus = async (student) => {
+    try {
+      const newStatus = student.isActive ? 'Inactive' : 'Active';
+      const data = await apiFetch(`/admin/students/${student._id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (data.success) {
+        showToastMsg(`Student status toggled to ${newStatus}.`);
+        fetchStudents();
+      }
+    } catch (err) {
+      showToastMsg('Failed to toggle status.', 'error');
     }
   };
 
   const toggleWardenStatus = async (warden) => {
     try {
       const newStatus = warden.isActive ? 'Inactive' : 'Active';
-      const response = await fetch(`http://localhost:5000/api/admin/wardens/${warden._id}`, {
+      const data = await apiFetch(`/admin/wardens/${warden._id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ status: newStatus })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToastMsg(`Warden account status updated to ${newStatus}.`);
+      if (data.success) {
+        showToastMsg(`Warden status toggled to ${newStatus}.`);
         fetchWardens();
-      } else {
-        showToastMsg(data.message || 'Failed to update status', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      showToastMsg('Failed to toggle status.', 'error');
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!studentToDelete) return;
+    try {
+      const data = await apiFetch(`/admin/students/${studentToDelete._id}`, { method: 'DELETE' });
+      if (data.success) {
+        showToastMsg('Student profile permanently deleted.');
+        setShowStudentDeleteModal(false);
+        setStudentToDelete(null);
+        fetchStudents();
+        fetchStats();
+      }
+    } catch (err) {
+      showToastMsg('Deletion failed.', 'error');
     }
   };
 
   const handleDeleteWarden = async () => {
     if (!wardenToDelete) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/wardens/${wardenToDelete._id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        showToastMsg('Warden account deleted successfully!');
+      const data = await apiFetch(`/admin/wardens/${wardenToDelete._id}`, { method: 'DELETE' });
+      if (data.success) {
+        showToastMsg('Warden profile permanently deleted.');
         setShowWardenDeleteModal(false);
         setWardenToDelete(null);
         fetchWardens();
-      } else {
-        showToastMsg(data.message || 'Unable to delete warden.', 'error');
+        fetchStats();
       }
     } catch (err) {
-      showToastMsg('Connection error.', 'error');
+      showToastMsg('Deletion failed.', 'error');
     }
   };
 
-  // ── Common Password Reset ──────────────────────────────────────────────────
   const openResetPasswordModal = (userObj, roleType) => {
     setResetUserId(userObj._id);
     setResetUserRole(roleType);
@@ -510,70 +592,288 @@ export default function AdminDashboard({ user, onLogout }) {
   const handleResetPasswordSubmit = async (e) => {
     e.preventDefault();
     if (!newTempPassword || newTempPassword.length < 6) {
-      showToastMsg('Password must be at least 6 characters long.', 'error');
+      showToastMsg('Password must be at least 6 characters.', 'error');
       return;
     }
-
     try {
-      const url = resetUserRole === 'student' 
-        ? `http://localhost:5000/api/admin/students/${resetUserId}/reset-password`
-        : `http://localhost:5000/api/admin/wardens/${resetUserId}/reset-password`;
+      const url = resetUserRole === 'student'
+        ? `/admin/students/${resetUserId}/reset-password`
+        : `/admin/wardens/${resetUserId}/reset-password`;
 
-      const response = await fetch(url, {
+      const data = await apiFetch(url, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
         body: JSON.stringify({ temporaryPassword: newTempPassword.trim() })
       });
-      const data = await response.json();
-      if (response.ok && data.success) {
+      if (data.success) {
         showToastMsg(`Password reset successfully for ${resetUserName}!`);
         setShowResetPasswordModal(false);
-      } else {
-        showToastMsg(data.message || 'Failed to reset password.', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      showToastMsg('Failed to reset password.', 'error');
+    }
+  };
+
+  // ── CRUD for Rooms / Hostels / Announcements ────────────────────────────
+  const handleRoomAddSubmit = async (e) => {
+    e.preventDefault();
+    if (!roomForm.roomNumber || !roomForm.blockName || !roomForm.floorNumber) {
+      showToastMsg('Please fill all room fields.', 'error');
+      return;
+    }
+    try {
+      const data = await apiFetch('/admin/rooms', {
+        method: 'POST',
+        body: JSON.stringify(roomForm)
+      });
+      if (data.success) {
+        showToastMsg('Room added successfully!');
+        setShowRoomAddModal(false);
+        fetchRooms();
+        fetchStats();
+      }
+    } catch (err) {
+      // Offline fallback
+      const newRoom = {
+        _id: 'r' + (rooms.length + 1),
+        roomNumber: roomForm.roomNumber,
+        blockName: roomForm.blockName,
+        floorNumber: roomForm.floorNumber,
+        capacity: Number(roomForm.capacity),
+        occupiedBeds: 0,
+        status: roomForm.status,
+        assignedStudents: []
+      };
+      setRooms([...rooms, newRoom]);
+      // Also add to report database
+      setOccupancyData([...occupancyData, {
+        hostelName: 'Boys Hostel', block: roomForm.blockName, floor: roomForm.floorNumber, roomNumber: roomForm.roomNumber,
+        capacity: Number(roomForm.capacity), occupiedBeds: 0, availableBeds: Number(roomForm.capacity), status: roomForm.status,
+        warden: 'Thayaneshwaran s', gender: 'Male', dept: 'N/A', year: 'N/A'
+      }]);
+      showToastMsg('Room added (Local Session Saved).');
+      setShowRoomAddModal(false);
+    }
+  };
+
+  const handleHostelAddSubmit = (e) => {
+    e.preventDefault();
+    if (!hostelForm.name || !hostelForm.warden) {
+      showToastMsg('Please fill all hostel fields.', 'error');
+      return;
+    }
+    const newHostel = {
+      _id: 'h' + (hostels.length + 1),
+      name: hostelForm.name,
+      blockCount: Number(hostelForm.blockCount),
+      floorCount: Number(hostelForm.floorCount),
+      roomCount: 12,
+      capacity: Number(hostelForm.capacity),
+      occupiedBeds: 0,
+      availableBeds: Number(hostelForm.capacity),
+      status: 'Active',
+      warden: hostelForm.warden
+    };
+    setHostels([...hostels, newHostel]);
+    showToastMsg('Hostel registered successfully!');
+    setShowHostelAddModal(false);
+  };
+
+  const handleAnnSaveSubmit = async (e) => {
+    e.preventDefault();
+    if (!annForm.title || !annForm.description) {
+      showToastMsg('Please fill all announcement fields.', 'error');
+      return;
+    }
+    try {
+      const url = selectedAnn ? `/admin/announcements/${selectedAnn._id}` : '/admin/announcements';
+      const method = selectedAnn ? 'PUT' : 'POST';
+      const data = await apiFetch(url, {
+        method,
+        body: JSON.stringify(annForm)
+      });
+      if (data.success) {
+        showToastMsg(selectedAnn ? 'Announcement updated.' : 'Announcement posted successfully!');
+        setShowAnnAddEditModal(false);
+        fetchAnnouncements();
+      }
+    } catch (err) {
+      // Offline fallback
+      if (selectedAnn) {
+        setAnnouncements(announcements.map(a => a._id === selectedAnn._id ? { ...a, ...annForm } : a));
+        showToastMsg('Announcement updated.');
+      } else {
+        const newAnn = {
+          _id: 'a' + (announcements.length + 1),
+          title: annForm.title,
+          description: annForm.description,
+          priority: annForm.priority,
+          visibleTo: annForm.visibleTo,
+          pinned: annForm.pinned,
+          createdAt: new Date().toISOString().split('T')[0]
+        };
+        setAnnouncements([newAnn, ...announcements]);
+        showToastMsg('Announcement posted.');
+      }
+      setShowAnnAddEditModal(false);
+    }
+  };
+
+  const deleteAnnouncement = (id) => {
+    setAnnouncements(announcements.filter(a => a._id !== id));
+    showToastMsg('Announcement deleted.');
+  };
+
+  const toggleAnnPin = (ann) => {
+    setAnnouncements(announcements.map(a => a._id === ann._id ? { ...a, pinned: !a.pinned } : a));
+    showToastMsg(ann.pinned ? 'Announcement unpinned.' : 'Announcement pinned to top.');
+  };
+
+  // ── Interactive Actions for Leave, Complaint, and Visitor Requests ──────
+  const handleLeaveApproval = (id, status) => {
+    setLeaves(leaves.map(l => l._id === id ? { ...l, status } : l));
+    showToastMsg(`Leave request marked as ${status}.`);
+  };
+
+  const handleComplaintStatus = (id, status) => {
+    setComplaints(complaints.map(c => c._id === id ? { ...c, status } : c));
+    showToastMsg(`Complaint status updated to ${status}.`);
+  };
+
+  const handleVisitorApproval = (id, status) => {
+    setVisitors(visitors.map(v => v._id === id ? { ...v, status } : v));
+    showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
+  };
+
+  // ── Helper: Printing & Export Reports ────────────────────────────────────
+  const triggerPrint = () => {
+    window.print();
+  };
+
+  const mockExport = (format) => {
+    showToastMsg(`Generating ${format} file...`);
+    setTimeout(() => {
+      showToastMsg(`Download completed for Occupancy_Report.${format === 'Excel' ? 'xlsx' : 'pdf'}`);
+    }, 1500);
+  };
+
+  // ── Sort & Filter logic for Occupancy Reports ────────────────────────────
+  const filteredOccupancy = occupancyData.filter(item => {
+    const searchMatch = reportSearch ? (
+      item.roomNumber.includes(reportSearch) ||
+      item.warden.toLowerCase().includes(reportSearch.toLowerCase())
+    ) : true;
+    const hostelMatch = reportHostel ? item.hostelName === reportHostel : true;
+    const blockMatch = reportBlock ? item.block === reportBlock : true;
+    const floorMatch = reportFloor ? item.floor === reportFloor : true;
+    const deptMatch = reportDept ? item.dept === reportDept : true;
+    const yearMatch = reportYear ? item.year === reportYear : true;
+    const genderMatch = reportGender ? item.gender === reportGender : true;
+    const statusMatch = reportStatus ? item.status === reportStatus : true;
+
+    return searchMatch && hostelMatch && blockMatch && floorMatch && deptMatch && yearMatch && genderMatch && statusMatch;
+  });
+
+  const sortedOccupancy = [...filteredOccupancy].sort((a, b) => {
+    let valA = a[sortField];
+    let valB = b[sortField];
+
+    if (typeof valA === 'string') {
+      return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+    }
+    return sortOrder === 'asc' ? (valA - valB) : (valB - valA);
+  });
+
+  const paginatedOccupancy = sortedOccupancy.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const totalPages = Math.ceil(sortedOccupancy.length / itemsPerPage);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
     }
   };
 
   return (
     <div className="flex w-full min-h-screen bg-gray-50 font-sans text-gray-800">
       
-      {/* Toast Messages */}
+      {/* Toast Messages Overlay */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center space-x-3 px-5 py-4 rounded-2xl shadow-2xl transition-all duration-300 ${
-          toast.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
-        }`}>
-          <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} text-lg`} />
-          <span className="text-base font-medium">{toast.message}</span>
-        </div>
+        <>
+          <style>{`
+            @keyframes toastFadeIn {
+              from { opacity: 0; transform: translate3d(20px, -20px, 0) scale(0.95); }
+              to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+            }
+            .animate-toast-in {
+              animation: toastFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+          `}</style>
+          <div className={`fixed top-6 right-6 z-[9999] flex items-center justify-between space-x-3 px-5 py-4 rounded-2xl shadow-2xl animate-toast-in transition-all duration-300 max-w-sm md:max-w-md ${
+            toast.type === 'success' ? 'bg-emerald-500 text-white' : toast.type === 'error' ? 'bg-rose-500 text-white' : 'bg-blue-500 text-white'
+          }`}>
+            <div className="flex items-center space-x-3">
+              <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'} text-lg`} />
+              <span className="text-sm md:text-base font-medium">{toast.message}</span>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setToast(null)} 
+              className="ml-3 hover:opacity-85 transition-opacity p-1 text-white/95 hover:text-white focus:outline-none"
+              title="Close Notification"
+            >
+              <i className="fas fa-times text-sm" />
+            </button>
+          </div>
+        </>
       )}
 
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar">
+      {/* ── SIDEBAR Collapsible Navigation ──────────────────────────────────── */}
+      <aside 
+        className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${
+          isSidebarExpanded ? 'w-64' : 'w-20'
+        } ${isMobileDrawerOpen ? 'translate-x-0 fixed z-40' : 'fixed lg:relative -translate-x-full lg:translate-x-0'}`}
+      >
         <div className="space-y-6">
           {/* Logo brand */}
-          <div className="flex items-center space-x-3 pb-6 border-b border-gray-100">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-outfit font-extrabold text-xl shadow-md">
-              H
+          <div className={`flex items-center pb-6 border-b border-gray-100 ${isSidebarExpanded ? 'justify-between' : 'justify-center'}`}>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-outfit font-extrabold text-xl shadow-md shrink-0">
+                H
+              </div>
+              {isSidebarExpanded && (
+                <span className="text-lg font-bold font-outfit text-gray-900 tracking-tight">
+                  Hostel<span className="text-accent text-amber-500 font-extrabold">Hub</span>
+                </span>
+              )}
             </div>
-            <span className="text-lg font-bold font-outfit text-gray-900 tracking-tight">
-              Hostel<span className="text-accent text-amber-500 font-extrabold">Hub</span>
-            </span>
+            {isSidebarExpanded && (
+              <button 
+                onClick={() => setIsSidebarExpanded(false)}
+                className="hidden lg:flex w-7 h-7 bg-gray-50 border border-gray-150 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                title="Collapse Sidebar"
+              >
+                <i className="fas fa-angle-left text-sm" />
+              </button>
+            )}
           </div>
 
           {/* User badge */}
-          <div className="bg-gray-50 rounded-xl p-4 flex items-center space-x-3 border border-gray-100 text-left">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+          <div className={`bg-gray-50 rounded-xl p-3 flex items-center border border-gray-100 ${isSidebarExpanded ? 'space-x-3 text-left' : 'justify-center'}`}>
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
               {initials}
             </div>
-            <div className="truncate text-left">
-              <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
-              <p className="text-[10px] text-gray-400 font-medium tracking-wide">{role}</p>
-            </div>
+            {isSidebarExpanded && (
+              <div className="truncate">
+                <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
+                <p className="text-[10px] text-gray-400 font-medium tracking-wide">{role}</p>
+              </div>
+            )}
           </div>
 
           {/* Nav Items */}
@@ -584,182 +884,341 @@ export default function AdminDashboard({ user, onLogout }) {
                 <button
                   key={idx}
                   onClick={() => {
-                    if (item.tab.endsWith('_mock')) {
-                      showToastMsg(`${item.label} module is active and managed automatically inside database schema.`, 'info');
-                    } else {
-                      setActiveTab(item.tab);
-                    }
+                    setActiveTab(item.tab);
+                    setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none text-left ${
+                  className={`w-full flex items-center rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none ${
+                    isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
+                  } ${
                     isSelected
                       ? 'bg-primary text-white shadow-sm'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
+                  title={item.label}
                 >
                   <i className={`fas ${item.icon} w-5 text-center ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
-                  <span>{item.label}</span>
+                  {isSidebarExpanded && <span>{item.label}</span>}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        {/* Sign Out Section */}
+        {/* Sign Out Button */}
         <div className="pt-6 border-t border-gray-100">
           <button
             onClick={onLogout}
-            className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none"
+            className={`w-full flex items-center rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none ${
+              isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
+            }`}
+            title="Sign Out"
           >
             <i className="fas fa-sign-out-alt w-5 text-center" />
-            <span>Sign Out</span>
+            {isSidebarExpanded && <span>Sign Out</span>}
           </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT PANE */}
-      <main className="flex-1 p-8 overflow-y-auto h-screen custom-scrollbar flex flex-col justify-start">
+      {/* Mobile Drawer Overlay */}
+      {isMobileDrawerOpen && (
+        <div 
+          onClick={() => setIsMobileDrawerOpen(false)}
+          className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
+
+      {/* ── MAIN CONTENT PANE ────────────────────────────────────────────────── */}
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto h-screen custom-scrollbar flex flex-col justify-start">
         
-        {/* Header welcome */}
-        <header className="flex justify-between items-center pb-6 border-b border-gray-200 mb-8">
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 font-outfit">
-            {activeTab === 'dashboard' && 'Administrative Command Analytics Center'}
-            {activeTab === 'students' && 'Student Accounts Master Portal'}
-            {activeTab === 'wardens' && 'Warden Management Console'}
-          </h1>
-          <div className="flex items-center space-x-3 text-xs">
-            <span className="bg-gray-200/80 px-3 py-1.5 rounded-full font-bold text-gray-600 tracking-wide">
-              {initials}
-            </span>
-            <span className="font-semibold text-gray-600">{name}</span>
+        {/* Top Navbar Header */}
+        <header className="flex justify-between items-center pb-5 border-b border-gray-200 mb-8 select-none">
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setIsMobileDrawerOpen(true)}
+              className="lg:hidden w-10 h-10 border border-gray-200 bg-white hover:bg-gray-55 rounded-xl flex items-center justify-center text-gray-500 focus:outline-none"
+            >
+              <i className="fas fa-bars text-lg" />
+            </button>
+            {!isSidebarExpanded && (
+              <button 
+                onClick={() => setIsSidebarExpanded(true)}
+                className="hidden lg:flex w-8 h-8 bg-white border border-gray-250 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50"
+                title="Expand Sidebar"
+              >
+                <i className="fas fa-angle-right text-base" />
+              </button>
+            )}
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-gray-900 font-outfit uppercase">
+              {activeTab === 'dashboard' && 'Command Analytics Center'}
+              {activeTab === 'students' && 'Student Accounts Master Portal'}
+              {activeTab === 'wardens' && 'Warden Management Console'}
+              {activeTab === 'rooms' && 'Room Assets Management'}
+              {activeTab === 'hostels' && 'Hostel Assets Management'}
+              {activeTab === 'leaves' && 'Student Leave Approvals'}
+              {activeTab === 'complaints' && 'Student Complaints Hub'}
+              {activeTab === 'visitors' && 'Visitor Security Logs'}
+              {activeTab === 'announcements' && 'Broadcast Information System'}
+              {activeTab === 'occupancy_reports' && 'Occupancy Intelligence Center'}
+              {activeTab === 'settings' && 'System Parameters Settings'}
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-4 text-xs font-semibold text-gray-600">
+            {/* Notifications Button */}
+            <div className="relative" ref={notifDropdownRef}>
+              <button 
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-50 shadow-sm relative focus:outline-none"
+              >
+                <i className="fas fa-bell text-base" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
+                )}
+              </button>
+
+              {isNotifOpen && (
+                <div className="absolute right-0 mt-3 bg-white border border-gray-150 rounded-2xl shadow-xl w-72 py-3 z-50 text-left">
+                  <div className="px-4 pb-2 border-b border-gray-100 flex justify-between items-center">
+                    <span className="font-bold text-gray-800">Notifications</span>
+                    <button 
+                      onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="divide-y divide-gray-50 max-h-60 overflow-y-auto custom-scrollbar">
+                    {notifications.length === 0 ? (
+                      <p className="p-4 text-xs text-gray-400 text-center">No new notifications.</p>
+                    ) : (
+                      notifications.map(notif => (
+                        <div key={notif._id} className={`p-3 hover:bg-gray-50 text-left text-xs ${!notif.read ? 'bg-primary-light/5' : ''}`}>
+                          <p className="font-bold text-gray-800">{notif.title}</p>
+                          <p className="text-gray-500 mt-0.5">{notif.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Dropdown */}
+            <div className="relative" ref={profileDropdownRef}>
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center space-x-2.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm focus:outline-none"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                  {initials}
+                </div>
+                <span className="hidden md:inline font-bold text-gray-700">{name}</span>
+                <i className="fas fa-angle-down text-gray-400" />
+              </button>
+
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-3 bg-white border border-gray-150 rounded-2xl shadow-xl w-48 py-2 z-50 text-left font-sans text-xs">
+                  <div className="px-4 py-2 border-b border-gray-100 text-left">
+                    <p className="font-bold text-gray-800">{name}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{user?.email || 'admin@hostelhub.com'}</p>
+                  </div>
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setIsProfileOpen(false); }}
+                    className="w-full text-left px-4 py-2 hover:bg-gray-55 text-gray-700 flex items-center space-x-2"
+                  >
+                    <i className="fas fa-cog text-gray-400 w-4" />
+                    <span>Settings</span>
+                  </button>
+                  <button 
+                    onClick={onLogout}
+                    className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 flex items-center space-x-2 border-t border-gray-50"
+                  >
+                    <i className="fas fa-sign-out-alt text-rose-400 w-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* ── PANEL: DASHBOARD ──────────────────────────────────────────────── */}
+        {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
+        
+        {/* ── TAB: DASHBOARD OVERVIEW ────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
-          <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8 w-full">
+          <div className="space-y-8 animate-fadeIn text-left">
+            
+            {/* Welcome banner card */}
+            <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <h2 className="text-2xl md:text-3xl font-extrabold font-outfit">Welcome Back, {name}</h2>
+                <p className="text-white/80 text-sm mt-1.5 font-sans">
+                  Here is the operational overview for the hostel campus today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
+                </p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl px-4 py-3 border border-white/20 text-center md:text-right shrink-0">
+                <span className="text-[10px] uppercase font-bold tracking-wider block text-amber-300">Operational Status</span>
+                <span className="text-base font-extrabold">All Services Running</span>
+              </div>
+            </div>
+
+            {/* Expanded Stats Grid (10 Summary Cards) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
               {stats.map((stat, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between items-start text-left cursor-pointer"
+                  className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between items-start cursor-pointer hover:-translate-y-0.5"
                 >
-                  <div className={`w-9 h-9 rounded-xl ${stat.colorBg} flex items-center justify-center text-base mb-4 shadow-sm`}>
+                  <div className={`w-9 h-9 rounded-xl ${stat.colorBg} flex items-center justify-center text-sm mb-4 shadow-inner`}>
                     <i className={`fas ${stat.icon}`} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-extrabold tracking-tight text-gray-900 mb-0.5">{stat.value}</h3>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{stat.label}</p>
-                    {stat.sub && (
-                      <p className="text-[9px] text-gray-400 font-semibold mt-0.5">{stat.sub}</p>
-                    )}
+                    <h3 className="text-2xl font-black text-gray-900 mb-0.5">{stat.value}</h3>
+                    <p className="text-[9px] font-extrabold text-gray-500 uppercase tracking-widest leading-none">{stat.label}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 w-full">
-              
-              {/* Circular Room Occupancy Chart */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-left flex flex-col justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">
-                  Room Occupancy
-                </h3>
-                <div className="flex items-center justify-center space-x-12 h-52">
-                  <div className="relative w-36 h-36">
-                    <svg viewBox="0 0 100 100" className="-rotate-90 w-full h-full">
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="#e2e8f0" strokeWidth="12" />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="none"
-                        stroke="#1a237e"
-                        strokeWidth="12"
-                        strokeDasharray={`${75 * 2.51} ${25 * 2.51}`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                      <span className="text-2xl font-black text-gray-800 block">75%</span>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Occupied</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <span className="text-xs font-semibold flex items-center space-x-2">
-                      <span className="inline-block w-3 h-3 rounded-full bg-primary" />
-                      <span>Occupied Beds</span>
-                    </span>
-                    <span className="text-xs font-semibold flex items-center space-x-2">
-                      <span className="inline-block w-3 h-3 rounded-full bg-gray-200" />
-                      <span>Vacant Beds</span>
-                    </span>
-                  </div>
-                </div>
+            {/* Quick Actions Row */}
+            <div className="bg-white border border-gray-100 p-6 rounded-3xl shadow-sm text-left">
+              <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-3 mb-5">
+                Dashboard Quick Actions
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <button 
+                  onClick={openStudentAddModal}
+                  className="bg-primary/5 hover:bg-primary/10 border border-primary/20 text-primary px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
+                >
+                  <i className="fas fa-user-plus text-sm" />
+                  <span>Add Student</span>
+                </button>
+                <button 
+                  onClick={openWardenAddModal}
+                  className="bg-amber-50 hover:bg-amber-100 border border-amber-200/50 text-amber-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
+                >
+                  <i className="fas fa-user-tie text-sm" />
+                  <span>Add Warden</span>
+                </button>
+                <button 
+                  onClick={() => setShowRoomAddModal(true)}
+                  className="bg-rose-50 hover:bg-rose-100 border border-rose-200/50 text-rose-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
+                >
+                  <i className="fas fa-door-closed text-sm" />
+                  <span>Add Room</span>
+                </button>
+                <button 
+                  onClick={() => setShowHostelAddModal(true)}
+                  className="bg-purple-50 hover:bg-purple-100 border border-purple-200/50 text-purple-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2"
+                >
+                  <i className="fas fa-building text-sm" />
+                  <span>Add Hostel</span>
+                </button>
+                <button 
+                  onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
+                  className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50 text-emerald-800 px-4 py-3.5 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-2 col-span-2 md:col-span-1"
+                >
+                  <i className="fas fa-bullhorn text-sm" />
+                  <span>Post Notice</span>
+                </button>
               </div>
+            </div>
 
-              {/* Bar Fee Collection Chart */}
-              <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-left flex flex-col justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">
-                  Fee Collection
-                </h3>
-                <div className="flex items-end justify-between h-44 px-4">
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((month, idx) => (
-                    <div key={idx} className="flex-1 flex flex-col items-center space-y-2 group">
-                      <div
-                        style={{ height: `${40 + idx * 20}px` }}
-                        className="w-8/12 bg-primary hover:bg-primary-light rounded-t-md transition-all duration-200 cursor-pointer"
-                      />
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{month}</span>
+            {/* Dashboard Lists Row (Recent Registrations / Leaves / Complaints) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+              
+              {/* Recent Student & Warden Registrations */}
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between h-96">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                    Recent Enlistments
+                  </h3>
+                  <button onClick={() => setActiveTab('students')} className="text-xs font-bold text-primary hover:underline">View All</button>
+                </div>
+                <div className="flex-1 divide-y divide-gray-55 overflow-y-auto pr-1 custom-scrollbar">
+                  {students.slice(0, 3).map(student => (
+                    <div key={student._id} className="py-3 flex items-center justify-between">
+                      <div className="flex items-center space-x-3 text-left">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          {student.fullName[0]}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-gray-900 truncate">{student.fullName}</p>
+                          <p className="text-[10px] text-gray-405 font-semibold">{student.registerNumber} · {student.department}</p>
+                        </div>
+                      </div>
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Student</span>
+                    </div>
+                  ))}
+                  {wardens.slice(0, 2).map(warden => (
+                    <div key={warden._id} className="py-3 flex items-center justify-between">
+                      <div className="flex items-center space-x-3 text-left">
+                        <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          {warden.fullName[0]}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-gray-900 truncate">{warden.fullName}</p>
+                          <p className="text-[10px] text-gray-405 font-semibold">{warden.employeeId} · {warden.assignedHostel || 'No Hostel'}</p>
+                        </div>
+                      </div>
+                      <span className="text-[9px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Warden</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-center text-xs font-bold text-gray-600 tracking-wide mt-6 border-t border-gray-50 pt-4">
-                  Total: ₹45,00,000
-                </p>
               </div>
 
-            </div>
-
-            {/* Recent Activity Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-left">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">
-                  Recent Activities
-                </h3>
-                <span className="text-xs font-semibold text-gray-400">System Logs</span>
-              </div>
-
-              <div className="divide-y divide-gray-100">
-                {activities.map((activity, idx) => (
-                  <div key={idx} className="flex justify-between items-center py-4 first:pt-0 last:pb-0">
-                    <div className="truncate text-left pr-4">
-                      <p className="text-xs font-bold text-gray-900 truncate mb-0.5">{activity.title}</p>
-                      <p className="text-[10px] text-gray-400 font-medium">{activity.time}</p>
-                    </div>
-                    <span className={`text-[10px] font-bold py-1 px-3 rounded-full capitalize select-none ${
-                      statusColors[activity.status] || 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {activity.status}
-                    </span>
+              {/* Recent Pending Leaves & Complaints */}
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between h-96">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                    Recent Requests & Complaints
+                  </h3>
+                  <div className="space-x-3">
+                    <button onClick={() => setActiveTab('leaves')} className="text-xs font-bold text-primary hover:underline">Leaves</button>
+                    <button onClick={() => setActiveTab('complaints')} className="text-xs font-bold text-primary hover:underline">Complaints</button>
                   </div>
-                ))}
+                </div>
+                <div className="flex-1 divide-y divide-gray-55 overflow-y-auto pr-1 custom-scrollbar">
+                  {leaves.slice(0, 2).map(l => (
+                    <div key={l._id} className="py-3 flex items-center justify-between">
+                      <div className="text-left max-w-[70%]">
+                        <p className="text-xs font-bold text-gray-800 truncate">Leave Request: {l.student?.fullName}</p>
+                        <p className="text-[10px] text-gray-450 truncate mt-0.5">{l.reason}</p>
+                      </div>
+                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                        l.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-700'
+                      }`}>{l.status}</span>
+                    </div>
+                  ))}
+                  {complaints.slice(0, 2).map(c => (
+                    <div key={c._id} className="py-3 flex items-center justify-between border-t border-gray-50">
+                      <div className="text-left max-w-[70%]">
+                        <p className="text-xs font-bold text-gray-800 truncate">Complaint: {c.title}</p>
+                        <p className="text-[10px] text-gray-450 truncate mt-0.5">{c.description}</p>
+                      </div>
+                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                        c.status === 'Pending' ? 'bg-red-50 text-red-600' : c.status === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                      }`}>{c.status}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
+
             </div>
-          </>
+
+          </div>
         )}
 
-        {/* ── PANEL: STUDENTS ───────────────────────────────────────────────── */}
+        {/* ── TAB: STUDENTS MANAGEMENT ────────────────────────────────────────── */}
         {activeTab === 'students' && (
-          <div className="flex flex-col space-y-6 w-full text-left">
-            
-            {/* Header + Add Button Row */}
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-500 font-medium">Create and manage Student profiles, activate/deactivate accounts, and assign rooms.</p>
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Create and manage Student profiles, activate/deactivate accounts, and assign rooms.</p>
+              </div>
               <button
                 onClick={openStudentAddModal}
-                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3 px-5 rounded-xl shadow-sm hover:shadow flex items-center space-x-2 transition-all"
+                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow-sm hover:shadow flex items-center space-x-2 transition-all shrink-0"
               >
                 <i className="fas fa-plus" />
                 <span>Add Student</span>
@@ -767,11 +1226,11 @@ export default function AdminDashboard({ user, onLogout }) {
             </div>
 
             {/* Search & Filter bar */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="md:col-span-2 relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm font-sans">
+              <div className="lg:col-span-2 relative">
                 <input
                   type="text"
-                  placeholder="Search by Name, Reg Number, or Email..."
+                  placeholder="Search Student..."
                   value={studentSearch}
                   onChange={(e) => setStudentSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
@@ -782,7 +1241,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <select
                   value={studentFilterBlock}
                   onChange={(e) => setStudentFilterBlock(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="">All Blocks</option>
                   <option value="Block A">Block A</option>
@@ -795,7 +1254,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <select
                   value={studentFilterGender}
                   onChange={(e) => setStudentFilterGender(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="">All Genders</option>
                   <option value="Male">Male</option>
@@ -806,7 +1265,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <select
                   value={studentFilterStatus}
                   onChange={(e) => setStudentFilterStatus(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="">All Statuses</option>
                   <option value="Active">Active Only</option>
@@ -816,13 +1275,14 @@ export default function AdminDashboard({ user, onLogout }) {
             </div>
 
             {/* Students Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
                     <th className="px-6 py-4 text-left">Student Info</th>
-                    <th className="px-6 py-4 text-left">Reg / Roll Number</th>
-                    <th className="px-6 py-4 text-left">Room Details</th>
+                    <th className="px-6 py-4 text-left">Register Number</th>
+                    <th className="px-6 py-4 text-left">Room / Bed</th>
+                    <th className="px-6 py-4 text-left">Parent Details</th>
                     <th className="px-6 py-4 text-left">Status</th>
                     <th className="px-6 py-4 text-center w-48">Actions</th>
                   </tr>
@@ -830,37 +1290,37 @@ export default function AdminDashboard({ user, onLogout }) {
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {students.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-12 text-center text-gray-400 font-medium">
-                        No students found.
+                      <td colSpan="6" className="px-6 py-12 text-center text-gray-400 font-medium">
+                        No students found matching filters.
                       </td>
                     </tr>
                   ) : (
                     students.map((student) => (
                       <tr key={student._id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-6 py-4 flex items-center space-x-3 text-left">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
-                            {(student.fullName || '').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                          <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                            {student.fullName[0].toUpperCase()}
                           </div>
                           <div>
                             <p className="font-bold text-gray-900">{student.fullName}</p>
-                            <p className="text-[10px] text-gray-400">{student.email}</p>
+                            <p className="text-[10px] text-gray-450">{student.email}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-left">
-                          <p className="font-bold text-gray-800">{student.registerNumber}</p>
-                          {student.rollNumber && (
-                            <p className="text-[10px] text-gray-400">Roll: {student.rollNumber}</p>
+                        <td className="px-6 py-4 text-left font-semibold text-gray-805">
+                          {student.registerNumber}
+                        </td>
+                        <td className="px-6 py-4 text-left font-bold text-gray-800">
+                          {student.roomNumber ? (
+                            <span>
+                              {student.hostelName ? `${student.hostelName} - ` : ''}{student.block} {student.roomNumber} ({student.bedNumber})
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs italic font-normal">Unallocated</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-left">
-                          {student.roomNumber ? (
-                            <>
-                              <p className="font-bold text-gray-800">{student.hostelName || 'Hostel'} – {student.roomNumber}</p>
-                              <p className="text-[10px] text-gray-400">{student.block}, Floor {student.floor}, Bed {student.bedNumber}</p>
-                            </>
-                          ) : (
-                            <span className="text-gray-400 text-xs italic">Not Allocated</span>
-                          )}
+                        <td className="px-6 py-4 text-left text-xs">
+                          <p className="font-semibold text-gray-700">{student.parentName || 'N/A'}</p>
+                          <p className="text-gray-400">{student.parentContact || 'N/A'}</p>
                         </td>
                         <td className="px-6 py-4 text-left">
                           <button
@@ -880,28 +1340,28 @@ export default function AdminDashboard({ user, onLogout }) {
                           <div className="flex items-center justify-center space-x-2">
                             <button
                               onClick={() => { setViewStudent(student); setShowStudentDetailsModal(true); }}
-                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-all border-none"
                               title="View Profile Details"
                             >
                               <i className="fas fa-eye text-xs" />
                             </button>
                             <button
                               onClick={() => openStudentEditModal(student)}
-                              className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-all border-none"
                               title="Edit Student Account"
                             >
                               <i className="fas fa-pencil-alt text-xs" />
                             </button>
                             <button
                               onClick={() => openResetPasswordModal(student, 'student')}
-                              className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-all border-none"
                               title="Reset Account Password"
                             >
                               <i className="fas fa-key text-xs" />
                             </button>
                             <button
                               onClick={() => { setStudentToDelete(student); setShowStudentDeleteModal(true); }}
-                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-all border-none"
                               title="Delete Account"
                             >
                               <i className="fas fa-trash-alt text-xs" />
@@ -914,20 +1374,19 @@ export default function AdminDashboard({ user, onLogout }) {
                 </tbody>
               </table>
             </div>
-
           </div>
         )}
 
-        {/* ── PANEL: WARDENS ────────────────────────────────────────────────── */}
+        {/* ── TAB: WARDENS MANAGEMENT ─────────────────────────────────────────── */}
         {activeTab === 'wardens' && (
-          <div className="flex flex-col space-y-6 w-full text-left">
-            
-            {/* Header + Add Button Row */}
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-500 font-medium">Create Warden records, manage active status, and assign management blocks.</p>
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Create Warden records, manage active status, and assign management blocks.</p>
+              </div>
               <button
                 onClick={openWardenAddModal}
-                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3 px-5 rounded-xl shadow-sm hover:shadow flex items-center space-x-2 transition-all"
+                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow-sm hover:shadow flex items-center space-x-2 transition-all shrink-0"
               >
                 <i className="fas fa-plus" />
                 <span>Add Warden</span>
@@ -939,7 +1398,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="md:col-span-2 relative">
                 <input
                   type="text"
-                  placeholder="Search Warden by Name, Employee ID, or Email..."
+                  placeholder="Search Warden..."
                   value={wardenSearch}
                   onChange={(e) => setWardenSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
@@ -950,7 +1409,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <select
                   value={wardenFilterHostel}
                   onChange={(e) => setWardenFilterHostel(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="">All Hostels</option>
                   <option value="Boys Hostel">Boys Hostel</option>
@@ -961,7 +1420,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <select
                   value={wardenFilterStatus}
                   onChange={(e) => setWardenFilterStatus(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
                 >
                   <option value="">All Statuses</option>
                   <option value="Active">Active Only</option>
@@ -971,7 +1430,7 @@ export default function AdminDashboard({ user, onLogout }) {
             </div>
 
             {/* Wardens Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
@@ -993,23 +1452,23 @@ export default function AdminDashboard({ user, onLogout }) {
                     wardens.map((warden) => (
                       <tr key={warden._id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-6 py-4 flex items-center space-x-3 text-left">
-                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                            {(warden.fullName || '').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                            {warden.fullName[0].toUpperCase()}
                           </div>
                           <div>
                             <p className="font-bold text-gray-900">{warden.fullName}</p>
                             <p className="text-[10px] text-gray-400">{warden.email}</p>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-left">
-                          <span className="font-bold text-gray-850">{warden.employeeId}</span>
+                        <td className="px-6 py-4 text-left font-bold text-gray-805">
+                          {warden.employeeId}
                         </td>
-                        <td className="px-6 py-4 text-left">
+                        <td className="px-6 py-4 text-left text-xs">
                           {warden.assignedHostel ? (
                             <>
-                              <p className="font-bold text-gray-800">{warden.assignedHostel}</p>
+                              <p className="font-bold text-gray-850">{warden.assignedHostel}</p>
                               {warden.assignedBlocks && warden.assignedBlocks.length > 0 && (
-                                <p className="text-[10px] text-gray-400">Blocks: {warden.assignedBlocks.join(', ')}</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Blocks: {warden.assignedBlocks.join(', ')}</p>
                               )}
                             </>
                           ) : (
@@ -1034,28 +1493,28 @@ export default function AdminDashboard({ user, onLogout }) {
                           <div className="flex items-center justify-center space-x-2">
                             <button
                               onClick={() => { setViewWarden(warden); setShowWardenDetailsModal(true); }}
-                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-all border-none"
                               title="View Profile Details"
                             >
                               <i className="fas fa-eye text-xs" />
                             </button>
                             <button
                               onClick={() => openWardenEditModal(warden)}
-                              className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-all border-none"
                               title="Edit Warden Account"
                             >
                               <i className="fas fa-pencil-alt text-xs" />
                             </button>
                             <button
                               onClick={() => openResetPasswordModal(warden, 'warden')}
-                              className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-all border-none"
                               title="Reset Account Password"
                             >
                               <i className="fas fa-key text-xs" />
                             </button>
                             <button
                               onClick={() => { setWardenToDelete(warden); setShowWardenDeleteModal(true); }}
-                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-all"
+                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition-all border-none"
                               title="Delete Account"
                             >
                               <i className="fas fa-trash-alt text-xs" />
@@ -1068,6 +1527,833 @@ export default function AdminDashboard({ user, onLogout }) {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ── TAB: ROOM MANAGEMENT ───────────────────────────────────────────── */}
+        {activeTab === 'rooms' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Configure room details, set capacity limits, and monitor bed allotment status.</p>
+              </div>
+              <button
+                onClick={() => setShowRoomAddModal(true)}
+                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
+              >
+                <i className="fas fa-plus" />
+                <span>Add New Room</span>
+              </button>
+            </div>
+
+            {/* Room Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="md:col-span-2 relative">
+                <input
+                  type="text"
+                  placeholder="Search by Room Number..."
+                  value={roomSearch}
+                  onChange={(e) => setRoomSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary"
+                />
+                <i className="fas fa-search absolute left-3.5 top-3.5 text-gray-400 text-sm" />
+              </div>
+              <div>
+                <select
+                  value={roomFilterBlock}
+                  onChange={(e) => setRoomFilterBlock(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
+                >
+                  <option value="">All Blocks</option>
+                  <option value="Block A">Block A</option>
+                  <option value="Block B">Block B</option>
+                  <option value="Block C">Block C</option>
+                  <option value="Block D">Block D</option>
+                </select>
+              </div>
+              <div>
+                <select
+                  value={roomFilterStatus}
+                  onChange={(e) => setRoomFilterStatus(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-primary bg-white"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Occupied">Occupied</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Rooms Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {rooms
+                .filter(r => r.roomNumber.includes(roomSearch) && (roomFilterBlock ? r.blockName === roomFilterBlock : true) && (roomFilterStatus ? r.status === roomFilterStatus : true))
+                .map(room => (
+                  <div key={room._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition duration-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-lg font-bold text-gray-900">{room.blockName} - Room {room.roomNumber}</span>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                        room.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : room.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
+                      }`}>{room.status}</span>
+                    </div>
+                    
+                    <div className="text-xs text-gray-500 space-y-1.5 pt-2">
+                      <div className="flex justify-between">
+                        <span>Floor Level:</span>
+                        <span className="font-bold text-gray-800">{room.floorNumber || '1'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Capacity:</span>
+                        <span className="font-bold text-gray-800">{room.capacity} Beds</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Allotted Beds:</span>
+                        <span className="font-bold text-gray-800">{room.occupiedBeds} Beds</span>
+                      </div>
+                    </div>
+                    
+                    {/* Capacity progress bar */}
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                      <div 
+                        style={{ width: `${(room.occupiedBeds / room.capacity) * 100}%` }}
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          room.occupiedBeds >= room.capacity ? 'bg-indigo-600' : 'bg-primary'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: HOSTEL MANAGEMENT ─────────────────────────────────────────── */}
+        {activeTab === 'hostels' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Manage campus Hostel structures, review administrative wardens, and adjust capacities.</p>
+              </div>
+              <button
+                onClick={() => setShowHostelAddModal(true)}
+                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
+              >
+                <i className="fas fa-plus" />
+                <span>Register Hostel</span>
+              </button>
+            </div>
+
+            {/* Hostel Cards List */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {hostels.map(hostel => (
+                <div key={hostel._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition-all duration-300 space-y-6">
+                  <div className="flex justify-between items-center pb-4 border-b border-gray-50">
+                    <div>
+                      <h3 className="text-lg font-extrabold text-gray-900 font-outfit">{hostel.name}</h3>
+                      <p className="text-[10px] text-emerald-600 font-extrabold uppercase mt-0.5 tracking-wider">Status: {hostel.status}</p>
+                    </div>
+                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                      <i className="fas fa-building text-lg" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="bg-gray-50/50 p-3 rounded-xl">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider block">Blocks Count</span>
+                      <span className="font-extrabold text-gray-800 text-sm">{hostel.blockCount} Blocks</span>
+                    </div>
+                    <div className="bg-gray-50/50 p-3 rounded-xl">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider block">Rooms Count</span>
+                      <span className="font-extrabold text-gray-800 text-sm">{hostel.roomCount} Rooms</span>
+                    </div>
+                    <div className="bg-gray-50/50 p-3 rounded-xl">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider block">Occupied Beds</span>
+                      <span className="font-extrabold text-gray-800 text-sm">{hostel.occupiedBeds} Beds</span>
+                    </div>
+                    <div className="bg-gray-50/50 p-3 rounded-xl">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider block">Available Beds</span>
+                      <span className="font-extrabold text-gray-800 text-sm">{hostel.availableBeds} Beds</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <span className="text-[10px] text-gray-450 uppercase font-bold tracking-wider block">Assigned Chief Warden</span>
+                    <p className="text-xs font-bold text-gray-805 mt-1 flex items-center space-x-1.5">
+                      <i className="fas fa-user-tie text-primary text-xs" />
+                      <span>{hostel.warden}</span>
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: LEAVE REQUESTS ────────────────────────────────────────────── */}
+        {activeTab === 'leaves' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Review and process student leave applications. Administrative actions are logged automatically.</p>
+            </div>
+
+            {/* Leaves List */}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {leaves.length === 0 ? (
+                  <p className="p-8 text-center text-gray-400 text-sm">No leave requests currently pending.</p>
+                ) : (
+                  leaves.map(leave => (
+                    <div key={leave._id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+                      <div className="space-y-2 text-left max-w-xl">
+                        <div className="flex items-center space-x-3">
+                          <span className="font-extrabold text-gray-900 text-base">{leave.student?.fullName}</span>
+                          <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{leave.leaveType}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-550">
+                          Period: <strong className="text-gray-800">{new Date(leave.fromDate).toLocaleDateString()}</strong> to <strong className="text-gray-800">{new Date(leave.toDate).toLocaleDateString()}</strong>
+                        </p>
+                        <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl italic">
+                          " {leave.reason} "
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3 shrink-0">
+                        {leave.status === 'Pending' ? (
+                          <>
+                            <button
+                              onClick={() => handleLeaveApproval(leave._id, 'Approved')}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleLeaveApproval(leave._id, 'Rejected')}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs px-4 py-2.5 rounded-xl transition"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span className={`text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider ${
+                            leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                          }`}>{leave.status}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: COMPLAINTS ────────────────────────────────────────────────── */}
+        {activeTab === 'complaints' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Track and update student complaints. Mark tickets to resolve operational and maintenance issues.</p>
+            </div>
+
+            {/* Complaints Feed */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {complaints.map(comp => (
+                <div key={comp._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition">
+                  <div className="flex justify-between items-start">
+                    <div className="text-left">
+                      <h4 className="font-extrabold text-gray-900 text-base">{comp.title}</h4>
+                      <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Category: {comp.category} · Room {comp.student?.roomNumber} ({comp.student?.block})</p>
+                    </div>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      comp.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                    }`}>{comp.priority} Priority</span>
+                  </div>
+
+                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{comp.description}</p>
+                  
+                  <div className="pt-2 border-t border-gray-50 flex justify-between items-center text-xs">
+                    <div className="flex items-center space-x-1">
+                      <span className="text-gray-400">Status:</span>
+                      <span className={`font-bold uppercase text-[10px] ${
+                        comp.status === 'Pending' ? 'text-red-500' : comp.status === 'In Progress' ? 'text-amber-500' : 'text-emerald-500'
+                      }`}>{comp.status}</span>
+                    </div>
+                    
+                    <div className="flex space-x-1">
+                      {comp.status !== 'Resolved' && (
+                        <>
+                          <button
+                            onClick={() => handleComplaintStatus(comp._id, 'In Progress')}
+                            className="bg-amber-55 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
+                          >
+                            Work
+                          </button>
+                          <button
+                            onClick={() => handleComplaintStatus(comp._id, 'Resolved')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
+                          >
+                            Resolve
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: VISITOR MANAGEMENT ────────────────────────────────────────── */}
+        {activeTab === 'visitors' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Verify guest entries and emergency visits. Review secure QR-coded pre-authorization requests.</p>
+            </div>
+
+            {/* Visitor Table */}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left">Visitor Name</th>
+                    <th className="px-6 py-4 text-left">Relationship</th>
+                    <th className="px-6 py-4 text-left">Host Student</th>
+                    <th className="px-6 py-4 text-left">Visit Date</th>
+                    <th className="px-6 py-4 text-left">Status</th>
+                    <th className="px-6 py-4 text-center w-36">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {visitors.map(visitor => (
+                    <tr key={visitor._id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 text-left font-bold text-gray-900">{visitor.visitorName}</td>
+                      <td className="px-6 py-4 text-left font-medium text-gray-600">{visitor.relationship}</td>
+                      <td className="px-6 py-4 text-left">
+                        <p className="font-semibold text-gray-800">{visitor.student?.fullName}</p>
+                        <p className="text-[10px] text-gray-400">Room {visitor.student?.roomNumber} ({visitor.student?.block})</p>
+                      </td>
+                      <td className="px-6 py-4 text-left font-bold text-gray-700">{visitor.visitDate} ({visitor.expectedArrivalTime})</td>
+                      <td className="px-6 py-4 text-left">
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                          visitor.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : visitor.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                        }`}>{visitor.status}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {visitor.status === 'Pending' ? (
+                          <div className="flex items-center justify-center space-x-1.5">
+                            <button
+                              onClick={() => handleVisitorApproval(visitor._id, 'Approved')}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1.5 rounded-lg text-[10px]"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleVisitorApproval(visitor._id, 'Rejected')}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-2 py-1.5 rounded-lg text-[10px]"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: ANNOUNCEMENTS ─────────────────────────────────────────────── */}
+        {activeTab === 'announcements' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Broadcast announcements to Students and Wardens. Pins critical alerts to the top.</p>
+              </div>
+              <button
+                onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
+                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
+              >
+                <i className="fas fa-plus" />
+                <span>Post Announcement</span>
+              </button>
+            </div>
+
+            {/* Announcement Feed */}
+            <div className="space-y-4">
+              {announcements.map(ann => (
+                <div key={ann._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition space-y-4 relative">
+                  {ann.pinned && (
+                    <span className="absolute top-6 right-6 text-amber-500 text-sm" title="Pinned to top">
+                      <i className="fas fa-thumbtack rotate-45" />
+                    </span>
+                  )}
+                  <div className="flex items-center space-x-3 text-left">
+                    <span className="text-base font-extrabold text-gray-900">{ann.title}</span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      ann.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
+                    }`}>{ann.priority} Priority</span>
+                  </div>
+                  
+                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{ann.description}</p>
+                  
+                  <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400 font-medium">
+                    <span>Target Audience: <strong className="text-gray-600 capitalize">{ann.visibleTo}</strong> · Posted on {ann.createdAt}</span>
+                    
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() => toggleAnnPin(ann)}
+                        className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center transition"
+                        title={ann.pinned ? 'Unpin' : 'Pin to top'}
+                      >
+                        <i className="fas fa-thumbtack text-xs" />
+                      </button>
+                      <button
+                        onClick={() => { setSelectedAnn(ann); setAnnForm({ title: ann.title, description: ann.description, priority: ann.priority, visibleTo: ann.visibleTo || 'all', pinned: ann.pinned }); setShowAnnAddEditModal(true); }}
+                        className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition"
+                        title="Edit Alert"
+                      >
+                        <i className="fas fa-pencil-alt text-xs" />
+                      </button>
+                      <button
+                        onClick={() => deleteAnnouncement(ann._id)}
+                        className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition"
+                        title="Delete Broadcast"
+                      >
+                        <i className="fas fa-trash-alt text-xs" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* ── TAB: OCCUPANCY REPORTS ─────────────────────────────────────────── */}
+        {activeTab === 'occupancy_reports' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            
+            {/* KPI Metrics Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Total Hostel Capacity</span>
+                <span className="text-2xl font-black text-gray-900 mt-1 block">384 Beds</span>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds (Allotted)</span>
+                <span className="text-2xl font-black text-primary mt-1 block">284 Beds</span>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds (Vacant)</span>
+                <span className="text-2xl font-black text-emerald-600 mt-1 block">100 Beds</span>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="text-2xl font-black text-amber-500">73.9%</span>
+                  <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
+                    <div className="bg-amber-500 h-full rounded-full" style={{ width: '73.9%' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Boys / Girls / Vacant Rooms Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Vacant Rooms</span>
+                <span className="text-xl font-extrabold text-gray-800 mt-1 block">12 Rooms</span>
+              </div>
+              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Fully Occupied Rooms</span>
+                <span className="text-xl font-extrabold text-gray-800 mt-1 block">48 Rooms</span>
+              </div>
+              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                <div>
+                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Boys Hostel Summary</span>
+                  <span className="text-sm font-black text-gray-800 block mt-1">144 / 192 Beds Allotted</span>
+                </div>
+                <div className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold">75%</div>
+              </div>
+              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                <div>
+                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Girls Hostel Summary</span>
+                  <span className="text-sm font-black text-gray-800 block mt-1">108 / 144 Beds Allotted</span>
+                </div>
+                <div className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded-lg font-bold">75%</div>
+              </div>
+            </div>
+
+            {/* Multi-Criteria Filters */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
+              <div className="flex justify-between items-center border-b border-gray-50 pb-3">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-widest">
+                  Intelligence Report Filter Criteria
+                </h3>
+                <button 
+                  onClick={() => {
+                    setReportHostel(''); setReportBlock(''); setReportFloor('');
+                    setReportDept(''); setReportYear(''); setReportGender('');
+                    setReportStatus(''); setReportSearch('');
+                  }}
+                  className="text-xs font-bold text-gray-450 hover:text-primary transition border-none bg-transparent"
+                >
+                  Clear Filters
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-sans">
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Select Hostel</label>
+                  <select 
+                    value={reportHostel} 
+                    onChange={e => setReportHostel(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Hostels</option>
+                    <option value="Boys Hostel">Boys Hostel</option>
+                    <option value="Girls Hostel">Girls Hostel</option>
+                    <option value="PG Hostel">PG Hostel</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Select Block</label>
+                  <select 
+                    value={reportBlock} 
+                    onChange={e => setReportBlock(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Blocks</option>
+                    <option value="Block A">Block A</option>
+                    <option value="Block B">Block B</option>
+                    <option value="Block C">Block C</option>
+                    <option value="Block D">Block D</option>
+                    <option value="Block E">Block E</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Select Floor</label>
+                  <select 
+                    value={reportFloor} 
+                    onChange={e => setReportFloor(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Floors</option>
+                    <option value="1">1st Floor</option>
+                    <option value="2">2nd Floor</option>
+                    <option value="3">3rd Floor</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Department</label>
+                  <select 
+                    value={reportDept} 
+                    onChange={e => setReportDept(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Departments</option>
+                    <option value="IT">IT</option>
+                    <option value="CSE">CSE</option>
+                    <option value="ECE">ECE</option>
+                    <option value="EEE">EEE</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Academic Year</label>
+                  <select 
+                    value={reportYear} 
+                    onChange={e => setReportYear(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Years</option>
+                    <option value="I">1st Year</option>
+                    <option value="II">2nd Year</option>
+                    <option value="III">3rd Year</option>
+                    <option value="IV">4th Year</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Gender</label>
+                  <select 
+                    value={reportGender} 
+                    onChange={e => setReportGender(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Genders</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Room Status</label>
+                  <select 
+                    value={reportStatus} 
+                    onChange={e => setReportStatus(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Available">Available</option>
+                    <option value="Occupied">Occupied</option>
+                    <option value="Maintenance">Maintenance</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-bold text-gray-600">Search</label>
+                  <input
+                    type="text"
+                    placeholder="Warden or Room No..."
+                    value={reportSearch}
+                    onChange={e => setReportSearch(e.target.value)}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Print & Export Bar */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm">
+              <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">{sortedOccupancy.length} Rooms Filtered</span>
+              <div className="flex items-center space-x-3 w-full sm:w-auto">
+                <button 
+                  onClick={triggerPrint}
+                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                >
+                  <i className="fas fa-print" />
+                  <span>Print Report</span>
+                </button>
+                <button 
+                  onClick={() => mockExport('PDF')}
+                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                >
+                  <i className="fas fa-file-pdf text-rose-500" />
+                  <span>Export PDF</span>
+                </button>
+                <button 
+                  onClick={() => mockExport('Excel')}
+                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                >
+                  <i className="fas fa-file-excel text-emerald-600" />
+                  <span>Export Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Occupancy Report Table */}
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider select-none">
+                    <th onClick={() => handleSort('hostelName')} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50">
+                      Hostel Name <i className={`fas fa-sort ml-1 ${sortField === 'hostelName' ? 'text-primary' : 'text-gray-300'}`} />
+                    </th>
+                    <th onClick={() => handleSort('block')} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50">
+                      Block <i className={`fas fa-sort ml-1 ${sortField === 'block' ? 'text-primary' : 'text-gray-300'}`} />
+                    </th>
+                    <th onClick={() => handleSort('floor')} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50">
+                      Floor <i className={`fas fa-sort ml-1 ${sortField === 'floor' ? 'text-primary' : 'text-gray-300'}`} />
+                    </th>
+                    <th onClick={() => handleSort('roomNumber')} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50">
+                      Room Number <i className={`fas fa-sort ml-1 ${sortField === 'roomNumber' ? 'text-primary' : 'text-gray-300'}`} />
+                    </th>
+                    <th className="px-6 py-4 text-center">Capacity</th>
+                    <th className="px-6 py-4 text-center">Occupied</th>
+                    <th className="px-6 py-4 text-center">Available</th>
+                    <th onClick={() => handleSort('status')} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50">
+                      Occupancy Status <i className={`fas fa-sort ml-1 ${sortField === 'status' ? 'text-primary' : 'text-gray-300'}`} />
+                    </th>
+                    <th className="px-6 py-4 text-left">Warden Assigned</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {paginatedOccupancy.length === 0 ? (
+                    <tr>
+                      <td colSpan="9" className="px-6 py-12 text-center text-gray-400 font-medium">
+                        No occupancy records matched the filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedOccupancy.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4 text-left font-bold text-gray-900">{row.hostelName}</td>
+                        <td className="px-6 py-4 text-left font-medium text-gray-650">{row.block}</td>
+                        <td className="px-6 py-4 text-left font-medium text-gray-650">{row.floor}</td>
+                        <td className="px-6 py-4 text-left font-bold text-gray-800">{row.roomNumber}</td>
+                        <td className="px-6 py-4 text-center font-semibold text-gray-600">{row.capacity}</td>
+                        <td className="px-6 py-4 text-center font-bold text-primary">{row.occupiedBeds}</td>
+                        <td className="px-6 py-4 text-center font-bold text-emerald-600">{row.availableBeds}</td>
+                        <td className="px-6 py-4 text-left">
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                            row.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
+                          }`}>{row.status}</span>
+                        </td>
+                        <td className="px-6 py-4 text-left font-semibold text-gray-700 flex items-center space-x-1.5 mt-2.5">
+                          <i className="fas fa-user-tie text-gray-400 text-xs" />
+                          <span>{row.warden}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center select-none pt-2">
+                <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Page {currentPage} of {totalPages}</span>
+                <div className="flex items-center space-x-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    className="w-9 h-9 border border-gray-250 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-55 disabled:opacity-40 disabled:pointer-events-none transition"
+                  >
+                    <i className="fas fa-angle-left" />
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    className="w-9 h-9 border border-gray-250 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-55 disabled:opacity-40 disabled:pointer-events-none transition"
+                  >
+                    <i className="fas fa-angle-right" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+
+
+        {/* ── TAB: SYSTEM SETTINGS ───────────────────────────────────────────── */}
+        {activeTab === 'settings' && (
+          <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
+            
+            {/* Setting Panels */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-sans">
+              
+              {/* Account Security */}
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
+                  Account Security settings
+                </h3>
+                <form onSubmit={submitPw} className="space-y-4">
+                  <div className="flex flex-col space-y-1.5 text-xs">
+                    <label className="font-bold text-gray-600">Current Administrator Password</label>
+                    <input 
+                      type="password" 
+                      value={oldPw} 
+                      onChange={e => setOldPw(e.target.value)}
+                      placeholder="Enter current password" 
+                      className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col space-y-1.5 text-xs">
+                    <label className="font-bold text-gray-600">New Password</label>
+                    <input 
+                      type="password" 
+                      value={newPw} 
+                      onChange={e => setNewPw(e.target.value)}
+                      placeholder="Min 6 characters" 
+                      className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col space-y-1.5 text-xs">
+                    <label className="font-bold text-gray-600">Confirm New Password</label>
+                    <input 
+                      type="password" 
+                      value={confirmPw} 
+                      onChange={e => setConfirmPw(e.target.value)}
+                      placeholder="Re-enter password" 
+                      className="px-4 py-3 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full bg-primary hover:bg-primary-light text-white font-bold text-xs py-3.5 rounded-xl shadow-md transition"
+                  >
+                    Change Password
+                  </button>
+                </form>
+              </div>
+
+              {/* System Configuration */}
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
+                  Campus System Configuration
+                </h3>
+                
+                <div className="space-y-4 text-xs">
+                  <div className="flex justify-between items-center py-2.5">
+                    <div>
+                      <span className="font-bold text-gray-800 block">Email Alerts Notifications</span>
+                      <span className="text-gray-400 font-medium">Broadcast admin system notices to email accounts.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={emailNotifs} 
+                      onChange={e => { setEmailNotifs(e.target.checked); showToastMsg('Email preferences updated.'); }}
+                      className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center py-2.5 border-t border-gray-50">
+                    <div>
+                      <span className="font-bold text-gray-800 block">SMS Gateway Broadcasts</span>
+                      <span className="text-gray-400 font-medium">Auto-dispatch entry logs & OTP pins via SMS.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={smsNotifs} 
+                      onChange={e => { setSmsNotifs(e.target.checked); showToastMsg('SMS preferences updated.'); }}
+                      className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center py-2.5 border-t border-gray-50">
+                    <div>
+                      <span className="font-bold text-gray-800 block text-rose-600">Maintenance & Offline Mode</span>
+                      <span className="text-gray-400 font-medium">Disables warden room assignments temporarily.</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={maintenanceMode} 
+                      onChange={e => { setMaintenanceMode(e.target.checked); showToastMsg(e.target.checked ? 'Campus maintenance mode activated.' : 'Campus maintenance mode disabled.'); }}
+                      className="w-9 h-5 bg-gray-200 checked:bg-rose-500 text-rose-500 border-gray-300 rounded-full cursor-pointer focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-50 flex flex-col space-y-2">
+                    <button 
+                      type="button" 
+                      onClick={() => { showToastMsg('Backing up MongoDB atlas cluster...'); setTimeout(() => showToastMsg('Backup package generated and saved successfully!'), 1500); }}
+                      className="w-full border border-primary hover:bg-primary/5 text-primary font-bold text-xs py-3 rounded-xl transition"
+                    >
+                      Backup Database
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
 
           </div>
         )}
@@ -1076,7 +2362,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: STUDENT ADD / EDIT ───────────────────────────────────────── */}
       {showStudentAddEditModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[90vh]">
             
             {/* Modal Header */}
@@ -1109,20 +2395,22 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="text"
                       value={studentForm.fullName}
-                      onChange={(e) => setStudentForm({ ...studentForm, fullName: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, fullName: e.target.value }); if (studentErrors.fullName) setStudentErrors(prev => ({ ...prev, fullName: undefined })); }}
                       placeholder="e.g. John Doe"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.fullName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.fullName && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.fullName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Register Number *</label>
                     <input
                       type="text"
                       value={studentForm.registerNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, registerNumber: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, registerNumber: e.target.value }); if (studentErrors.registerNumber) setStudentErrors(prev => ({ ...prev, registerNumber: undefined })); }}
                       placeholder="e.g. 311520104001"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.registerNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.registerNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.registerNumber}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Roll Number (Optional)</label>
@@ -1131,7 +2419,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.rollNumber}
                       onChange={(e) => setStudentForm({ ...studentForm, rollNumber: e.target.value })}
                       placeholder="e.g. 20IT402"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1139,66 +2427,65 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="email"
                       value={studentForm.email}
-                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, email: e.target.value }); if (studentErrors.email) setStudentErrors(prev => ({ ...prev, email: undefined })); }}
                       placeholder="john.doe@college.edu"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.email ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.email && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.email}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Phone Number *</label>
                     <input
                       type="text"
                       value={studentForm.phoneNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, phoneNumber: e.target.value })}
+                      onChange={(e) => { setStudentForm({ ...studentForm, phoneNumber: e.target.value }); if (studentErrors.phoneNumber) setStudentErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
                       placeholder="e.g. 9876543210"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {studentErrors.phoneNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.phoneNumber}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Gender *</label>
                     <select
                       value={studentForm.gender}
-                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      onChange={(e) => { setStudentForm({ ...studentForm, gender: e.target.value }); if (studentErrors.gender) setStudentErrors(prev => ({ ...prev, gender: undefined })); }}
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none bg-white ${studentErrors.gender ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     >
                       <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                     </select>
+                    {studentErrors.gender && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.gender}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Department *</label>
+                    <label className="text-xs font-bold text-gray-600">Department</label>
                     <input
                       type="text"
                       value={studentForm.department}
                       onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
-                      placeholder="e.g. Information Technology"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      placeholder="e.g. CSE / IT"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Year *</label>
-                    <select
+                    <label className="text-xs font-bold text-gray-600">Academic Year</label>
+                    <input
+                      type="text"
                       value={studentForm.year}
                       onChange={(e) => setStudentForm({ ...studentForm, year: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
-                    >
-                      <option value="">Select Year</option>
-                      <option value="I">I Year</option>
-                      <option value="II">II Year</option>
-                      <option value="III">III Year</option>
-                      <option value="IV">IV Year</option>
-                    </select>
+                      placeholder="e.g. II / III"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
+                    />
                   </div>
                   {!selectedStudent && (
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-bold text-gray-600">Temporary Password (optional)</label>
+                      <label className="text-xs font-bold text-gray-600">Temporary Password (Optional)</label>
                       <input
                         type="text"
                         value={studentForm.temporaryPassword}
                         onChange={(e) => setStudentForm({ ...studentForm, temporaryPassword: e.target.value })}
                         placeholder="Leave blank to auto-generate"
-                        className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-amber-50/30 focus:bg-white"
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary bg-amber-50/20"
                       />
                     </div>
                   )}
@@ -1218,7 +2505,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.parentName}
                       onChange={(e) => setStudentForm({ ...studentForm, parentName: e.target.value })}
                       placeholder="e.g. Richard Doe"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1228,7 +2515,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.parentContact}
                       onChange={(e) => setStudentForm({ ...studentForm, parentContact: e.target.value })}
                       placeholder="e.g. 9876501234"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1238,7 +2525,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.emergencyContact}
                       onChange={(e) => setStudentForm({ ...studentForm, emergencyContact: e.target.value })}
                       placeholder="e.g. 9876598765"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1249,7 +2536,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
                   Hostel & Room allocation
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Hostel Name</label>
                     <input
@@ -1257,7 +2544,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.hostelName}
                       onChange={(e) => setStudentForm({ ...studentForm, hostelName: e.target.value })}
                       placeholder="Boys / Girls Hostel"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1267,7 +2554,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.block}
                       onChange={(e) => setStudentForm({ ...studentForm, block: e.target.value })}
                       placeholder="A / B / C Block"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1277,7 +2564,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.floor}
                       onChange={(e) => setStudentForm({ ...studentForm, floor: e.target.value })}
                       placeholder="e.g. 1 / 2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1287,17 +2574,17 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.roomNumber}
                       onChange={(e) => setStudentForm({ ...studentForm, roomNumber: e.target.value })}
                       placeholder="e.g. 101"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
-                  <div className="flex flex-col space-y-1">
+                  <div className="flex flex-col space-y-1 col-span-2 md:col-span-1">
                     <label className="text-xs font-bold text-gray-600">Bed Number</label>
                     <input
                       type="text"
                       value={studentForm.bedNumber}
                       onChange={(e) => setStudentForm({ ...studentForm, bedNumber: e.target.value })}
                       placeholder="e.g. B1 / B2"
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1316,9 +2603,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       value="Active"
                       checked={studentForm.status === 'Active'}
                       onChange={() => setStudentForm({ ...studentForm, status: 'Active' })}
-                      className="w-4.5 h-4.5 text-primary"
+                      className="w-4.5 h-4.5 text-primary focus:ring-0"
                     />
-                    <span className="text-sm font-semibold text-gray-800">Active</span>
+                    <span className="text-xs font-bold text-gray-700">Active</span>
                   </label>
                   <label className="inline-flex items-center space-x-2.5 cursor-pointer">
                     <input
@@ -1327,9 +2614,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       value="Inactive"
                       checked={studentForm.status === 'Inactive'}
                       onChange={() => setStudentForm({ ...studentForm, status: 'Inactive' })}
-                      className="w-4.5 h-4.5 text-rose-600"
+                      className="w-4.5 h-4.5 text-rose-600 focus:ring-0"
                     />
-                    <span className="text-sm font-semibold text-gray-800">Inactive (Deactivated)</span>
+                    <span className="text-xs font-bold text-gray-700">Inactive</span>
                   </label>
                 </div>
               </div>
@@ -1339,27 +2626,26 @@ export default function AdminDashboard({ user, onLogout }) {
                 <button
                   type="button"
                   onClick={() => setShowStudentAddEditModal(false)}
-                  className="px-6 py-3 border border-gray-250 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                  className="px-6 py-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-55"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-primary hover:bg-primary-light text-white text-xs font-bold rounded-xl shadow-md transition"
+                  className="px-6 py-3 bg-primary hover:bg-primary-light text-white text-xs font-bold rounded-xl shadow-md"
                 >
-                  {selectedStudent ? 'Save Updates' : 'Enlist Student'}
+                  {selectedStudent ? 'Save Updates' : 'Enroll Student'}
                 </button>
               </div>
 
             </form>
-
           </div>
         </div>
       )}
 
       {/* ── MODAL: WARDEN ADD / EDIT ────────────────────────────────────────── */}
       {showWardenAddEditModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[90vh]">
             
             {/* Modal Header */}
@@ -1392,62 +2678,67 @@ export default function AdminDashboard({ user, onLogout }) {
                     <input
                       type="text"
                       value={wardenForm.fullName}
-                      onChange={(e) => setWardenForm({ ...wardenForm, fullName: e.target.value })}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, fullName: e.target.value }); if (wardenErrors.fullName) setWardenErrors(prev => ({ ...prev, fullName: undefined })); }}
                       placeholder="e.g. Robert Smith"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${wardenErrors.fullName ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.fullName && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{wardenErrors.fullName}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Employee ID *</label>
                     <input
                       type="text"
                       value={wardenForm.employeeId}
-                      onChange={(e) => setWardenForm({ ...wardenForm, employeeId: e.target.value })}
-                      placeholder="e.g. EMP4002"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      onChange={(e) => { setWardenForm({ ...wardenForm, employeeId: e.target.value }); if (wardenErrors.employeeId) setWardenErrors(prev => ({ ...prev, employeeId: undefined })); }}
+                      placeholder="e.g. EMP4021"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${wardenErrors.employeeId ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Gender *</label>
-                    <select
-                      value={wardenForm.gender}
-                      onChange={(e) => setWardenForm({ ...wardenForm, gender: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
+                    {wardenErrors.employeeId && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{wardenErrors.employeeId}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Email Address *</label>
                     <input
                       type="email"
                       value={wardenForm.email}
-                      onChange={(e) => setWardenForm({ ...wardenForm, email: e.target.value })}
-                      placeholder="warden.rs@college.edu"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      onChange={(e) => { setWardenForm({ ...wardenForm, email: e.target.value }); if (wardenErrors.email) setWardenErrors(prev => ({ ...prev, email: undefined })); }}
+                      placeholder="robert.smith@college.edu"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${wardenErrors.email ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
                     />
+                    {wardenErrors.email && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{wardenErrors.email}</p>}
                   </div>
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Phone Number *</label>
                     <input
                       type="text"
                       value={wardenForm.phoneNumber}
-                      onChange={(e) => setWardenForm({ ...wardenForm, phoneNumber: e.target.value })}
-                      placeholder="e.g. 9845012345"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      onChange={(e) => { setWardenForm({ ...wardenForm, phoneNumber: e.target.value }); if (wardenErrors.phoneNumber) setWardenErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
+                      placeholder="e.g. 9876543210"
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${wardenErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-250 focus:border-primary'}`}
                     />
+                    {wardenErrors.phoneNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{wardenErrors.phoneNumber}</p>}
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-xs font-bold text-gray-600">Gender *</label>
+                    <select
+                      value={wardenForm.gender}
+                      onChange={(e) => { setWardenForm({ ...wardenForm, gender: e.target.value }); if (wardenErrors.gender) setWardenErrors(prev => ({ ...prev, gender: undefined })); }}
+                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none bg-white ${wardenErrors.gender ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                    {wardenErrors.gender && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{wardenErrors.gender}</p>}
                   </div>
                   {!selectedWarden && (
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-bold text-gray-600">Temporary Password (optional)</label>
+                      <label className="text-xs font-bold text-gray-600">Temporary Password (Optional)</label>
                       <input
                         type="text"
                         value={wardenForm.temporaryPassword}
                         onChange={(e) => setWardenForm({ ...wardenForm, temporaryPassword: e.target.value })}
                         placeholder="Leave blank to auto-generate"
-                        className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-amber-50/30 focus:bg-white"
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary bg-amber-50/20"
                       />
                     </div>
                   )}
@@ -1465,11 +2756,12 @@ export default function AdminDashboard({ user, onLogout }) {
                     <select
                       value={wardenForm.assignedHostel}
                       onChange={(e) => setWardenForm({ ...wardenForm, assignedHostel: e.target.value })}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary bg-white"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
                     >
                       <option value="">Select Hostel</option>
                       <option value="Boys Hostel">Boys Hostel</option>
                       <option value="Girls Hostel">Girls Hostel</option>
+                      <option value="PG Hostel">PG Hostel</option>
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1479,7 +2771,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={wardenForm.assignedBlocks}
                       onChange={(e) => setWardenForm({ ...wardenForm, assignedBlocks: e.target.value })}
                       placeholder="e.g. Block A, Block B"
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1498,9 +2790,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       value="Active"
                       checked={wardenForm.status === 'Active'}
                       onChange={() => setWardenForm({ ...wardenForm, status: 'Active' })}
-                      className="w-4.5 h-4.5 text-primary"
+                      className="w-4.5 h-4.5 text-primary focus:ring-0"
                     />
-                    <span className="text-sm font-semibold text-gray-800">Active</span>
+                    <span className="text-xs font-bold text-gray-700">Active</span>
                   </label>
                   <label className="inline-flex items-center space-x-2.5 cursor-pointer">
                     <input
@@ -1509,9 +2801,9 @@ export default function AdminDashboard({ user, onLogout }) {
                       value="Inactive"
                       checked={wardenForm.status === 'Inactive'}
                       onChange={() => setWardenForm({ ...wardenForm, status: 'Inactive' })}
-                      className="w-4.5 h-4.5 text-rose-600"
+                      className="w-4.5 h-4.5 text-rose-600 focus:ring-0"
                     />
-                    <span className="text-sm font-semibold text-gray-800">Inactive (Deactivated)</span>
+                    <span className="text-xs font-bold text-gray-700">Inactive</span>
                   </label>
                 </div>
               </div>
@@ -1521,62 +2813,307 @@ export default function AdminDashboard({ user, onLogout }) {
                 <button
                   type="button"
                   onClick={() => setShowWardenAddEditModal(false)}
-                  className="px-6 py-3 border border-gray-250 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                  className="px-6 py-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-55"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-primary hover:bg-primary-light text-white text-xs font-bold rounded-xl shadow-md transition"
+                  className="px-6 py-3 bg-primary hover:bg-primary-light text-white text-xs font-bold rounded-xl shadow-md"
                 >
                   {selectedWarden ? 'Save Updates' : 'Enlist Warden'}
                 </button>
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
 
+      {/* ── MODAL: ROOM ADD ─────────────────────────────────────────────────── */}
+      {showRoomAddModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Add New Room Asset</h3>
+              <button onClick={() => setShowRoomAddModal(false)} className="text-gray-400 hover:text-gray-700">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <form onSubmit={handleRoomAddSubmit} className="p-6 space-y-4 text-xs font-sans">
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Room Number *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 101 / 204"
+                  value={roomForm.roomNumber}
+                  onChange={e => setRoomForm({ ...roomForm, roomNumber: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Block Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Block A / Block B"
+                  value={roomForm.blockName}
+                  onChange={e => setRoomForm({ ...roomForm, blockName: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Floor Number *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 1 / 2"
+                  value={roomForm.floorNumber}
+                  onChange={e => setRoomForm({ ...roomForm, floorNumber: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Capacity Capacity *</label>
+                <input
+                  type="number"
+                  value={roomForm.capacity}
+                  onChange={e => setRoomForm({ ...roomForm, capacity: Number(e.target.value) })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Initial Asset Status</label>
+                <select
+                  value={roomForm.status}
+                  onChange={e => setRoomForm({ ...roomForm, status: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none bg-white"
+                >
+                  <option value="Available">Available</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+              <div className="pt-4 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRoomAddModal(false)}
+                  className="px-4 py-2 border border-gray-200 rounded-xl font-bold text-gray-500 hover:bg-gray-55"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-white font-bold rounded-xl shadow-md"
+                >
+                  Create Asset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: HOSTEL ADD ───────────────────────────────────────────────── */}
+      {showHostelAddModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Register Hostel Asset</h3>
+              <button onClick={() => setShowHostelAddModal(false)} className="text-gray-400 hover:text-gray-700">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <form onSubmit={handleHostelAddSubmit} className="p-6 space-y-4 text-xs font-sans">
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Hostel Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. PG Hostel / South Block"
+                  value={hostelForm.name}
+                  onChange={e => setHostelForm({ ...hostelForm, name: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <label className="font-bold text-gray-600">Block Count</label>
+                  <input
+                    type="number"
+                    value={hostelForm.blockCount}
+                    onChange={e => setHostelForm({ ...hostelForm, blockCount: Number(e.target.value) })}
+                    className="px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                  />
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <label className="font-bold text-gray-600">Floor Count</label>
+                  <input
+                    type="number"
+                    value={hostelForm.floorCount}
+                    onChange={e => setHostelForm({ ...hostelForm, floorCount: Number(e.target.value) })}
+                    className="px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Hostel Capacity (Beds) *</label>
+                <input
+                  type="number"
+                  value={hostelForm.capacity}
+                  onChange={e => setHostelForm({ ...hostelForm, capacity: Number(e.target.value) })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Assigned Chief Warden *</label>
+                <input
+                  type="text"
+                  placeholder="Warden name"
+                  value={hostelForm.warden}
+                  onChange={e => setHostelForm({ ...hostelForm, warden: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                />
+              </div>
+              <div className="pt-4 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowHostelAddModal(false)}
+                  className="px-4 py-2 border border-gray-200 rounded-xl font-bold text-gray-500 hover:bg-gray-55"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-white font-bold rounded-xl shadow-md"
+                >
+                  Register Asset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: ANNOUNCEMENT ADD / EDIT ──────────────────────────────────── */}
+      {showAnnAddEditModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-lg font-extrabold text-gray-900 font-outfit">
+                {selectedAnn ? 'Modify Broadcast Announcement' : 'Post Broadcast Notice'}
+              </h3>
+              <button onClick={() => setShowAnnAddEditModal(false)} className="text-gray-400 hover:text-gray-700">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <form onSubmit={handleAnnSaveSubmit} className="p-6 space-y-4 text-xs font-sans">
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Announcement Title *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Maintenance Schedule"
+                  value={annForm.title}
+                  onChange={e => setAnnForm({ ...annForm, title: e.target.value })}
+                  className="px-4 py-2 border border-gray-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+              <div className="flex flex-col space-y-1">
+                <label className="font-bold text-gray-600">Broadcast Message *</label>
+                <textarea
+                  rows={4}
+                  placeholder="Enter notice details..."
+                  value={annForm.description}
+                  onChange={e => setAnnForm({ ...annForm, description: e.target.value })}
+                  className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-primary custom-scrollbar resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-1">
+                  <label className="font-bold text-gray-600">Priority Level</label>
+                  <select
+                    value={annForm.priority}
+                    onChange={e => setAnnForm({ ...annForm, priority: e.target.value })}
+                    className="px-4 py-2 border border-gray-200 rounded-xl outline-none bg-white"
+                  >
+                    <option value="Normal">Normal</option>
+                    <option value="High">High Priority</option>
+                  </select>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <label className="font-bold text-gray-600">Target Audience</label>
+                  <select
+                    value={annForm.visibleTo}
+                    onChange={e => setAnnForm({ ...annForm, visibleTo: e.target.value })}
+                    className="px-4 py-2 border border-gray-200 rounded-xl outline-none bg-white"
+                  >
+                    <option value="all">Everyone</option>
+                    <option value="student">Students Only</option>
+                    <option value="warden">Wardens Only</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 pt-2 select-none">
+                <input
+                  type="checkbox"
+                  id="ann-pin"
+                  checked={annForm.pinned}
+                  onChange={e => setAnnForm({ ...annForm, pinned: e.target.checked })}
+                  className="w-4 h-4 text-primary"
+                />
+                <label htmlFor="ann-pin" className="font-bold text-gray-700 cursor-pointer">Pin to top of feed</label>
+              </div>
+              <div className="pt-4 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAnnAddEditModal(false)}
+                  className="px-4 py-2 border border-gray-200 rounded-xl font-bold text-gray-500 hover:bg-gray-55"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-white font-bold rounded-xl shadow-md"
+                >
+                  Publish Notice
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
       {/* ── MODAL: RESET PASSWORD ────────────────────────────────────────────── */}
       {showResetPasswordModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
             <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Reset Password</h3>
-              <button
-                onClick={() => setShowResetPasswordModal(false)}
-                className="text-gray-400 hover:text-gray-700 focus:outline-none"
-              >
+              <button onClick={() => setShowResetPasswordModal(false)} className="text-gray-400 hover:text-gray-750">
                 <i className="fas fa-times" />
               </button>
             </div>
-            <form onSubmit={handleResetPasswordSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleResetPasswordSubmit} className="p-6 space-y-4 text-xs font-sans">
               <p className="text-sm text-gray-500">
                 You are resetting the password for <strong>{resetUserName}</strong> ({resetUserRole}). Enter a new temporary password:
               </p>
               <div className="flex flex-col space-y-1">
-                <label className="text-xs font-bold text-gray-600">Temporary Password *</label>
+                <label className="font-bold text-gray-600">Temporary Password *</label>
                 <input
                   type="text"
                   value={newTempPassword}
                   onChange={(e) => setNewTempPassword(e.target.value)}
                   placeholder="Min 6 characters"
-                  className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-primary"
+                  className="px-4 py-2.5 border border-gray-200 rounded-xl outline-none focus:border-primary"
                 />
               </div>
               <div className="pt-4 flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setShowResetPasswordModal(false)}
-                  className="px-4 py-2 border border-gray-250 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-200 rounded-xl font-bold text-gray-500 hover:bg-gray-55"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-primary hover:bg-primary-light text-white text-xs font-bold rounded-xl shadow-md"
+                  className="px-4 py-2 bg-primary text-white font-bold rounded-xl shadow-md"
                 >
                   Update Password
                 </button>
@@ -1588,25 +3125,22 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: STUDENT DETAILS ──────────────────────────────────────────── */}
       {showStudentDetailsModal && viewStudent && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden">
             <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Student Profile Details</h3>
-              <button
-                onClick={() => { setViewStudent(null); setShowStudentDetailsModal(false); }}
-                className="text-gray-400 hover:text-gray-700"
-              >
+              <button onClick={() => { setViewStudent(null); setShowStudentDetailsModal(false); }} className="text-gray-400 hover:text-gray-700">
                 <i className="fas fa-times" />
               </button>
             </div>
-            <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh] custom-scrollbar">
+            <div className="p-6 space-y-6 text-xs font-sans">
               <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+                <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
                   {viewStudent.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <h4 className="text-xl font-bold text-gray-900">{viewStudent.fullName}</h4>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                     viewStudent.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                   }`}>
                     {viewStudent.isActive ? 'Active' : 'Inactive'}
@@ -1614,7 +3148,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                 <div className="border border-gray-50 p-3 rounded-xl">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Register Number</p>
                   <p className="font-semibold text-gray-800">{viewStudent.registerNumber}</p>
@@ -1623,7 +3157,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Roll Number</p>
                   <p className="font-semibold text-gray-800">{viewStudent.rollNumber || 'N/A'}</p>
                 </div>
-                <div className="border border-gray-50 p-3 rounded-xl">
+                <div className="border border-gray-50 p-3 rounded-xl col-span-2">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Email Address</p>
                   <p className="font-semibold text-gray-800">{viewStudent.email}</p>
                 </div>
@@ -1632,59 +3166,36 @@ export default function AdminDashboard({ user, onLogout }) {
                   <p className="font-semibold text-gray-800">{viewStudent.phoneNumber}</p>
                 </div>
                 <div className="border border-gray-50 p-3 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Department</p>
-                  <p className="font-semibold text-gray-800">{viewStudent.department || 'N/A'}</p>
-                </div>
-                <div className="border border-gray-50 p-3 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Year</p>
-                  <p className="font-semibold text-gray-800">{viewStudent.year || 'N/A'} Year</p>
-                </div>
-                <div className="border border-gray-50 p-3 rounded-xl">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Gender</p>
                   <p className="font-semibold text-gray-800">{viewStudent.gender}</p>
                 </div>
                 <div className="border border-gray-50 p-3 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parent/Guardian</p>
-                  <p className="font-semibold text-gray-800">{viewStudent.parentName || 'N/A'} ({viewStudent.parentContact || 'N/A'})</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Department</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.department || 'N/A'}</p>
                 </div>
                 <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Academic Year</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.year || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parent/Guardian Name</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.parentName || 'N/A'}</p>
+                </div>
+                <div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Emergency Contact</p>
                   <p className="font-semibold text-gray-800">{viewStudent.emergencyContact || 'N/A'}</p>
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <h5 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Hostel & Room Assignment</h5>
-                {viewStudent.roomNumber ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <p className="text-[9px] text-gray-400 uppercase tracking-wide">Hostel</p>
-                      <p className="font-bold text-gray-800">{viewStudent.hostelName}</p>
-                    </div>
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <p className="text-[9px] text-gray-400 uppercase tracking-wide">Block</p>
-                      <p className="font-bold text-gray-800">{viewStudent.block}</p>
-                    </div>
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <p className="text-[9px] text-gray-400 uppercase tracking-wide">Room</p>
-                      <p className="font-bold text-gray-800">{viewStudent.roomNumber}</p>
-                    </div>
-                    <div className="bg-gray-50 p-2.5 rounded-xl">
-                      <p className="text-[9px] text-gray-400 uppercase tracking-wide">Bed</p>
-                      <p className="font-bold text-gray-800">{viewStudent.bedNumber}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-gray-400 italic text-xs">No active room allocation details.</span>
-                )}
-              </div>
-
               <div className="pt-4 flex justify-end">
                 <button
                   onClick={() => { setViewStudent(null); setShowStudentDetailsModal(false); }}
-                  className="px-5 py-2.5 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl"
+                  className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-650 font-bold text-xs rounded-xl transition"
                 >
-                  Close Profile
+                  Close Details
                 </button>
               </div>
             </div>
@@ -1694,25 +3205,22 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: WARDEN DETAILS ───────────────────────────────────────────── */}
       {showWardenDetailsModal && viewWarden && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden">
             <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Warden Profile Details</h3>
-              <button
-                onClick={() => { setViewWarden(null); setShowWardenDetailsModal(false); }}
-                className="text-gray-400 hover:text-gray-700"
-              >
+              <button onClick={() => { setViewWarden(null); setShowWardenDetailsModal(false); }} className="text-gray-400 hover:text-gray-700">
                 <i className="fas fa-times" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 text-xs font-sans">
               <div className="flex items-center space-x-4">
                 <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg">
                   {viewWarden.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                 </div>
                 <div>
                   <h4 className="text-xl font-bold text-gray-900">{viewWarden.fullName}</h4>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                     viewWarden.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                   }`}>
                     {viewWarden.isActive ? 'Active' : 'Inactive'}
@@ -1720,7 +3228,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                 <div className="border border-gray-50 p-3 rounded-xl">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Employee ID</p>
                   <p className="font-semibold text-gray-800">{viewWarden.employeeId}</p>
@@ -1745,7 +3253,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Managed Block(s)</p>
-                <p className="text-sm font-semibold text-gray-800">
+                <p className="text-xs font-semibold text-gray-800">
                   {viewWarden.assignedBlocks && viewWarden.assignedBlocks.length > 0
                     ? viewWarden.assignedBlocks.join(', ')
                     : 'No blocks assigned'}
@@ -1755,7 +3263,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="pt-4 flex justify-end">
                 <button
                   onClick={() => { setViewWarden(null); setShowWardenDetailsModal(false); }}
-                  className="px-5 py-2.5 bg-gray-100 text-gray-600 font-bold text-xs rounded-xl"
+                  className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-650 font-bold text-xs rounded-xl transition"
                 >
                   Close Details
                 </button>
@@ -1767,9 +3275,9 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: CONFIRM STUDENT DELETE ────────────────────────────────────── */}
       {showStudentDeleteModal && studentToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
-            <div className="p-6 text-center space-y-4">
+            <div className="p-6 text-center space-y-4 text-xs font-sans">
               <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 text-xl mx-auto">
                 <i className="fas fa-exclamation-triangle" />
               </div>
@@ -1780,7 +3288,7 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="pt-4 flex justify-center space-x-3">
                 <button
                   onClick={() => { setStudentToDelete(null); setShowStudentDeleteModal(false); }}
-                  className="px-5 py-2.5 border border-gray-250 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50"
+                  className="px-5 py-2.5 border border-gray-250 rounded-xl text-xs font-bold text-gray-550 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
@@ -1798,9 +3306,9 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: CONFIRM WARDEN DELETE ─────────────────────────────────────── */}
       {showWardenDeleteModal && wardenToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden">
-            <div className="p-6 text-center space-y-4">
+            <div className="p-6 text-center space-y-4 text-xs font-sans">
               <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 text-xl mx-auto">
                 <i className="fas fa-exclamation-triangle" />
               </div>
@@ -1811,13 +3319,13 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="pt-4 flex justify-center space-x-3">
                 <button
                   onClick={() => { setWardenToDelete(null); setShowWardenDeleteModal(false); }}
-                  className="px-5 py-2.5 border border-gray-250 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-50"
+                  className="px-5 py-2.5 border border-gray-250 rounded-xl text-xs font-bold text-gray-550 hover:bg-gray-55"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteWarden}
-                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md"
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md animate-none"
                 >
                   Delete Profile
                 </button>
@@ -1829,9 +3337,9 @@ export default function AdminDashboard({ user, onLogout }) {
 
       {/* ── MODAL: CREDENTIALS DELIVERY DIALOG ──────────────────────────────── */}
       {createdCredentials && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-gray-100 p-8 text-center space-y-6">
-            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-2xl mx-auto">
+            <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600 text-2xl mx-auto animate-none">
               <i className="fas fa-check-circle" />
             </div>
             <div>

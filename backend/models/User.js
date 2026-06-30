@@ -114,6 +114,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isFirstLogin: {
+      type: Boolean,
+      default: false,
+    },
     password: {
       type: String,
       required: [true, 'Password is required'],
