@@ -482,13 +482,22 @@ const allocateRoom = async (req, res) => {
       }
       await newRoom.save();
 
-      student.room = roomId;
+       student.room = roomId;
     } else {
       // Deallocate
       student.room = null;
     }
 
     await student.save();
+
+    await updateNotification(
+      studentId,
+      'Info',
+      'Room Allocation Updated',
+      student.room ? 'Your room has been assigned/updated by the warden.' : 'Your room allocation has been released.',
+      student.room || null,
+      { status: 'Updated' }
+    );
 
     return res.status(200).json({ success: true, message: 'Room allocated successfully', student });
   } catch (error) {

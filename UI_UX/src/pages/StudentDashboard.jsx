@@ -75,15 +75,21 @@ export default function StudentDashboard({ user, onLogout }) {
   // ── API helpers & data loading ─────────────────────────────────────────
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = {};
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window.__forceLogout === 'function') window.__forceLogout();
+      }
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
     }
     return res.json();
   };
+
 
   const fetchAll = async () => {
     try {
