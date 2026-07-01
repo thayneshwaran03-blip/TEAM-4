@@ -825,85 +825,214 @@ export default function AdminDashboard({ user, onLogout }) {
         </>
       )}
 
-      {/* ── SIDEBAR Collapsible Navigation ──────────────────────────────────── */}
+      {/* ── SIDEBAR — Premium collapsible design ──────────────────────────────────── */}
       <aside
-        className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${isSidebarExpanded ? 'w-64' : 'w-20'
-          } fixed lg:relative z-40 ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`
+          flex-shrink-0 flex flex-col bg-white border-r border-gray-100/80 h-screen
+          shadow-[1px_0_20px_rgba(0,0,0,0.04)]
+          fixed lg:relative inset-y-0 left-0 z-50
+          ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          transition-[width,transform] duration-[280ms] ease-in-out
+        `}
+        style={{ width: isMobileDrawerOpen ? '256px' : (isSidebarExpanded ? '256px' : '72px') }}
       >
-        <div className="space-y-6">
-          {/* Logo brand */}
-          <div className={`flex items-center pb-6 border-b border-gray-100 ${isSidebarExpanded ? 'justify-between' : 'justify-center'}`}>
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-outfit font-extrabold text-xl shadow-md shrink-0">
-                H
-              </div>
-              {isSidebarExpanded && (
-                <span className="text-lg font-bold font-outfit text-gray-900 tracking-tight">
-                  Hostel<span className="text-accent text-amber-500 font-extrabold">Hub</span>
-                </span>
-              )}
+        {/* ── Header: Logo ────────────────────────────────────────────── */}
+        <div
+          className="flex items-center shrink-0 border-b border-gray-100"
+          style={{ height: '64px', padding: '0 14px', justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'space-between' : 'center' }}
+        >
+          {/* Logo mark + wordmark */}
+          <div className="flex items-center min-w-0 overflow-hidden text-left">
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+              <i className="fas fa-home text-primary" style={{ fontSize: '15px' }} />
             </div>
-            {isSidebarExpanded && (
-              <button
-                onClick={() => setIsSidebarExpanded(false)}
-                className="hidden lg:flex w-7 h-7 bg-gray-50 border border-gray-150 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                title="Collapse Sidebar"
+            <span
+              className="font-bold text-gray-900 tracking-tight select-none whitespace-nowrap transition-all duration-[280ms] ease-in-out overflow-hidden"
+              style={{
+                fontSize: '15px',
+                marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '10px' : '0px',
+                maxWidth: isSidebarExpanded || isMobileDrawerOpen ? '140px' : '0px',
+                opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              }}
+            >
+              Hostel<span className="text-primary">Hub</span>
+            </span>
+          </div>
+
+          {/* Mobile close ✕ */}
+          <button
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-150 shrink-0"
+          >
+            <i className="fas fa-times" style={{ fontSize: '14px' }} />
+          </button>
+        </div>
+
+        {/* ── Profile section ──────────────────────────────────────────── */}
+        <div className="shrink-0">
+          {/* EXPANDED profile card */}
+          <div
+            className="overflow-hidden transition-all duration-[280ms] ease-in-out"
+            style={{
+              maxHeight: isSidebarExpanded || isMobileDrawerOpen ? '150px' : '0px',
+              opacity:   isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              margin:    isSidebarExpanded || isMobileDrawerOpen ? '14px 12px 6px' : '0 12px',
+            }}
+          >
+            <div className="bg-primary/5 rounded-2xl border border-primary/10 p-4 flex flex-col items-center text-center">
+              <div
+                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
+                style={{ fontSize: '15px' }}
               >
-                <i className="fas fa-angle-left text-sm" />
-              </button>
-            )}
-          </div>
-
-          {/* User badge */}
-          <div className={`bg-gray-50 rounded-xl p-3 flex items-center border border-gray-100 ${isSidebarExpanded ? 'space-x-3 text-left' : 'justify-center'}`}>
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-              {initials}
-            </div>
-            {isSidebarExpanded && (
-              <div className="truncate">
-                <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
-                <p className="text-[10px] text-gray-400 font-medium tracking-wide">{role}</p>
+                {initials.charAt(0)}
               </div>
-            )}
+              <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '13px' }}>{name}</p>
+              <span
+                className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
+                style={{ fontSize: '9px', letterSpacing: '0.08em' }}
+              >
+                {role}
+              </span>
+              <p className="mt-1 text-[#9CA3AF] whitespace-nowrap" style={{ fontSize: '10.5px', fontWeight: 500 }}>System Administrator</p>
+            </div>
           </div>
 
-          {/* Nav Items */}
-          <nav className="flex flex-col space-y-1">
-            {navItems.map((item, idx) => {
-              const isSelected = activeTab === item.tab;
-              return (
+          {/* COLLAPSED mini avatar */}
+          <div
+            className="flex justify-center transition-all duration-[280ms] ease-in-out overflow-hidden"
+            style={{
+              maxHeight: !isSidebarExpanded && !isMobileDrawerOpen ? '56px' : '0px',
+              opacity:   !isSidebarExpanded && !isMobileDrawerOpen ? 1 : 0,
+              paddingTop:    !isSidebarExpanded && !isMobileDrawerOpen ? '12px' : '0px',
+              paddingBottom: !isSidebarExpanded && !isMobileDrawerOpen ? '4px' : '0px',
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
+              style={{ fontSize: '13px' }}
+              title={name}
+            >
+              {initials.charAt(0)}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Navigation ───────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-1" style={{ padding: '6px 8px' }}>
+          {navItems.map(item => {
+            const active   = activeTab === item.tab;
+            const expanded = isSidebarExpanded || isMobileDrawerOpen;
+            return (
+              <div key={item.tab} className="relative group">
                 <button
-                  key={idx}
                   onClick={() => {
                     setActiveTab(item.tab);
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-                    } ${isSelected
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  className={`relative flex items-center w-full rounded-xl mb-0.5 transition-all duration-150
+                    ${active
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-gray-500 hover:bg-gray-55 hover:text-gray-800'
                     }`}
-                  title={item.label}
+                  style={{
+                    height: '42px',
+                    padding: expanded ? '0 14px' : '0',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    fontWeight: active ? 600 : 500,
+                    fontSize: '14px',
+                  }}
                 >
-                  <i className={`fas ${item.icon} w-5 text-center ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
-                  {isSidebarExpanded && <span>{item.label}</span>}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+                  {/* Active indicator bar */}
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                  )}
 
-        {/* Sign Out Button */}
-        <div className="pt-6 border-t border-gray-100">
-          <button
-            onClick={onLogout}
-            className={`w-full flex items-center rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-              }`}
-            title="Sign Out"
-          >
-            <i className="fas fa-sign-out-alt w-5 text-center" />
-            {isSidebarExpanded && <span>Sign Out</span>}
-          </button>
+                  {/* Icon */}
+                  <span
+                    className="flex items-center justify-center shrink-0"
+                    style={{ width: '22px', height: '22px' }}
+                  >
+                    <i
+                      className={`fas ${item.icon} transition-colors`}
+                      style={{
+                        fontSize: '15px',
+                        color: active ? 'var(--tw-color-primary, #1a237e)' : undefined,
+                      }}
+                    />
+                  </span>
+
+                  {/* Label */}
+                  <span
+                    className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out text-left"
+                    style={{
+                      marginLeft: expanded ? '11px' : '0px',
+                      maxWidth:   expanded ? '160px' : '0px',
+                      opacity:    expanded ? 1 : 0,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+
+                {/* CSS Tooltip (collapsed only) */}
+                {!expanded && (
+                  <div
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                      bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                      whitespace-nowrap z-[999] shadow-lg"
+                    style={{ fontSize: '12px' }}
+                  >
+                    {item.label}
+                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* ── Sign Out ─────────────────────────────────────────────────── */}
+        <div className="shrink-0 border-t border-gray-100 py-2" style={{ padding: '8px 8px' }}>
+          <div className="relative group">
+            <button
+              onClick={onLogout}
+              className="flex items-center w-full rounded-xl text-red-500 hover:text-red-750 hover:bg-red-50 transition-all duration-150"
+              style={{
+                height: '42px',
+                padding: isSidebarExpanded || isMobileDrawerOpen ? '0 14px' : '0',
+                justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'flex-start' : 'center',
+                fontWeight: 600,
+                fontSize: '14px',
+              }}
+            >
+              <span className="flex items-center justify-center shrink-0" style={{ width: '22px', height: '22px' }}>
+                <i className="fas fa-sign-out-alt" style={{ fontSize: '15px' }} />
+              </span>
+              <span
+                className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out text-left"
+                style={{
+                  marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '11px' : '0px',
+                  maxWidth:   isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px',
+                  opacity:    isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+                }}
+              >
+                Sign Out
+              </span>
+            </button>
+
+            {!isSidebarExpanded && !isMobileDrawerOpen && (
+              <div
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                  bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                  opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                  whitespace-nowrap z-[999] shadow-lg"
+              >
+                Sign Out
+                <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -915,74 +1044,81 @@ export default function AdminDashboard({ user, onLogout }) {
         />
       )}
 
-      {/* ── MAIN CONTENT PANE ────────────────────────────────────────────────── */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto overflow-x-hidden h-screen custom-scrollbar flex flex-col justify-start max-w-full">
+      {/* ── CONTENT WRAPPER ────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 bg-[#F8FAFC]">
 
         {/* Top Navbar Header */}
-        <header className="flex justify-between items-center pb-5 border-b border-gray-200 mb-8 select-none">
-          <div className="flex items-center space-x-4">
+        <header
+          className="shrink-0 bg-white border-b border-gray-100 flex items-center justify-between"
+          style={{ height: '64px', zIndex: 30, padding: '0 20px' }}
+        >
+          {/* Left: Hamburger & Page Title */}
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsMobileDrawerOpen(true)}
-              className="lg:hidden w-10 h-10 border border-gray-200 bg-white hover:bg-gray-55 rounded-xl flex items-center justify-center text-gray-500 focus:outline-none"
+              onClick={() => {
+                if (window.innerWidth >= 1024) {
+                  setIsSidebarExpanded(prev => !prev);
+                } else {
+                  setIsMobileDrawerOpen(prev => !prev);
+                }
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-150 shrink-0"
+              aria-label="Toggle sidebar"
             >
-              <i className="fas fa-bars text-lg" />
+              <i className="fas fa-bars" style={{ fontSize: '16px' }} />
             </button>
-            {!isSidebarExpanded && (
-              <button
-                onClick={() => setIsSidebarExpanded(true)}
-                className="hidden lg:flex w-8 h-8 bg-white border border-gray-250 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50"
-                title="Expand Sidebar"
-              >
-                <i className="fas fa-angle-right text-base" />
-              </button>
-            )}
-            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-gray-900 font-outfit uppercase">
-              {activeTab === 'dashboard' && 'Command Analytics Center'}
-              {activeTab === 'students' && 'Student Accounts Master Portal'}
-              {activeTab === 'wardens' && 'Warden Management Console'}
-              {activeTab === 'rooms' && 'Room Assets Management'}
-              {activeTab === 'hostels' && 'Hostel Assets Management'}
-              {activeTab === 'leaves' && 'Student Leave Approvals'}
-              {activeTab === 'complaints' && 'Student Complaints Hub'}
-              {activeTab === 'visitors' && 'Visitor Security Logs'}
-              {activeTab === 'announcements' && 'Broadcast Information System'}
-              {activeTab === 'occupancy_reports' && 'Occupancy Intelligence Center'}
-              {activeTab === 'settings' && 'System Parameters Settings'}
-            </h1>
+            
+            <span className="hidden sm:block font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>
+              {activeTab === 'dashboard' && 'Dashboard'}
+              {activeTab === 'students' && 'Student Management'}
+              {activeTab === 'wardens' && 'Warden Management'}
+              {activeTab === 'rooms' && 'Room Assets'}
+              {activeTab === 'hostels' && 'Hostel Assets'}
+              {activeTab === 'leaves' && 'Leave Requests'}
+              {activeTab === 'complaints' && 'Complaints'}
+              {activeTab === 'visitors' && 'Visitor Management'}
+              {activeTab === 'announcements' && 'Announcements'}
+              {activeTab === 'occupancy_reports' && 'Occupancy Reports'}
+              {activeTab === 'settings' && 'Settings'}
+            </span>
           </div>
 
-          <div className="flex items-center space-x-4 text-xs font-semibold text-gray-600">
+          {/* Right: Notifications & Profile dropdown */}
+          <div className="flex items-center space-x-4">
+            
             {/* Notifications Button */}
             <div className="relative" ref={notifDropdownRef}>
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-50 shadow-sm relative focus:outline-none"
+                className="relative p-2 text-gray-500 hover:bg-gray-50 rounded-xl transition-colors border border-gray-100"
               >
                 <i className="fas fa-bell text-base" />
                 {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold ring-2 ring-white">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
                 )}
               </button>
 
               {isNotifOpen && (
-                <div className="absolute right-0 mt-3 bg-white border border-gray-150 rounded-2xl shadow-xl w-72 py-3 z-50 text-left">
-                  <div className="px-4 pb-2 border-b border-gray-100 flex justify-between items-center">
-                    <span className="font-bold text-gray-800">Notifications</span>
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 p-4 origin-top-right animate-scaleIn text-left">
+                  <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-[#1F2937]">Notifications</span>
                     <button
                       onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
-                      className="text-[10px] text-primary hover:underline"
+                      className="text-xs text-primary font-medium hover:underline"
                     >
                       Mark all read
                     </button>
                   </div>
-                  <div className="divide-y divide-gray-50 max-h-60 overflow-y-auto custom-scrollbar">
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                     {notifications.length === 0 ? (
                       <p className="p-4 text-xs text-gray-400 text-center">No new notifications.</p>
                     ) : (
                       notifications.map(notif => (
-                        <div key={notif._id} className={`p-3 hover:bg-gray-50 text-left text-xs ${!notif.read ? 'bg-primary-light/5' : ''}`}>
-                          <p className="font-bold text-gray-800">{notif.title}</p>
-                          <p className="text-gray-500 mt-0.5">{notif.message}</p>
+                        <div key={notif._id} className={`p-2.5 rounded-xl text-xs ${notif.read ? '' : 'bg-primary/5'}`}>
+                          <p className="text-[#374151] font-bold">{notif.title}</p>
+                          <p className="text-[#6B7280] mt-0.5">{notif.message}</p>
                         </div>
                       ))
                     )}
@@ -991,13 +1127,13 @@ export default function AdminDashboard({ user, onLogout }) {
               )}
             </div>
 
-            {/* Profile Dropdown */}
+            {/* Profile dropdown */}
             <div className="relative" ref={profileDropdownRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center space-x-2.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm focus:outline-none"
+                className="flex items-center space-x-3 pl-2 pr-3 py-2 rounded-xl hover:bg-gray-55 transition-colors border border-gray-100"
               >
-                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
                   {initials}
                 </div>
                 <span className="hidden md:inline font-bold text-gray-700">{name}</span>
@@ -1030,39 +1166,64 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         </header>
 
-        {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
+        {/* ── MAIN BODY ─────────────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col justify-start max-w-full custom-scrollbar text-left">
+
+          {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
 
         {/* ── TAB: DASHBOARD OVERVIEW ────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fadeIn text-left">
 
-            {/* Welcome banner card */}
-            <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 w-full max-w-full">
+            {/* Welcome row (matching Student Dashboard design) */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-2xl md:text-3xl font-extrabold font-outfit">Welcome Back, {name}</h2>
-                <p className="text-white/80 text-sm mt-1.5 font-sans">
-                  Here is the operational overview for the hostel campus today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
-                </p>
+                <h1 className="font-bold text-[#111827] leading-tight tracking-tight font-outfit text-left" style={{ fontSize: '42px' }}>
+                  Welcome Back, {name.split(' ')[0]} {"\uD83D\uDC4B"}
+                </h1>
+                <p className="text-[#4B5563] mt-2 text-left" style={{ fontSize: '18px', fontWeight: 500 }}>Here's what's happening in your hostel today.</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl px-4 py-3 border border-white/20 text-center md:text-right shrink-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider block text-amber-300">Operational Status</span>
-                <span className="text-base font-extrabold">All Services Running</span>
+              
+              {/* Date card */}
+              <div className="flex items-center space-x-3 px-5 py-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 text-left shrink-0">
+                <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <i className="fas fa-calendar-alt text-primary text-base" />
+                </div>
+                <div>
+                  <p className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '14px' }}>
+                    {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                  <p className="text-[#6B7280] font-medium" style={{ fontSize: '12px' }}>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Expanded Stats Grid (3 columns, large items) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Expanded Stats Grid (3 columns, student card size) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {stats.map((stat, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between items-start cursor-pointer hover:-translate-y-1"
+                  onClick={() => {
+                    if (stat.tab) {
+                      setActiveTab(stat.tab);
+                    }
+                  }}
+                  className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-primary/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 cursor-pointer flex flex-col justify-between h-full group"
                 >
-                  <div className={`w-14 h-14 rounded-2xl ${stat.colorBg} flex items-center justify-center text-2xl mb-6 shadow-inner`}>
-                    <i className={`fas ${stat.icon}`} />
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`w-9 h-9 ${stat.colorBg.split(' ')[0]} rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
+                      <i className={`fas ${stat.icon} ${stat.colorBg.split(' ')[1]} text-base`} />
+                    </div>
+                    <span className="w-6 h-6 rounded-full bg-gray-55 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                      <i className="fas fa-chevron-right text-gray-400 group-hover:text-primary text-[9px] transition-transform duration-300 group-hover:translate-x-0.5" />
+                    </span>
                   </div>
                   <div>
-                    <h3 className="text-4xl font-black text-gray-900 mb-2">{stat.value}</h3>
-                    <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest leading-relaxed">{stat.label}</p>
+                    <p className="uppercase tracking-wider mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{stat.label}</p>
+                    <p className="font-semibold text-[#111827] mb-1 leading-tight" style={{ fontSize: '22px' }}>{stat.value}</p>
+                    <p className="text-[#6B7280]" style={{ fontSize: '13px', fontWeight: 500 }}>{stat.sub}</p>
                   </div>
                 </div>
               ))}
@@ -3350,6 +3511,7 @@ export default function AdminDashboard({ user, onLogout }) {
         </div>
       )}
 
+      </div>
     </div>
   );
 }
