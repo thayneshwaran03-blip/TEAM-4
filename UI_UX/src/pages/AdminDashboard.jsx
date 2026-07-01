@@ -57,15 +57,25 @@ export default function AdminDashboard({ user, onLogout }) {
 
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = {};
+    // Only add Content-Type when there is a request body
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API}/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
+      // On 401 (token expired) or 403 (wrong role) → force re-login
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window.__forceLogout === 'function') {
+          window.__forceLogout();
+        }
+      }
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
     }
     return res.json();
   };
+
 
   // ── Student / Warden / Room API State ─────────────────────────────────────
   const [students, setStudents] = useState([]);
@@ -277,11 +287,43 @@ export default function AdminDashboard({ user, onLogout }) {
       }
     } catch (err) {
       console.error('Fetch Announcements Error:', err);
-      // Fallback dummy announcements
       setAnnouncements([
         { _id: 'a1', title: 'Hostel Maintenance Schedule', description: 'Block A maintenance will occur this weekend. Water supply will be limited from 9 AM to 1 PM.', priority: 'High', visibleTo: 'all', pinned: true, createdAt: '2026-06-29' },
         { _id: 'a2', title: 'Curfew Timing Notice', description: 'All students must be inside the hostel gates by 9:00 PM starting tomorrow.', priority: 'Normal', visibleTo: 'student', pinned: false, createdAt: '2026-06-28' }
       ]);
+    }
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const data = await apiFetch('/admin/leaves');
+      if (data.success) {
+        setLeaves(data.leaveRequests);
+      }
+    } catch (err) {
+      console.error('Fetch Leaves Error:', err);
+    }
+  };
+
+  const fetchComplaints = async () => {
+    try {
+      const data = await apiFetch('/admin/complaints');
+      if (data.success) {
+        setComplaints(data.complaints);
+      }
+    } catch (err) {
+      console.error('Fetch Complaints Error:', err);
+    }
+  };
+
+  const fetchVisitors = async () => {
+    try {
+      const data = await apiFetch('/admin/visitors');
+      if (data.success) {
+        setVisitors(data.visitorRequests);
+      }
+    } catch (err) {
+      console.error('Fetch Visitors Error:', err);
     }
   };
 
@@ -290,28 +332,31 @@ export default function AdminDashboard({ user, onLogout }) {
       const sData = await apiFetch('/admin/students').catch(() => ({ students: [] }));
       const wData = await apiFetch('/admin/wardens').catch(() => ({ wardens: [] }));
       const rData = await apiFetch('/admin/rooms').catch(() => ({ rooms: [] }));
+      const lData = await apiFetch('/admin/leaves').catch(() => ({ leaveRequests: [] }));
+      const cData = await apiFetch('/admin/complaints').catch(() => ({ complaints: [] }));
+      const vData = await apiFetch('/admin/visitors').catch(() => ({ visitorRequests: [] }));
+      const aData = await apiFetch('/admin/announcements').catch(() => ({ announcements: [] }));
 
-      const studentCount = sData.students ? sData.students.length : 14;
-      const wardenCount = wData.wardens ? wData.wardens.length : 3;
-      const roomCount = rData.rooms ? rData.rooms.length : 4;
+      const studentCount = sData.students ? sData.students.length : 0;
+      const wardenCount = wData.wardens ? wData.wardens.length : 0;
+      const roomCount = rData.rooms ? rData.rooms.length : 0;
+      const pendingLeaves = lData.leaveRequests ? lData.leaveRequests.filter(l => l.status === 'Pending').length : 0;
+      const pendingComplaints = cData.complaints ? cData.complaints.filter(c => c.status === 'Pending' || c.status === 'Open').length : 0;
+      const visitorsCount = vData.visitorRequests ? vData.visitorRequests.length : 0;
+      const activeAnnouncementsCount = aData.announcements ? aData.announcements.length : 0;
 
       let occupiedBeds = 0;
       if (rData.rooms && rData.rooms.length > 0) {
         rData.rooms.forEach(r => occupiedBeds += (r.occupiedBeds || 0));
-      } else {
-        occupiedBeds = 14; // Fallback aggregation from mock rooms
       }
 
-      const totalCapacity = 256; // 128 + 128
-      const availableBeds = totalCapacity - occupiedBeds;
-
       setStats([
-        { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600' },
-        { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600' },
-        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: leaves.filter(l => l.status === 'Pending').length.toString(), colorBg: 'bg-orange-50 text-orange-600' },
-        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: complaints.filter(c => c.status === 'Pending').length.toString(), colorBg: 'bg-red-50 text-red-600' },
-        { icon: 'fa-address-card', label: 'Visitors Today', value: visitors.length.toString(), colorBg: 'bg-indigo-50 text-indigo-600' },
-        { icon: 'fa-bullhorn', label: 'Active Announcements', value: announcements.length.toString(), colorBg: 'bg-yellow-50 text-yellow-600' }
+        { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600', tab: 'students' },
+        { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600', tab: 'wardens' },
+        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: pendingLeaves.toString(), colorBg: 'bg-orange-50 text-orange-600', tab: 'leaves' },
+        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: pendingComplaints.toString(), colorBg: 'bg-red-50 text-red-600', tab: 'complaints' },
+        { icon: 'fa-address-card', label: 'Visitors Today', value: visitorsCount.toString(), colorBg: 'bg-indigo-50 text-indigo-600', tab: 'visitors' },
+        { icon: 'fa-bullhorn', label: 'Active Announcements', value: activeAnnouncementsCount.toString(), colorBg: 'bg-yellow-50 text-yellow-600', tab: 'announcements' }
       ]);
     } catch (err) {
       console.error('Fetch Stats Error:', err);
@@ -323,6 +368,9 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchWardens();
     fetchRooms();
     fetchAnnouncements();
+    fetchLeaves();
+    fetchComplaints();
+    fetchVisitors();
     fetchStats();
   }, [studentSearch, studentFilterBlock, studentFilterHostel, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
 
@@ -444,7 +492,10 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg(data.message || 'Error occurred saving details.', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      const msg = err?.message || '';
+      // Show the backend error text if available, else generic message
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Server connection failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -506,9 +557,12 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg(data.message || 'Validation error saving warden.', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Server connection failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
+
 
   const toggleStudentStatus = async (student) => {
     try {
@@ -552,9 +606,13 @@ export default function AdminDashboard({ user, onLogout }) {
         setStudentToDelete(null);
         fetchStudents();
         fetchStats();
+      } else {
+        showToastMsg(data.message || 'Deletion failed.', 'error');
       }
     } catch (err) {
-      showToastMsg('Deletion failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Deletion failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -568,9 +626,13 @@ export default function AdminDashboard({ user, onLogout }) {
         setWardenToDelete(null);
         fetchWardens();
         fetchStats();
+      } else {
+        showToastMsg(data.message || 'Deletion failed.', 'error');
       }
     } catch (err) {
-      showToastMsg('Deletion failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Deletion failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -722,19 +784,54 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   // ── Interactive Actions for Leave, Complaint, and Visitor Requests ──────
-  const handleLeaveApproval = (id, status) => {
-    setLeaves(leaves.map(l => l._id === id ? { ...l, status } : l));
-    showToastMsg(`Leave request marked as ${status}.`);
+  const handleLeaveApproval = async (id, status) => {
+    try {
+      const action = status === 'Approved' ? 'approve' : 'reject';
+      await apiFetch(`/admin/leaves/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Leave request marked as ${status}.`);
+      fetchLeaves();
+      fetchStats();
+    } catch (err) {
+      console.error('Leave Approval Error:', err);
+      showToastMsg('Failed to process leave approval.', 'error');
+    }
   };
 
-  const handleComplaintStatus = (id, status) => {
-    setComplaints(complaints.map(c => c._id === id ? { ...c, status } : c));
-    showToastMsg(`Complaint status updated to ${status}.`);
+  const handleComplaintStatus = async (id, status) => {
+    try {
+      let action = 'accept';
+      if (status === 'Resolved') action = 'resolve';
+      if (status === 'Rejected') action = 'reject';
+      await apiFetch(`/admin/complaints/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Complaint status updated to ${status}.`);
+      fetchComplaints();
+      fetchStats();
+    } catch (err) {
+      console.error('Complaint Status Update Error:', err);
+      showToastMsg('Failed to update complaint status.', 'error');
+    }
   };
 
-  const handleVisitorApproval = (id, status) => {
-    setVisitors(visitors.map(v => v._id === id ? { ...v, status } : v));
-    showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
+  const handleVisitorApproval = async (id, status) => {
+    try {
+      const action = status === 'Approved' ? 'approve' : 'reject';
+      await apiFetch(`/admin/visitors/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
+      fetchVisitors();
+      fetchStats();
+    } catch (err) {
+      console.error('Visitor Approval Error:', err);
+      showToastMsg('Failed to process visitor approval.', 'error');
+    }
   };
 
   // ── Helper: Printing & Export Reports ────────────────────────────────────
