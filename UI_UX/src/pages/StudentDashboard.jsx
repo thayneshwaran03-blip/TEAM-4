@@ -29,8 +29,12 @@ export default function StudentDashboard({ user, onLogout }) {
   const [visitors, setVisitors] = useState([]);
   const [profile, setProfile] = useState(null);
 
-  const roomNumber = profile?.room?.roomNumber || 'N/A';
-  const blockName  = profile?.room?.blockName || 'N/A';
+  const roomNumber  = profile?.room?.roomNumber  || 'N/A';
+  const blockName   = profile?.room?.blockName   || 'N/A';
+  const floorNumber = profile?.room?.floorNumber || 'N/A';
+  const roommatesCount = profile?.room?.occupiedBeds > 1
+    ? `${profile.room.occupiedBeds - 1} Roommate${profile.room.occupiedBeds - 1 > 1 ? 's' : ''}`
+    : 'No Roommates';
 
   // form fields
   const [leaveType,      setLeaveType]      = useState('Weekend Outing');
@@ -75,15 +79,21 @@ export default function StudentDashboard({ user, onLogout }) {
   // ── API helpers & data loading ─────────────────────────────────────────
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = {};
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window.__forceLogout === 'function') window.__forceLogout();
+      }
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
     }
     return res.json();
   };
+
 
   const fetchAll = async () => {
     try {
@@ -118,10 +128,14 @@ export default function StudentDashboard({ user, onLogout }) {
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(fetchAll, 10000);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── derived ───────────────────────────────────────────────────────────────
-  const unread         = notifications.filter(n => !n.read).length;
+  const unread         = notifications.filter(n => n.status !== 'Read').length;
   const pendingLeaves  = leaves.filter(l => l.status === 'Pending').length;
   const activeComp     = complaints.filter(c => c.status === 'Pending').length;
 
@@ -339,7 +353,7 @@ export default function StudentDashboard({ user, onLogout }) {
                 className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
                 style={{ fontSize: '9px', letterSpacing: '0.08em' }}
               >Student</span>
-              <p className="mt-1 text-[#9CA3AF] whitespace-nowrap" style={{ fontSize: '10.5px', fontWeight: 500 }}>Room {roomNumber}, {blockName}</p>
+
             </div>
           </div>
 
@@ -546,16 +560,19 @@ export default function StudentDashboard({ user, onLogout }) {
                     <span className="text-sm font-semibold text-[#1F2937]">Notifications</span>
                     {unread > 0 && (
                       <button
-                        onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
+                        onClick={() => setNotifications(notifications.map(n => ({ ...n, status: 'Read' })))}
                         className="text-xs text-primary font-medium hover:underline"
                       >Mark all read</button>
                     )}
                   </div>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {notifications.map(n => (
-                      <div key={n.id} className={`p-2.5 rounded-xl text-xs ${n.read ? '' : 'bg-primary/5'}`}>
-                        <p className="text-[#374151] font-normal">{n.text}</p>
-                        <p className="text-[#6B7280] mt-0.5">{n.time}</p>
+                    {notifications.length === 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-4">No notifications yet.</p>
+                    ) : notifications.map(n => (
+                      <div key={n._id || n.id} className={`p-2.5 rounded-xl text-xs ${n.status !== 'Read' ? 'bg-primary/5' : ''}`}>
+                        <p className="font-semibold text-[#374151]">{n.title}</p>
+                        <p className="text-[#374151] font-normal">{n.message}</p>
+                        <p className="text-[#6B7280] mt-0.5">{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}</p>
                       </div>
                     ))}
                   </div>
@@ -639,7 +656,9 @@ export default function StudentDashboard({ user, onLogout }) {
                 {[
                   {
                     icon: 'fa-home',    iconBg: 'bg-blue-50',   iconColor: 'text-blue-600',
-                    label: 'My Room',   value: `Room ${roomNumber}`,   sub: `${blockName} · 1st Floor`,
+                    label: 'My Room',
+                    value: roomNumber !== 'N/A' ? `Room ${roomNumber}` : 'Not Assigned',
+                    sub: roomNumber !== 'N/A' ? `${blockName} · Floor ${floorNumber}` : 'No room assigned',
                     tab: 'My Room',
                   },
                   {
@@ -692,10 +711,10 @@ export default function StudentDashboard({ user, onLogout }) {
 
                     <div className="grid grid-cols-2 gap-4 mb-6">
                       {[
-                        { label: 'ROOM NUMBER',    value: '101',        icon: 'fa-bed',       iconColor: 'text-blue-500'   },
-                        { label: 'BLOCK / WING',   value: 'Block A',    icon: 'fa-building',  iconColor: 'text-primary-light' },
-                        { label: 'FLOOR LEVEL',    value: '1st Floor',  icon: 'fa-layer-group',iconColor: 'text-orange-500'},
-                        { label: 'ROOMMATES COUNT',value: '1 Roommate', icon: 'fa-user-friends',iconColor: 'text-green-500'},
+                        { label: 'ROOM NUMBER',    value: roomNumber !== 'N/A' ? `Rm ${roomNumber}` : 'Not Assigned', icon: 'fa-bed',        iconColor: 'text-blue-500'      },
+                        { label: 'BLOCK / WING',   value: blockName  !== 'N/A' ? blockName            : '—',          icon: 'fa-building',   iconColor: 'text-primary-light' },
+                        { label: 'FLOOR LEVEL',    value: floorNumber !== 'N/A' ? `Floor ${floorNumber}` : '—',       icon: 'fa-layer-group',iconColor: 'text-orange-500'    },
+                        { label: 'ROOMMATES COUNT',value: roommatesCount,                                              icon: 'fa-user-friends',iconColor: 'text-green-500'    },
                       ].map((item, i) => (
                         <div key={i} className="bg-gray-50/50 hover:bg-gray-50/80 rounded-xl p-4 flex items-center justify-between border border-gray-100/50 transition-colors">
                           <div>
@@ -777,13 +796,40 @@ export default function StudentDashboard({ user, onLogout }) {
                 <div className="lg:col-span-2 space-y-5">
                   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                     <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Roommates</h3>
-                    <div className="flex items-center space-x-3 py-3">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs">RS</div>
-                      <div>
-                        <p className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>Rohit Sharma</p>
-                        <p className="text-[#6B7280] font-normal" style={{ fontSize: '13px' }}>Computer Science · 2nd Year</p>
+                    {!profile?.room ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <i className="fas fa-door-open text-3xl text-gray-200 mb-3" />
+                        <p className="text-sm font-semibold text-gray-400">No room assigned yet</p>
+                        <p className="text-xs text-gray-300 mt-1">Your roommates will appear here once a room is allocated by the warden.</p>
                       </div>
-                    </div>
+                    ) : (() => {
+                      const roommates = (profile.room.assignedStudents || []).filter(
+                        r => (r._id || r) !== profile._id && (r._id || r).toString() !== profile._id?.toString()
+                      );
+                      return roommates.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <i className="fas fa-user-friends text-3xl text-gray-200 mb-3" />
+                          <p className="text-sm font-semibold text-gray-400">No roommates yet</p>
+                          <p className="text-xs text-gray-300 mt-1">You are the only occupant in this room.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {roommates.map((r, i) => {
+                            const rName = r.fullName || 'Roommate';
+                            const rInitials = rName.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                            return (
+                              <div key={r._id || i} className="flex items-center space-x-3 py-3 border-b border-gray-50 last:border-0">
+                                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs shrink-0">{rInitials}</div>
+                                <div>
+                                  <p className="font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>{rName}</p>
+                                  <p className="text-[#6B7280] font-normal" style={{ fontSize: '13px' }}>{[r.department, r.year ? `${r.year} Year` : null].filter(Boolean).join(' · ') || 'Hostel Resident'}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                     <h3 className="font-semibold text-[#1F2937] mb-4" style={{ fontSize: '18px' }}>Room Amenities</h3>
@@ -1004,10 +1050,7 @@ export default function StudentDashboard({ user, onLogout }) {
         </main>
       </div>
 
-      {/* Floating chat button (matches screenshot) */}
-      <button className="fixed bottom-6 right-6 w-12 h-12 bg-primary hover:bg-primary-light text-white rounded-full shadow-lg flex items-center justify-center transition-all z-30 hover:scale-105">
-        <i className="fas fa-comment text-base" />
-      </button>
+
 
       {/* ── MODALS ─────────────────────────────────────────────────────────── */}
       {/* My Profile */}

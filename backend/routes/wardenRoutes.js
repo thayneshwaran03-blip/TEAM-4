@@ -19,6 +19,7 @@ router.put('/complaints/:id/status', wardenController.updateComplaintStatus);
 
 // Visitor Requests
 router.get('/visitor-requests', wardenController.listVisitorRequests);
+router.post('/visitor-requests/on-the-spot', wardenController.registerVisitorOnTheSpot);
 router.put('/visitor-requests/:id', wardenController.reviewVisitorRequest);
 
 // Student Management
@@ -42,5 +43,10 @@ router.delete('/announcements/:id', wardenController.deleteAnnouncement);
 // Room Management
 router.get('/rooms', wardenController.listRooms);
 router.put('/students/:studentId/allocate-room', wardenController.allocateRoom);
+
+// Occupancy Report
+router.get('/occupancy/dashboard', wardenController.getWardenOccupancyDashboard);
+router.get('/occupancy/report', wardenController.getWardenOccupancyReport);
+router.get('/occupancy/export', wardenController.getWardenOccupancyExport);
 
 module.exports = router;

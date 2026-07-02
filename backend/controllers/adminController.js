@@ -1,10 +1,18 @@
 const Announcement = require('../models/Announcement');
 const Room = require('../models/Room');
 const User = require('../models/User');
+const LeaveRequest = require('../models/LeaveRequest');
+const Complaint = require('../models/Complaint');
+const VisitorRequest = require('../models/VisitorRequest');
+const Notification = require('../models/Notification');
 const nodemailer = require('nodemailer');
 
+const updateNotification = async (recipient, type, title, message, relatedTo, metadata = {}) => {
+  return Notification.create({ recipient, type, title, message, relatedTo, metadata });
+};
+
 // ── Helper: Send credentials email via nodemailer ───────────────────────────
-const sendCredentialsEmail = async (toEmail, tempPassword, userName, role) => {
+const sendCredentialsEmail = async (toEmail, tempPassword, userName, role, userId = '') => {
   const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
   const loginUrl = 'http://localhost:5173/login';
 
@@ -45,6 +53,11 @@ const sendCredentialsEmail = async (toEmail, tempPassword, userName, role) => {
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
                 <strong>Role:</strong> ${displayRole}
               </p>
+              ${userId ? `
+              <p style="margin: 6px 0; color: #444; font-size: 14px;">
+                <strong>${role === 'student' ? 'Student ID' : 'Employee ID'}:</strong> <code style="background: #e3ebff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #1a237e;">${userId}</code>
+              </p>
+              ` : ''}
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
                 <strong>Email:</strong> <a href="mailto:${toEmail}" style="color: #3949ab; text-decoration: none;">${toEmail}</a>
               </p>
@@ -230,10 +243,19 @@ const createStudent = async (req, res) => {
       studentRoomId = targetRoom._id;
     }
 
+    // Generate unique Student ID
+    let studentId = 'STU-' + Math.floor(100000 + Math.random() * 900000);
+    let studentIdExists = await User.findOne({ studentId });
+    while (studentIdExists) {
+      studentId = 'STU-' + Math.floor(100000 + Math.random() * 900000);
+      studentIdExists = await User.findOne({ studentId });
+    }
+
     const student = new User({
       fullName,
       registerNumber,
       rollNumber,
+      studentId,
       email: email.toLowerCase(),
       phoneNumber,
       department,
@@ -272,7 +294,7 @@ const createStudent = async (req, res) => {
     }
 
     try {
-      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student');
+      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student', studentId);
     } catch (mailErr) {
       console.error('Failed to send credentials email to student:', mailErr);
     }
@@ -451,6 +473,16 @@ const updateStudent = async (req, res) => {
     }
 
     await student.save();
+
+    await updateNotification(
+      student._id,
+      'Info',
+      'Profile Updated',
+      'Your profile details or room allocation have been updated by the hostel administration.',
+      student.room || null,
+      { status: 'Updated' }
+    );
+
     return res.status(200).json({ success: true, message: 'Student updated successfully', student });
   } catch (error) {
     console.error('Update Student Error:', error);
@@ -691,6 +723,12 @@ const deleteWarden = async (req, res) => {
     if (!warden || warden.role !== 'warden') {
       return res.status(404).json({ success: false, message: 'Warden not found' });
     }
+
+    // Nullify warden reference on all linked records to preserve history
+    await LeaveRequest.updateMany({ warden: id }, { $set: { warden: null } });
+    await Complaint.updateMany({ warden: id }, { $set: { warden: null } });
+    await VisitorRequest.updateMany({ warden: id }, { $set: { warden: null } });
+
     await User.findByIdAndDelete(id);
     return res.status(200).json({ success: true, message: 'Warden deleted successfully' });
   } catch (error) {
@@ -698,6 +736,7 @@ const deleteWarden = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Unable to delete warden', error: error.message });
   }
 };
+
 
 const resetWardenPassword = async (req, res) => {
   try {
@@ -725,6 +764,207 @@ const resetWardenPassword = async (req, res) => {
   }
 };
 
+// Leave Requests Management
+const listLeaveRequests = async (req, res) => {
+  try {
+    const leaveRequests = await LeaveRequest.find()
+      .populate({ path: 'student', select: 'fullName email phoneNumber block hostelName' })
+      .populate({ path: 'room', select: 'roomNumber blockName' })
+      .populate({ path: 'warden', select: 'fullName email' })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, leaveRequests });
+  } catch (error) {
+    console.error('Admin List Leave Requests Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to retrieve leave requests', error: error.message });
+  }
+};
+
+const reviewLeaveRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, comment } = req.body;
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Action must be approve or reject' });
+    }
+
+    const leaveRequest = await LeaveRequest.findById(id).populate('student', 'fullName');
+    if (!leaveRequest) {
+      return res.status(404).json({ success: false, message: 'Leave request not found' });
+    }
+
+    if (leaveRequest.status !== 'Pending') {
+      return res.status(400).json({ success: false, message: 'Only pending leave requests can be reviewed' });
+    }
+
+    if (action === 'approve') {
+      leaveRequest.status = 'Approved';
+      leaveRequest.approvedBy = req.user._id;
+      leaveRequest.rejectedBy = null;
+      leaveRequest.history.push({ status: 'Approved', changedBy: req.user._id, comment: comment || 'Leave approved by admin' });
+      await updateNotification(
+        leaveRequest.student._id,
+        'Leave',
+        'Leave Request Approved',
+        `Your leave request has been approved by administrator ${req.user.fullName}.`,
+        leaveRequest._id,
+        { status: 'Approved' }
+      );
+    } else {
+      leaveRequest.status = 'Rejected';
+      leaveRequest.rejectedBy = req.user._id;
+      leaveRequest.approvedBy = null;
+      leaveRequest.history.push({ status: 'Rejected', changedBy: req.user._id, comment: comment || 'Leave rejected by admin' });
+      await updateNotification(
+        leaveRequest.student._id,
+        'Leave',
+        'Leave Request Rejected',
+        `Your leave request has been rejected by administrator ${req.user.fullName}.`,
+        leaveRequest._id,
+        { status: 'Rejected' }
+      );
+    }
+
+    await leaveRequest.save();
+    return res.status(200).json({ success: true, message: `Leave request ${action}d successfully`, leaveRequest });
+  } catch (error) {
+    console.error('Admin Review Leave Request Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to review leave request', error: error.message });
+  }
+};
+
+// Complaints Management
+const listComplaints = async (req, res) => {
+  try {
+    const complaints = await Complaint.find()
+      .populate({ path: 'student', select: 'fullName email room block hostelName' })
+      .populate({ path: 'warden', select: 'fullName email' })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, complaints });
+  } catch (error) {
+    console.error('Admin List Complaints Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to retrieve complaints', error: error.message });
+  }
+};
+
+const updateComplaintStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, assignedTeam, comment } = req.body;
+
+    const statusMap = {
+      accept: 'In Progress',
+      assign: 'In Progress',
+      in_progress: 'In Progress',
+      resolve: 'Resolved',
+      reject: 'Rejected',
+    };
+
+    if (!statusMap[action]) {
+      return res.status(400).json({ success: false, message: 'Invalid complaint action' });
+    }
+
+    const complaint = await Complaint.findById(id).populate('student', 'fullName');
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found' });
+    }
+
+    if (complaint.status === 'Resolved' || complaint.status === 'Rejected') {
+      return res.status(400).json({ success: false, message: 'Cannot modify a closed complaint' });
+    }
+
+    complaint.status = statusMap[action];
+    if (assignedTeam) {
+      complaint.assignedTeam = assignedTeam;
+    }
+    complaint.history.push({ status: complaint.status, changedBy: req.user._id, comment: comment || `Complaint status updated by admin to ${statusMap[action]}` });
+    await complaint.save();
+
+    await updateNotification(
+      complaint.student._id,
+      'Complaint',
+      `Complaint Updated: ${complaint.status}`,
+      `Your complaint status has been updated to ${complaint.status} by administrator ${req.user.fullName}.`,
+      complaint._id,
+      { status: complaint.status }
+    );
+
+    return res.status(200).json({ success: true, message: 'Complaint status updated successfully', complaint });
+  } catch (error) {
+    console.error('Admin Update Complaint Status Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to update complaint status', error: error.message });
+  }
+};
+
+// Visitor Requests Management
+const listVisitorRequests = async (req, res) => {
+  try {
+    const visitorRequests = await VisitorRequest.find()
+      .populate({ path: 'student', select: 'fullName email room block hostelName' })
+      .populate({ path: 'warden', select: 'fullName email' })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, visitorRequests });
+  } catch (error) {
+    console.error('Admin List Visitor Requests Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to retrieve visitor requests', error: error.message });
+  }
+};
+
+const reviewVisitorRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, comment } = req.body;
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Action must be approve or reject' });
+    }
+
+    const visitorRequest = await VisitorRequest.findById(id).populate('student', 'fullName');
+    if (!visitorRequest) {
+      return res.status(404).json({ success: false, message: 'Visitor request not found' });
+    }
+
+    if (visitorRequest.status !== 'Pending') {
+      return res.status(400).json({ success: false, message: 'Only pending visitor requests can be reviewed' });
+    }
+
+    if (action === 'approve') {
+      visitorRequest.status = 'Approved';
+      visitorRequest.reviewedBy = req.user._id;
+      visitorRequest.history.push({ status: 'Approved', changedBy: req.user._id, comment: comment || 'Visitor request approved by admin' });
+      await updateNotification(
+        visitorRequest.student._id,
+        'Visitor',
+        'Visitor Request Approved',
+        `Your visitor request has been approved by administrator ${req.user.fullName}.`,
+        visitorRequest._id,
+        { status: 'Approved' }
+      );
+    } else {
+      visitorRequest.status = 'Rejected';
+      visitorRequest.reviewedBy = req.user._id;
+      visitorRequest.history.push({ status: 'Rejected', changedBy: req.user._id, comment: comment || 'Visitor request rejected by admin' });
+      await updateNotification(
+        visitorRequest.student._id,
+        'Visitor',
+        'Visitor Request Rejected',
+        `Your visitor request has been rejected by administrator ${req.user.fullName}.`,
+        visitorRequest._id,
+        { status: 'Rejected' }
+      );
+    }
+
+    await visitorRequest.save();
+    return res.status(200).json({ success: true, message: `Visitor request ${action}d successfully`, visitorRequest });
+  } catch (error) {
+    console.error('Admin Review Visitor Request Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to review visitor request', error: error.message });
+  }
+};
+
 module.exports = {
   createAnnouncement,
   listAnnouncements,
@@ -742,4 +982,10 @@ module.exports = {
   updateWarden,
   deleteWarden,
   resetWardenPassword,
+  listLeaveRequests,
+  reviewLeaveRequest,
+  listComplaints,
+  updateComplaintStatus,
+  listVisitorRequests,
+  reviewVisitorRequest,
 };

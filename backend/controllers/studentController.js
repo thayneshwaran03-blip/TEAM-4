@@ -24,7 +24,11 @@ const getStudentProfile = async (req, res) => {
       .select('-password -resetOtp -resetOtpExpiry')
       .populate({
         path: 'room',
-        select: 'roomNumber blockName floorNumber capacity occupiedBeds status',
+        select: 'roomNumber blockName floorNumber capacity occupiedBeds status assignedStudents',
+        populate: {
+          path: 'assignedStudents',
+          select: 'fullName department year',
+        },
       });
 
     if (!student) {
@@ -60,7 +64,11 @@ const updateStudentProfile = async (req, res) => {
       select: '-password -resetOtp -resetOtpExpiry',
     }).populate({
       path: 'room',
-      select: 'roomNumber blockName floorNumber capacity occupiedBeds status',
+      select: 'roomNumber blockName floorNumber capacity occupiedBeds status assignedStudents',
+      populate: {
+        path: 'assignedStudents',
+        select: 'fullName department year',
+      },
     });
 
     if (!updatedStudent) {
@@ -147,7 +155,25 @@ const submitLeaveRequest = async (req, res) => {
       history: [{ status: 'Pending', changedBy: student._id, comment: 'Leave request submitted' }],
     });
 
-    const warden = await User.findOne({ role: 'warden' }).select('_id');
+    const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
+    const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
+    const warden = await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel,
+      assignedBlocks: { $in: blocksToTry }
+    }) || await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel
+    }) || await User.findOne({ role: 'warden' });
+
     if (warden) {
       leaveRequest.warden = warden._id;
       await leaveRequest.save();
@@ -262,16 +288,39 @@ const submitComplaint = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Complaint category, title, and description are required' });
     }
 
+    const student = await User.findById(req.user._id).populate('room');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
     const complaint = await Complaint.create({
-      student: req.user._id,
+      student: student._id,
       category,
       title,
       description,
       priority: priority || 'Medium',
-      history: [{ status: 'Pending', changedBy: req.user._id, comment: 'Complaint submitted' }],
+      history: [{ status: 'Pending', changedBy: student._id, comment: 'Complaint submitted' }],
     });
 
-    const warden = await User.findOne({ role: 'warden' }).select('_id');
+    const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
+    const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
+    const warden = await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel,
+      assignedBlocks: { $in: blocksToTry }
+    }) || await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel
+    }) || await User.findOne({ role: 'warden' });
+
     if (warden) {
       complaint.warden = warden._id;
       await complaint.save();
@@ -279,9 +328,9 @@ const submitComplaint = async (req, res) => {
         warden._id,
         'Complaint',
         'New Complaint Submitted',
-        `A new complaint has been submitted by ${req.user.fullName}.`,
+        `A new complaint has been submitted by ${student.fullName}.`,
         complaint._id,
-        { student: req.user._id }
+        { student: student._id }
       );
     }
 
@@ -318,21 +367,44 @@ const submitVisitorRequest = async (req, res) => {
   try {
     const { visitorName, relationship, phoneNumber, visitDate, expectedArrivalTime } = req.body;
 
-    if (!visitorName || !relationship || !phoneNumber || !visitDate || !expectedArrivalTime) {
+    if (!visitorName || !relationship || !phoneNumber || !visitDate) {
       return res.status(400).json({ success: false, message: 'All visitor request fields are required' });
     }
 
+    const student = await User.findById(req.user._id).populate('room');
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
     const request = await VisitorRequest.create({
-      student: req.user._id,
+      student: student._id,
       visitorName,
       relationship,
       phoneNumber,
       visitDate,
-      expectedArrivalTime,
-      history: [{ status: 'Pending', changedBy: req.user._id, comment: 'Visitor request submitted' }],
+      expectedArrivalTime: expectedArrivalTime || 'Anytime',
+      history: [{ status: 'Pending', changedBy: student._id, comment: 'Visitor request submitted' }],
     });
 
-    const warden = await User.findOne({ role: 'warden' }).select('_id');
+    const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
+    const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
+    const warden = await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel,
+      assignedBlocks: { $in: blocksToTry }
+    }) || await User.findOne({
+      role: 'warden',
+      assignedHostel: studentHostel
+    }) || await User.findOne({ role: 'warden' });
+
     if (warden) {
       request.warden = warden._id;
       await request.save();
@@ -340,9 +412,9 @@ const submitVisitorRequest = async (req, res) => {
         warden._id,
         'Visitor',
         'New Visitor Request',
-        `A new visitor request has been submitted by ${req.user.fullName}.`,
+        `A new visitor request has been submitted by ${student.fullName}.`,
         request._id,
-        { student: req.user._id }
+        { student: student._id }
       );
     }
 

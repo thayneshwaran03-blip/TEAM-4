@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 export default function WardenDashboard({ user, onLogout }) {
 // Variables name, email, initials are declared below the state hooks to access dynamic state
@@ -46,9 +48,31 @@ export default function WardenDashboard({ user, onLogout }) {
   const [wardenName,      setWardenName]      = useState('');
   const [wardenPhone,     setWardenPhone]     = useState('');
   const [rooms,           setRooms]           = useState([]);
+  const [occupancyStats,  setOccupancyStats]  = useState({
+    totalCapacity: 0,
+    occupiedBeds: 0,
+    availableBeds: 0,
+    occupancyRate: 0,
+    occupiedRooms: 0,
+    vacantRooms: 0
+  });
+  const [reportFloor,     setReportFloor]     = useState('');
+  const [reportSearch,    setReportSearch]    = useState('');
+  const [sortField,       setSortField]       = useState('roomNumber');
+  const [sortOrder,       setSortOrder]       = useState('asc');
+  const [occupancyPage,   setOccupancyPage]   = useState(1);
+  const occupancyPerPage = 8;
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showRoomModal,   setShowRoomModal]   = useState(false);
   const [allocRoomId,     setAllocRoomId]     = useState('');
+
+  // On-the-spot visitor registration states
+  const [onSpotStudentId, setOnSpotStudentId] = useState('');
+  const [onSpotVisitorName, setOnSpotVisitorName] = useState('');
+  const [onSpotRelationship, setOnSpotRelationship] = useState('');
+  const [onSpotPhoneNumber, setOnSpotPhoneNumber] = useState('');
+  const [onSpotVisitDate, setOnSpotVisitDate] = useState('');
+  const [onSpotPurpose, setOnSpotPurpose] = useState('');
 
   const name     = profile?.fullName || user?.fullName || 'Keerthana';
   const email    = profile?.email    || user?.email    || 'keerthana.warden@hostel.com';
@@ -56,19 +80,25 @@ export default function WardenDashboard({ user, onLogout }) {
 
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = {};
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window.__forceLogout === 'function') window.__forceLogout();
+      }
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
     }
     return res.json();
   };
 
+
   const fetchAll = async () => {
     try {
-      const [leavesResp, complaintsResp, visitorsResp, annResp, studentsResp, notifsResp, profileResp, roomsResp] = await Promise.all([
+      const [leavesResp, complaintsResp, visitorsResp, annResp, studentsResp, notifsResp, profileResp, roomsResp, occDashResp] = await Promise.all([
         apiFetch('/warden/leave-requests').catch(() => ({ leaveRequests: [] })),
         apiFetch('/warden/complaints').catch(() => ({ complaints: [] })),
         apiFetch('/warden/visitor-requests').catch(() => ({ visitorRequests: [] })),
@@ -76,7 +106,8 @@ export default function WardenDashboard({ user, onLogout }) {
         apiFetch('/warden/students').catch(() => ({ students: [] })),
         apiFetch('/warden/notifications').catch(() => ({ notifications: [] })),
         apiFetch('/warden/profile').catch(() => null),
-        apiFetch('/warden/rooms').catch(() => ({ rooms: [] })),
+        apiFetch('/warden/occupancy/report').catch(() => ({ rooms: [] })),
+        apiFetch('/warden/occupancy/dashboard').catch(() => ({ stats: {} }))
       ]);
 
       setLeaveRequests(leavesResp.leaveRequests || []);
@@ -86,6 +117,9 @@ export default function WardenDashboard({ user, onLogout }) {
       setStudents(studentsResp.students || []);
       setNotifications(notifsResp.notifications || []);
       setRooms(roomsResp.rooms || []);
+      if (occDashResp && occDashResp.stats) {
+        setOccupancyStats(occDashResp.stats);
+      }
       if (profileResp && profileResp.warden) {
         const w = profileResp.warden;
         setProfile(w);
@@ -182,6 +216,43 @@ export default function WardenDashboard({ user, onLogout }) {
     } catch (err) {
       console.error(err);
       showToast(`Failed to update visitor request.`, 'error');
+    }
+  };
+
+  const handleRegisterVisitorOnSpot = async (e) => {
+    e.preventDefault();
+    if (!onSpotStudentId || !onSpotVisitorName || !onSpotRelationship || !onSpotPhoneNumber || !onSpotVisitDate) {
+      showToast('Please fill all required fields.', 'error');
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/warden/visitor-requests/on-the-spot', {
+        method: 'POST',
+        body: JSON.stringify({
+          studentIdentifier: onSpotStudentId,
+          visitorName: onSpotVisitorName,
+          relationship: onSpotRelationship,
+          phoneNumber: onSpotPhoneNumber,
+          visitDate: onSpotVisitDate,
+          purpose: onSpotPurpose
+        })
+      });
+
+      if (res.success) {
+        showToast('Visitor registered successfully on the spot!');
+        setOnSpotStudentId('');
+        setOnSpotVisitorName('');
+        setOnSpotRelationship('');
+        setOnSpotPhoneNumber('');
+        setOnSpotVisitDate('');
+        setOnSpotPurpose('');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to register visitor.', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'Server error', 'error');
     }
   };
 
@@ -293,6 +364,246 @@ export default function WardenDashboard({ user, onLogout }) {
       console.error(err);
       showToast('Failed to allocate room.', 'error');
     }
+  };
+
+  const exportOccupancyReportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    doc.setFillColor(26, 35, 126);
+    doc.rect(0, 0, 297, 25, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('HostelHub - Occupancy Report', 15, 16);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    const hostel = profile?.assignedHostel || 'N/A';
+    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
+    const warden = profile?.fullName || 'N/A';
+    const dateStr = new Date().toLocaleString();
+
+    doc.text(`Warden Name: ${warden}`, 15, 35);
+    doc.text(`Hostel: ${hostel}`, 15, 41);
+    doc.text(`Assigned Block: ${block}`, 15, 47);
+    doc.text(`Date & Time: ${dateStr}`, 15, 53);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Dashboard Statistics', 15, 65);
+
+    const statLabels = [
+      { label: 'Total Capacity', val: `${occupancyStats.totalCapacity} Beds` },
+      { label: 'Occupied Beds', val: `${occupancyStats.occupiedBeds} Beds` },
+      { label: 'Available Beds', val: `${occupancyStats.availableBeds} Beds` },
+      { label: 'Occupancy Rate', val: `${occupancyStats.occupancyRate}%` },
+      { label: 'Occupied Rooms', val: `${occupancyStats.occupiedRooms} Rooms` },
+      { label: 'Vacant Rooms', val: `${occupancyStats.vacantRooms} Rooms` }
+    ];
+
+    let currentX = 15;
+    const cardWidth = 42;
+    const cardHeight = 18;
+
+    statLabels.forEach((stat) => {
+      doc.setFillColor(240, 244, 255);
+      doc.setDrawColor(180, 198, 252);
+      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+      
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.label, currentX + 4, 77);
+
+      doc.setTextColor(26, 35, 126);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.val, currentX + 4, 85);
+
+      currentX += cardWidth + 5;
+    });
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Occupancy Table', 15, 102);
+
+    const tableHeaders = [['Room Number', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy Status']];
+    
+    const filteredRooms = rooms.filter(r => {
+      const q = reportSearch.toLowerCase();
+      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
+      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+      return sMatch && fMatch;
+    });
+
+    const tableRows = filteredRooms.map(r => [
+      r.roomNumber,
+      r.floorNumber,
+      r.capacity,
+      r.occupiedBeds,
+      Math.max(0, r.capacity - r.occupiedBeds),
+      r.status
+    ]);
+
+    doc.autoTable({
+      startY: 108,
+      head: tableHeaders,
+      body: tableRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [26, 35, 126],
+        textColor: [255, 255, 255],
+        fontSize: 10,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [55, 65, 81],
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold' }
+      },
+      didDrawPage: (data) => {
+        const str = 'Page ' + doc.internal.getNumberOfPages();
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text(str, 280, 200, { align: 'right' });
+        doc.text('HostelHub - Centralized Hostel Management System', 15, 200);
+      }
+    });
+
+    doc.save(`Occupancy_Report_${block}_${Date.now()}.pdf`);
+  };
+
+  const triggerPrintReport = () => {
+    const hostel = profile?.assignedHostel || 'N/A';
+    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
+    const warden = profile?.fullName || 'N/A';
+    const dateStr = new Date().toLocaleString();
+
+    const printWindow = window.open('', '_blank');
+    
+    const filteredRooms = rooms.filter(r => {
+      const q = reportSearch.toLowerCase();
+      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
+      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+      return sMatch && fMatch;
+    });
+
+    const tableRowsHtml = filteredRooms.map(r => `
+      <tr>
+        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${r.roomNumber}</td>
+        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.floorNumber}</td>
+        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.capacity}</td>
+        <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #1a237e; font-weight: bold;">${r.occupiedBeds}</td>
+        <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #10b981; font-weight: bold;">${Math.max(0, r.capacity - r.occupiedBeds)}</td>
+        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
+          <span style="padding: 4px 8px; border-radius: 9999px; font-size: 11px; font-weight: 900; background-color: ${r.status === 'FULL' ? '#fef2f2' : '#ecfdf5'}; color: ${r.status === 'FULL' ? '#b91c1c' : '#047857'};">${r.status}</span>
+        </td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Occupancy Report - ${block}</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 40px; color: #333; }
+            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .header-bar h1 { margin: 0; font-size: 24px; }
+            .meta-info { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            .meta-col { flex: 1; }
+            .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 30px; }
+            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 15px; text-align: center; }
+            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+            .stat-card p.val { margin: 0; color: #1a237e; font-size: 18px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #1a237e; color: white; padding: 12px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
+            .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; border-t: 1px solid #e5e7eb; pt-10; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <h1>HostelHub - Occupancy Report</h1>
+            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
+          </div>
+          <div class="meta-info">
+            <div class="meta-col">
+              <p><strong>Warden Name:</strong> ${warden}</p>
+              <p><strong>Hostel:</strong> ${hostel}</p>
+            </div>
+            <div class="meta-col" style="text-align: right;">
+              <p><strong>Assigned Block:</strong> ${block}</p>
+              <p><strong>Date & Time:</strong> ${dateStr}</p>
+            </div>
+          </div>
+          <h2 style="font-size: 18px; border-bottom: 2px solid #1a237e; padding-bottom: 8px; margin-bottom: 15px;">Dashboard Statistics</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="label">Total Capacity</p>
+              <p class="val">${occupancyStats.totalCapacity} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Beds</p>
+              <p class="val">${occupancyStats.occupiedBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Available Beds</p>
+              <p class="val">${occupancyStats.availableBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupancy Rate</p>
+              <p class="val">${occupancyStats.occupancyRate}%</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Rooms</p>
+              <p class="val">${occupancyStats.occupiedRooms} Rooms</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Vacant Rooms</p>
+              <p class="val">${occupancyStats.vacantRooms} Rooms</p>
+            </div>
+          </div>
+          <h2 style="font-size: 18px; border-bottom: 2px solid #1a237e; padding-bottom: 8px; margin-bottom: 15px;">Detailed Occupancy List</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Room Number</th>
+                <th>Floor</th>
+                <th>Capacity</th>
+                <th>Occupied Beds</th>
+                <th>Available Beds</th>
+                <th>Occupancy Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+          <div class="footer">
+            <span>HostelHub System - Centralized Hostel Management</span>
+            <span>Printed on: ${dateStr}</span>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // ── nav config ────────────────────────────────────────────────────────────
@@ -1064,62 +1375,149 @@ export default function WardenDashboard({ user, onLogout }) {
           {activeTab === 'Visitors' && (
             <div className="space-y-6 animate-fadeIn">
               <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Visitor Management</h2>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                <div className="flex flex-col sm:flex-row gap-3 mb-5">
-                  <div className="relative flex-1">
-                    <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-                    <input
-                      type="text"
-                      placeholder="Search by visitor or student name…"
-                      value={searchVisitors}
-                      onChange={e => { setSearchVisitors(e.target.value); setCurrentPage(1); }}
-                      className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
-                    />
-                  </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* On-the-spot Registration Form */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:col-span-1 h-fit">
+                  <h3 className="font-bold text-gray-800 mb-4 flex items-center space-x-2" style={{ fontSize: '18px' }}>
+                    <i className="fas fa-user-plus text-primary text-base" />
+                    <span>On-the-Spot Registration</span>
+                  </h3>
+                  <form onSubmit={handleRegisterVisitorOnSpot} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Student ID / Reg No</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. STU-123456 or RegNo"
+                        value={onSpotStudentId}
+                        onChange={e => setOnSpotStudentId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Visitor Name</label>
+                      <input
+                        type="text"
+                        placeholder="Full Name"
+                        value={onSpotVisitorName}
+                        onChange={e => setOnSpotVisitorName(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Relationship</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Parent, Friend"
+                          value={onSpotRelationship}
+                          onChange={e => setOnSpotRelationship(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Phone Number</label>
+                        <input
+                          type="text"
+                          placeholder="10-digit number"
+                          value={onSpotPhoneNumber}
+                          onChange={e => setOnSpotPhoneNumber(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Visit Date</label>
+                      <input
+                        type="date"
+                        value={onSpotVisitDate}
+                        onChange={e => setOnSpotVisitDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Purpose of Visit</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Delivery, Query, Meet"
+                        value={onSpotPurpose}
+                        onChange={e => setOnSpotPurpose(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center space-x-1"
+                    >
+                      <i className="fas fa-plus" />
+                      <span>Register Visitor</span>
+                    </button>
+                  </form>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full" style={{ fontSize: '15px' }}>
-                    <thead>
-                      <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
-                        <th className="pb-3 text-left font-medium">Visitor Name</th>
-                        <th className="pb-3 text-left font-medium">Student</th>
-                        <th className="pb-3 text-left font-medium hidden sm:table-cell">Relationship</th>
-                        <th className="pb-3 text-left font-medium hidden md:table-cell">Visit Date</th>
-                        <th className="pb-3 text-left font-medium">Status</th>
-                        <th className="pb-3 text-left font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {paginate(filteredVisitors).map(v => (
-                        <tr key={v._id || v.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="py-4 font-semibold text-[#1F2937]">{v.visitorName}</td>
-                          <td className="py-4 text-[#374151] font-normal">{v.student?.fullName || 'N/A'}</td>
-                          <td className="py-4 text-[#374151] font-normal hidden sm:table-cell">{v.relationship}</td>
-                          <td className="py-4 text-[#374151] font-normal hidden md:table-cell">{v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'}</td>
-                          <td className="py-4"><StatusBadge status={v.status} /></td>
-                          <td className="py-4">
-                            {v.status === 'Pending' ? (
-                              <div className="flex gap-2">
-                                <button onClick={() => handleVisitorAction(v._id || v.id, 'Approved')}
-                                  className="px-3 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
-                                  <i className="fas fa-check mr-1" />Approve
-                                </button>
-                                <button onClick={() => handleVisitorAction(v._id || v.id, 'Rejected')}
-                                  className="px-3 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
-                                  <i className="fas fa-times mr-1" />Reject
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400 font-medium">Actioned</span>
-                            )}
-                          </td>
+
+                {/* Visitor Log Table */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
+                  <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                    <div className="relative flex-1">
+                      <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                      <input
+                        type="text"
+                        placeholder="Search by visitor or student name…"
+                        value={searchVisitors}
+                        onChange={e => { setSearchVisitors(e.target.value); setCurrentPage(1); }}
+                        className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full" style={{ fontSize: '15px' }}>
+                      <thead>
+                        <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
+                          <th className="pb-3 text-left font-medium">Visitor Name</th>
+                          <th className="pb-3 text-left font-medium">Student</th>
+                          <th className="pb-3 text-left font-medium hidden sm:table-cell">Relationship</th>
+                          <th className="pb-3 text-left font-medium hidden md:table-cell">Visit Date</th>
+                          <th className="pb-3 text-left font-medium">Status</th>
+                          <th className="pb-3 text-left font-medium">Actions</th>
                         </tr>
-                      ))}
-                      {filteredVisitors.length === 0 && (
-                        <tr><td colSpan={6} className="py-12 text-center text-sm text-gray-400">No visitor requests found.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {paginate(filteredVisitors).map(v => (
+                          <tr key={v._id || v.id} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="py-4 font-semibold text-[#1F2937]">{v.visitorName}</td>
+                            <td className="py-4 text-[#374151] font-normal">{v.student?.fullName || 'N/A'}</td>
+                            <td className="py-4 text-[#374151] font-normal hidden sm:table-cell">{v.relationship}</td>
+                            <td className="py-4 text-[#374151] font-normal hidden md:table-cell">{v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'}</td>
+                            <td className="py-4"><StatusBadge status={v.status} /></td>
+                            <td className="py-4">
+                              {v.status === 'Pending' ? (
+                                <div className="flex gap-2">
+                                  <button onClick={() => handleVisitorAction(v._id || v.id, 'Approved')}
+                                    className="px-3 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors">
+                                    <i className="fas fa-check mr-1" />Approve
+                                  </button>
+                                  <button onClick={() => handleVisitorAction(v._id || v.id, 'Rejected')}
+                                    className="px-3 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                                    <i className="fas fa-times mr-1" />Reject
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-400 font-medium">Actioned</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredVisitors.length === 0 && (
+                          <tr><td colSpan={6} className="py-12 text-center text-sm text-gray-400">No visitor requests found.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1181,144 +1579,212 @@ export default function WardenDashboard({ user, onLogout }) {
 
           {/* ══ OCCUPANCY REPORTS ══════════════════════════════════════════ */}
           {activeTab === 'Occupancy Reports' && (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
               <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Occupancy Reports</h2>
 
-              {/* Stats row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                {[
-                  { label: 'Total Rooms',     value: rooms.length,  icon: 'fa-building',        iconBg: 'bg-blue-50',   iconColor: 'text-blue-600'   },
-                  { label: 'Occupied Rooms',  value: rooms.filter(r => r.occupiedBeds > 0).length,  icon: 'fa-door-closed',     iconBg: 'bg-green-50',  iconColor: 'text-green-600'  },
-                  { label: 'Available Rooms', value: rooms.filter(r => r.occupiedBeds < r.capacity).length,   icon: 'fa-door-open',       iconBg: 'bg-amber-50',  iconColor: 'text-amber-600'  },
-                  { label: 'Occupied Beds',   value: rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0),  icon: 'fa-bed',             iconBg: 'bg-purple-50', iconColor: 'text-purple-600' },
-                  { label: 'Available Beds',  value: Math.max(0, rooms.reduce((acc, r) => acc + (r.capacity || 0), 0) - rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0)),  icon: 'fa-plus-square',     iconBg: 'bg-rose-50',   iconColor: 'text-rose-600'   },
-                ].map((s, i) => (
-                  <div key={i} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col">
-                    <div className={`w-9 h-9 ${s.iconBg} rounded-xl flex items-center justify-center mb-3`}>
-                      <i className={`fas ${s.icon} ${s.iconColor} text-base`} />
+              {/* KPI Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                  <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Total Capacity</span>
+                  <span className="text-2xl font-black text-gray-900 mt-1 block">
+                    {occupancyStats.totalCapacity} Beds
+                  </span>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                  <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds</span>
+                  <span className="text-2xl font-black text-primary mt-1 block">
+                    {occupancyStats.occupiedBeds} Beds
+                  </span>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                  <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds</span>
+                  <span className="text-2xl font-black text-emerald-600 mt-1 block">
+                    {occupancyStats.availableBeds} Beds
+                  </span>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                  <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-2xl font-black text-amber-500">
+                      {occupancyStats.occupancyRate}%
+                    </span>
+                    <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
+                      <div 
+                        className="bg-amber-500 h-full rounded-full" 
+                        style={{ 
+                          width: `${occupancyStats.occupancyRate}%` 
+                        }} 
+                      />
                     </div>
-                    <p className="font-bold text-[#111827] mb-0.5" style={{ fontSize: '30px' }}>{s.value}</p>
-                    <p className="text-[#6B7280] font-medium" style={{ fontSize: '13px' }}>{s.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Visual bars */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                  <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Room Occupancy by Block</h3>
-                  <div className="space-y-4">
-                    {(() => {
-                      const blockMap = {};
-                      rooms.forEach(r => {
-                        if (!blockMap[r.blockName]) blockMap[r.blockName] = { occupied: 0, total: 0 };
-                        blockMap[r.blockName].total += r.capacity;
-                        blockMap[r.blockName].occupied += r.occupiedBeds;
-                      });
-                      const blockOccupancies = Object.keys(blockMap).map(block => ({
-                        block,
-                        occupied: blockMap[block].occupied,
-                        total: blockMap[block].total
-                      })).sort((a, b) => a.block.localeCompare(b.block));
-                      if (blockOccupancies.length === 0) {
-                        return <p className="text-sm text-gray-400">No rooms allocated.</p>;
-                      }
-                      return blockOccupancies.map((b, i) => (
-                        <div key={i}>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="font-semibold text-[#1F2937]" style={{ fontSize: '14px' }}>{b.block}</span>
-                            <span className="text-[#6B7280]" style={{ fontSize: '13px' }}>{b.occupied}/{b.total} beds</span>
-                          </div>
-                          <div className="w-full bg-gray-100 rounded-full h-3">
-                            <div
-                              className="bg-primary h-3 rounded-full transition-all duration-500"
-                              style={{ width: `${b.total > 0 ? (b.occupied / b.total) * 100 : 0}%` }}
-                            />
-                          </div>
-                          <p className="text-[#6B7280] mt-1" style={{ fontSize: '11px' }}>{b.total > 0 ? Math.round((b.occupied / b.total) * 100) : 0}% occupancy</p>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                  <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Student Distribution by Department</h3>
-                  <div className="space-y-3">
-                    {(() => {
-                      const deptMap = {};
-                      students.forEach(s => {
-                        if (s.department) deptMap[s.department] = (deptMap[s.department] || 0) + 1;
-                      });
-                      const counts = Object.values(deptMap);
-                      const maxCount = counts.length > 0 ? Math.max(...counts) : 1;
-                      const deptColors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-teal-500', 'bg-indigo-500'];
-                      const deptDistribution = Object.keys(deptMap).map((dept, idx) => ({
-                        dept,
-                        count: deptMap[dept],
-                        color: deptColors[idx % deptColors.length]
-                      })).sort((a, b) => b.count - a.count);
-                      if (deptDistribution.length === 0) {
-                        return <p className="text-sm text-gray-400">No departments specified.</p>;
-                      }
-                      return deptDistribution.map((d, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${d.color}`} />
-                          <div className="flex-1">
-                            <div className="flex justify-between mb-1">
-                              <span className="text-[#374151] font-medium" style={{ fontSize: '13px' }}>{d.dept}</span>
-                              <span className="text-[#6B7280] font-medium" style={{ fontSize: '13px' }}>{d.count}</span>
-                            </div>
-                            <div className="w-full bg-gray-100 rounded-full h-2">
-                              <div className={`${d.color} h-2 rounded-full`} style={{ width: `${(d.count / maxCount) * 100}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                      ));
-                    })()}
                   </div>
                 </div>
               </div>
 
-              {/* Recent activity */}
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Detailed Room List</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full" style={{ fontSize: '15px' }}>
-                    <thead>
-                      <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
-                        <th className="pb-3 text-left font-medium">Room No.</th>
-                        <th className="pb-3 text-left font-medium">Block</th>
-                        <th className="pb-3 text-left font-medium">Capacity</th>
-                        <th className="pb-3 text-left font-medium">Occupied</th>
-                        <th className="pb-3 text-left font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {[
-                        { room: '101', block: 'A', cap: 2, occ: 2 },
-                        { room: '102', block: 'A', cap: 2, occ: 2 },
-                        { room: '103', block: 'A', cap: 2, occ: 1 },
-                        { room: '104', block: 'A', cap: 2, occ: 2 },
-                        { room: '105', block: 'A', cap: 2, occ: 2 },
-                        { room: '201', block: 'B', cap: 2, occ: 2 },
-                        { room: '202', block: 'B', cap: 2, occ: 1 },
-                        { room: '203', block: 'B', cap: 2, occ: 0 },
-                      ].map((r, i) => (
-                        <tr key={i} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="py-3.5 font-semibold text-[#1F2937]">Room {r.room}</td>
-                          <td className="py-3.5 text-[#374151] font-normal">Block {r.block}</td>
-                          <td className="py-3.5 text-[#374151] font-normal">{r.cap} beds</td>
-                          <td className="py-3.5 text-[#374151] font-normal">{r.occ}/{r.cap}</td>
-                          <td className="py-3.5">
-                            <StatusBadge status={r.occ === 0 ? 'Available' : r.occ < r.cap ? 'Partial' : 'Full'} />
+              {/* Filters */}
+              <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
+                <div className="flex justify-between items-center border-b border-gray-50 pb-3">
+                  <h3 className="text-xs font-bold text-primary uppercase tracking-widest">Filter Criteria</h3>
+                  <button
+                    onClick={() => { setReportFloor(''); setReportSearch(''); }}
+                    className="text-xs font-bold text-gray-455 hover:text-primary transition border-none bg-transparent"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans">
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-bold text-gray-600">Select Floor</label>
+                    <select value={reportFloor} onChange={e => setReportFloor(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white">
+                      <option value="">All Floors</option>
+                      <option value="1">1st Floor</option>
+                      <option value="2">2nd Floor</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] font-bold text-gray-600">Search Room</label>
+                    <input
+                      type="text"
+                      placeholder="Room No..."
+                      value={reportSearch}
+                      onChange={e => setReportSearch(e.target.value)}
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Print / Export Bar */}
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm">
+                <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+                  {rooms.filter(r => {
+                    const q = reportSearch.toLowerCase();
+                    const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
+                    const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+                    return sMatch && fMatch;
+                  }).length} Rooms Filtered
+                </span>
+                <div className="flex items-center space-x-3 w-full sm:w-auto">
+                  <button
+                    onClick={triggerPrintReport}
+                    className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                  >
+                    <i className="fas fa-print" />
+                    <span>Print Report</span>
+                  </button>
+                  <button
+                    onClick={exportOccupancyReportPDF}
+                    className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                  >
+                    <i className="fas fa-file-pdf text-rose-500" />
+                    <span>Export PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Room Table */}
+              <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider select-none">
+                      <th onClick={() => {
+                        if (sortField === 'roomNumber') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                        else { setSortField('roomNumber'); setSortOrder('asc'); }
+                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
+                        Room No. <i className={`fas fa-sort ml-1 ${sortField === 'roomNumber' ? 'text-primary' : 'text-gray-300'}`} />
+                      </th>
+                      <th onClick={() => {
+                        if (sortField === 'floorNumber') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                        else { setSortField('floorNumber'); setSortOrder('asc'); }
+                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold font-sans">
+                        Floor <i className={`fas fa-sort ml-1 ${sortField === 'floorNumber' ? 'text-primary' : 'text-gray-300'}`} />
+                      </th>
+                      <th className="px-6 py-4 text-center font-bold">Capacity</th>
+                      <th className="px-6 py-4 text-center font-bold">Occupied Beds</th>
+                      <th className="px-6 py-4 text-center font-bold">Available Beds</th>
+                      <th onClick={() => {
+                        if (sortField === 'status') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                        else { setSortField('status'); setSortOrder('asc'); }
+                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
+                        Occupancy Status <i className={`fas fa-sort ml-1 ${sortField === 'status' ? 'text-primary' : 'text-gray-300'}`} />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {(() => {
+                      const filtered = rooms.filter(r => {
+                        const q = reportSearch.toLowerCase();
+                        const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
+                        const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+                        return sMatch && fMatch;
+                      });
+
+                      const sortedRooms = [...filtered].sort((a, b) => {
+                        let vA = a[sortField] || ''; let vB = b[sortField] || '';
+                        return sortOrder === 'asc' ? String(vA).localeCompare(String(vB)) : String(vB).localeCompare(String(vA));
+                      });
+
+                      const pageRooms = sortedRooms.slice((occupancyPage - 1) * occupancyPerPage, occupancyPage * occupancyPerPage);
+
+                      if (pageRooms.length === 0) return (
+                        <tr><td colSpan="6" className="px-6 py-12 text-center text-gray-400 font-medium">No rooms matched the filter criteria.</td></tr>
+                      );
+
+                      return pageRooms.map((room, idx) => (
+                        <tr key={room._id || idx} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-6 py-4 text-left font-bold text-gray-800">{room.roomNumber}</td>
+                          <td className="px-6 py-4 text-left font-medium text-gray-650">{room.floorNumber}</td>
+                          <td className="px-6 py-4 text-center font-semibold text-gray-600">{room.capacity}</td>
+                          <td className="px-6 py-4 text-center font-bold text-primary">{room.occupiedBeds}</td>
+                          <td className="px-6 py-4 text-center font-bold text-emerald-600">{room.availableBeds}</td>
+                          <td className="px-6 py-4 text-left font-semibold">
+                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              room.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            }`}>{room.status}</span>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
               </div>
+
+              {/* Pagination Controls */}
+              {rooms.filter(r => {
+                const q = reportSearch.toLowerCase();
+                const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
+                const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+                return sMatch && fMatch;
+              }).length > occupancyPerPage && (
+                <div className="flex justify-between items-center bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm font-sans">
+                  <button
+                    disabled={occupancyPage === 1}
+                    onClick={() => setOccupancyPage(p => Math.max(1, p - 1))}
+                    className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-gray-500 font-medium">
+                    Page {occupancyPage} of {Math.ceil(rooms.filter(r => {
+                      const q = reportSearch.toLowerCase();
+                      const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
+                      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+                      return sMatch && fMatch;
+                    }).length / occupancyPerPage)}
+                  </span>
+                  <button
+                    disabled={occupancyPage * occupancyPerPage >= rooms.filter(r => {
+                      const q = reportSearch.toLowerCase();
+                      const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
+                      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+                      return sMatch && fMatch;
+                    }).length}
+                    onClick={() => setOccupancyPage(p => p + 1)}
+                    className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

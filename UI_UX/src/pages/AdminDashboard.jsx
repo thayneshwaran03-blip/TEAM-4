@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 export default function AdminDashboard({ user, onLogout }) {
   const name = user ? user.fullName : 'System Admin';
@@ -57,15 +59,25 @@ export default function AdminDashboard({ user, onLogout }) {
 
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const headers = {};
+    // Only add Content-Type when there is a request body
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API}/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
+      // On 401 (token expired) or 403 (wrong role) → force re-login
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window.__forceLogout === 'function') {
+          window.__forceLogout();
+        }
+      }
       throw new Error(`${res.status} ${res.statusText} - ${text}`);
     }
     return res.json();
   };
+
 
   // ── Student / Warden / Room API State ─────────────────────────────────────
   const [students, setStudents] = useState([]);
@@ -83,6 +95,17 @@ export default function AdminDashboard({ user, onLogout }) {
   const [roomSearch, setRoomSearch] = useState('');
   const [roomFilterBlock, setRoomFilterBlock] = useState('');
   const [roomFilterStatus, setRoomFilterStatus] = useState('');
+
+  // Leaves / Complaints / Visitors / Announcements UI States
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [complaintSearch, setComplaintSearch] = useState('');
+  const [visitorSearch, setVisitorSearch] = useState('');
+  const [announcementSearch, setAnnouncementSearch] = useState('');
+  const [leavesPage, setLeavesPage] = useState(1);
+  const [complaintsPage, setComplaintsPage] = useState(1);
+  const [visitorsPage, setVisitorsPage] = useState(1);
+  const [announcementsPage, setAnnouncementsPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
 
   const [announcements, setAnnouncements] = useState([]);
   const [stats, setStats] = useState([]);
@@ -277,11 +300,43 @@ export default function AdminDashboard({ user, onLogout }) {
       }
     } catch (err) {
       console.error('Fetch Announcements Error:', err);
-      // Fallback dummy announcements
       setAnnouncements([
         { _id: 'a1', title: 'Hostel Maintenance Schedule', description: 'Block A maintenance will occur this weekend. Water supply will be limited from 9 AM to 1 PM.', priority: 'High', visibleTo: 'all', pinned: true, createdAt: '2026-06-29' },
         { _id: 'a2', title: 'Curfew Timing Notice', description: 'All students must be inside the hostel gates by 9:00 PM starting tomorrow.', priority: 'Normal', visibleTo: 'student', pinned: false, createdAt: '2026-06-28' }
       ]);
+    }
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const data = await apiFetch('/admin/leaves');
+      if (data.success) {
+        setLeaves(data.leaveRequests);
+      }
+    } catch (err) {
+      console.error('Fetch Leaves Error:', err);
+    }
+  };
+
+  const fetchComplaints = async () => {
+    try {
+      const data = await apiFetch('/admin/complaints');
+      if (data.success) {
+        setComplaints(data.complaints);
+      }
+    } catch (err) {
+      console.error('Fetch Complaints Error:', err);
+    }
+  };
+
+  const fetchVisitors = async () => {
+    try {
+      const data = await apiFetch('/admin/visitors');
+      if (data.success) {
+        setVisitors(data.visitorRequests);
+      }
+    } catch (err) {
+      console.error('Fetch Visitors Error:', err);
     }
   };
 
@@ -290,28 +345,31 @@ export default function AdminDashboard({ user, onLogout }) {
       const sData = await apiFetch('/admin/students').catch(() => ({ students: [] }));
       const wData = await apiFetch('/admin/wardens').catch(() => ({ wardens: [] }));
       const rData = await apiFetch('/admin/rooms').catch(() => ({ rooms: [] }));
+      const lData = await apiFetch('/admin/leaves').catch(() => ({ leaveRequests: [] }));
+      const cData = await apiFetch('/admin/complaints').catch(() => ({ complaints: [] }));
+      const vData = await apiFetch('/admin/visitors').catch(() => ({ visitorRequests: [] }));
+      const aData = await apiFetch('/admin/announcements').catch(() => ({ announcements: [] }));
 
-      const studentCount = sData.students ? sData.students.length : 14;
-      const wardenCount = wData.wardens ? wData.wardens.length : 3;
-      const roomCount = rData.rooms ? rData.rooms.length : 4;
+      const studentCount = sData.students ? sData.students.length : 0;
+      const wardenCount = wData.wardens ? wData.wardens.length : 0;
+      const roomCount = rData.rooms ? rData.rooms.length : 0;
+      const pendingLeaves = lData.leaveRequests ? lData.leaveRequests.filter(l => l.status === 'Pending').length : 0;
+      const pendingComplaints = cData.complaints ? cData.complaints.filter(c => c.status === 'Pending' || c.status === 'Open').length : 0;
+      const visitorsCount = vData.visitorRequests ? vData.visitorRequests.length : 0;
+      const activeAnnouncementsCount = aData.announcements ? aData.announcements.length : 0;
 
       let occupiedBeds = 0;
       if (rData.rooms && rData.rooms.length > 0) {
         rData.rooms.forEach(r => occupiedBeds += (r.occupiedBeds || 0));
-      } else {
-        occupiedBeds = 14; // Fallback aggregation from mock rooms
       }
 
-      const totalCapacity = 256; // 128 + 128
-      const availableBeds = totalCapacity - occupiedBeds;
-
       setStats([
-        { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600' },
-        { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600' },
-        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: leaves.filter(l => l.status === 'Pending').length.toString(), colorBg: 'bg-orange-50 text-orange-600' },
-        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: complaints.filter(c => c.status === 'Pending').length.toString(), colorBg: 'bg-red-50 text-red-600' },
-        { icon: 'fa-address-card', label: 'Visitors Today', value: visitors.length.toString(), colorBg: 'bg-indigo-50 text-indigo-600' },
-        { icon: 'fa-bullhorn', label: 'Active Announcements', value: announcements.length.toString(), colorBg: 'bg-yellow-50 text-yellow-600' }
+        { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600', tab: 'students' },
+        { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600', tab: 'wardens' },
+        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: pendingLeaves.toString(), colorBg: 'bg-orange-50 text-orange-600', tab: 'leaves' },
+        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: pendingComplaints.toString(), colorBg: 'bg-red-50 text-red-600', tab: 'complaints' },
+        { icon: 'fa-address-card', label: 'Visitors Today', value: visitorsCount.toString(), colorBg: 'bg-indigo-50 text-indigo-600', tab: 'visitors' },
+        { icon: 'fa-bullhorn', label: 'Active Announcements', value: activeAnnouncementsCount.toString(), colorBg: 'bg-yellow-50 text-yellow-600', tab: 'announcements' }
       ]);
     } catch (err) {
       console.error('Fetch Stats Error:', err);
@@ -323,6 +381,9 @@ export default function AdminDashboard({ user, onLogout }) {
     fetchWardens();
     fetchRooms();
     fetchAnnouncements();
+    fetchLeaves();
+    fetchComplaints();
+    fetchVisitors();
     fetchStats();
   }, [studentSearch, studentFilterBlock, studentFilterHostel, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
 
@@ -444,7 +505,10 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg(data.message || 'Error occurred saving details.', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      const msg = err?.message || '';
+      // Show the backend error text if available, else generic message
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Server connection failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -506,9 +570,12 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg(data.message || 'Validation error saving warden.', 'error');
       }
     } catch (err) {
-      showToastMsg('Server connection failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Server connection failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
+
 
   const toggleStudentStatus = async (student) => {
     try {
@@ -552,9 +619,13 @@ export default function AdminDashboard({ user, onLogout }) {
         setStudentToDelete(null);
         fetchStudents();
         fetchStats();
+      } else {
+        showToastMsg(data.message || 'Deletion failed.', 'error');
       }
     } catch (err) {
-      showToastMsg('Deletion failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Deletion failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -568,9 +639,13 @@ export default function AdminDashboard({ user, onLogout }) {
         setWardenToDelete(null);
         fetchWardens();
         fetchStats();
+      } else {
+        showToastMsg(data.message || 'Deletion failed.', 'error');
       }
     } catch (err) {
-      showToastMsg('Deletion failed.', 'error');
+      const msg = err?.message || '';
+      const display = msg.includes(' - ') ? msg.split(' - ').slice(1).join(' - ') : 'Deletion failed. Please try again.';
+      showToastMsg(display, 'error');
     }
   };
 
@@ -722,35 +797,403 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   // ── Interactive Actions for Leave, Complaint, and Visitor Requests ──────
-  const handleLeaveApproval = (id, status) => {
-    setLeaves(leaves.map(l => l._id === id ? { ...l, status } : l));
-    showToastMsg(`Leave request marked as ${status}.`);
+  const handleLeaveApproval = async (id, status) => {
+    try {
+      const action = status === 'Approved' ? 'approve' : 'reject';
+      await apiFetch(`/admin/leaves/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Leave request marked as ${status}.`);
+      fetchLeaves();
+      fetchStats();
+    } catch (err) {
+      console.error('Leave Approval Error:', err);
+      showToastMsg('Failed to process leave approval.', 'error');
+    }
   };
 
-  const handleComplaintStatus = (id, status) => {
-    setComplaints(complaints.map(c => c._id === id ? { ...c, status } : c));
-    showToastMsg(`Complaint status updated to ${status}.`);
+  const handleComplaintStatus = async (id, status) => {
+    try {
+      let action = 'accept';
+      if (status === 'Resolved') action = 'resolve';
+      if (status === 'Rejected') action = 'reject';
+      await apiFetch(`/admin/complaints/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Complaint status updated to ${status}.`);
+      fetchComplaints();
+      fetchStats();
+    } catch (err) {
+      console.error('Complaint Status Update Error:', err);
+      showToastMsg('Failed to update complaint status.', 'error');
+    }
   };
 
-  const handleVisitorApproval = (id, status) => {
-    setVisitors(visitors.map(v => v._id === id ? { ...v, status } : v));
-    showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
+  const StatusBadge = ({ status }) => {
+    const cfg = {
+      Pending:     'bg-amber-50 text-amber-600',
+      Approved:    'bg-green-50 text-green-600',
+      Rejected:    'bg-red-50 text-red-600',
+      'In Progress': 'bg-blue-50 text-blue-600',
+      Resolved:    'bg-emerald-50 text-emerald-600',
+      Active:      'bg-green-50 text-green-600',
+      'On Leave':  'bg-orange-50 text-orange-600',
+    };
+    return (
+      <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${cfg[status] || 'bg-gray-100 text-gray-500'}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const PriorityBadge = ({ priority }) => {
+    const cfg = {
+      High:   'bg-red-50 text-red-600',
+      Medium: 'bg-amber-50 text-amber-600',
+      Low:    'bg-gray-100 text-gray-500',
+      Normal: 'bg-blue-50 text-blue-600',
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] uppercase ${cfg[priority] || 'bg-gray-100 text-gray-500'}`}>
+        {priority}
+      </span>
+    );
+  };
+
+  const handleVisitorApproval = async (id, status) => {
+    try {
+      const action = status === 'Approved' ? 'approve' : 'reject';
+      await apiFetch(`/admin/visitors/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ action })
+      });
+      showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
+      fetchVisitors();
+      fetchStats();
+    } catch (err) {
+      console.error('Visitor Approval Error:', err);
+      showToastMsg('Failed to process visitor approval.', 'error');
+    }
   };
 
   // ── Helper: Printing & Export Reports ────────────────────────────────────
-  const triggerPrint = () => {
-    window.print();
+  const exportOccupancyReportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const primaryColor = [26, 35, 126];
+
+    doc.setFillColor(26, 35, 126);
+    doc.rect(0, 0, 297, 25, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('HostelHub - Hostel Occupancy Report', 15, 16);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    const dateStr = new Date().toLocaleString();
+    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
+    const academicYear = '2026 - 2027';
+
+    doc.text(`Report ID: ${reportId}`, 15, 35);
+    doc.text(`Printed By: ${name} (Admin)`, 15, 41);
+    doc.text(`Academic Year: ${academicYear}`, 15, 47);
+    doc.text(`Generated Date: ${dateStr}`, 15, 53);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Executive Summary', 15, 65);
+
+    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
+
+    const statLabels = [
+      { label: 'Total Capacity', val: `${totalBeds} Beds` },
+      { label: 'Occupied Beds', val: `${occupiedBeds} Beds` },
+      { label: 'Available Beds', val: `${availableBeds} Beds` },
+      { label: 'Occupancy Rate', val: `${occupancyRate}%` },
+      { label: 'Total Rooms', val: `${totalRooms} Rooms` },
+      { label: 'Occupied Rooms', val: `${occupiedRooms} Rooms` },
+      { label: 'Vacant Rooms', val: `${vacantRooms} Rooms` }
+    ];
+
+    let currentX = 15;
+    const cardWidth = 36;
+    const cardHeight = 18;
+
+    statLabels.forEach((stat) => {
+      doc.setFillColor(240, 244, 255);
+      doc.setDrawColor(180, 198, 252);
+      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+      
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.label, currentX + 3, 77);
+
+      doc.setTextColor(26, 35, 126);
+      doc.setFontSize(10.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.val, currentX + 3, 85);
+
+      currentX += cardWidth + 2;
+    });
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Occupancy Details', 15, 102);
+
+    const tableHeaders = [['Room Number', 'Hostel', 'Block', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy %', 'Room Status', 'Last Updated']];
+    
+    const tableRows = filteredOccupancy.map(r => [
+      r.roomNumber,
+      r.hostelName,
+      r.block,
+      r.floor,
+      r.capacity,
+      r.occupiedBeds,
+      r.availableBeds,
+      r.capacity > 0 ? `${Math.round((r.occupiedBeds / r.capacity) * 100)}%` : '0%',
+      r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL',
+      r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'
+    ]);
+
+    doc.autoTable({
+      startY: 108,
+      head: tableHeaders,
+      body: tableRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [26, 35, 126],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [55, 65, 81],
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold' }
+      },
+      didParseCell: (data) => {
+        if (data.column.index === 8 && data.cell.section === 'body') {
+          const val = data.cell.raw;
+          if (val === 'FULL') {
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (val === 'PARTIAL') {
+            data.cell.styles.textColor = [217, 119, 6];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (val === 'AVAILABLE') {
+            data.cell.styles.textColor = [4, 120, 87];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        const str = 'Page ' + doc.internal.getNumberOfPages();
+        doc.setFontSize(8.5);
+        doc.setTextColor(107, 114, 128);
+        doc.text(str, 280, 202, { align: 'right' });
+        doc.text('HostelHub © 2026 · Confidential Document · Printed By Admin', 15, 202);
+      }
+    });
+
+    doc.save(`Occupancy_Report_Admin_${Date.now()}.pdf`);
   };
 
-  const mockExport = (format) => {
-    showToastMsg(`Generating ${format} file...`);
-    setTimeout(() => {
-      showToastMsg(`Download completed for Occupancy_Report.${format === 'Excel' ? 'xlsx' : 'pdf'}`);
-    }, 1500);
+  const triggerPrintReport = () => {
+    const dateStr = new Date().toLocaleString();
+    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
+    const academicYear = '2026 - 2027';
+
+    const printWindow = window.open('', '_blank');
+
+    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
+
+    const tableRowsHtml = filteredOccupancy.map(r => {
+      const status = r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL';
+      const statusColor = status === 'FULL' ? '#b91c1c' : status === 'PARTIAL' ? '#d97706' : '#047857';
+      const statusBg = status === 'FULL' ? '#fef2f2' : status === 'PARTIAL' ? '#fffbeb' : '#ecfdf5';
+      const pct = r.capacity > 0 ? Math.round((r.occupiedBeds / r.capacity) * 100) : 0;
+      
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${r.roomNumber}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.hostelName}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.block}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.floor}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.capacity}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #1a237e; font-weight: bold;">${r.occupiedBeds}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #10b981; font-weight: bold;">${r.availableBeds}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${pct}%</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+            <span style="padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; background-color: ${statusBg}; color: ${statusColor};">${status}</span>
+          </td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Occupancy Report - Admin</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 30px; color: #333; }
+            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .header-bar h1 { margin: 0; font-size: 24px; }
+            .meta-info { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 13px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            .meta-col { flex: 1; }
+            .stats-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 25px; }
+            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; text-align: center; }
+            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+            .stat-card p.val { margin: 0; color: #1a237e; font-size: 15px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+            th { background-color: #1a237e; color: white; padding: 10px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
+            .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <h1>HostelHub - Hostel Occupancy Report</h1>
+            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
+          </div>
+          <div class="meta-info">
+            <div class="meta-col">
+              <p><strong>Printed By:</strong> ${name} (Admin)</p>
+              <p><strong>Academic Year:</strong> ${academicYear}</p>
+            </div>
+            <div class="meta-col" style="text-align: right;">
+              <p><strong>Report ID:</strong> ${reportId}</p>
+              <p><strong>Generated Date:</strong> ${dateStr}</p>
+            </div>
+          </div>
+          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Executive Summary</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="label">Total Capacity</p>
+              <p class="val">${totalBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Beds</p>
+              <p class="val">${occupiedBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Available Beds</p>
+              <p class="val">${availableBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupancy Rate</p>
+              <p class="val">${occupancyRate}%</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Total Rooms</p>
+              <p class="val">${totalRooms} Rooms</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Rooms</p>
+              <p class="val">${occupiedRooms} Rooms</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Vacant Rooms</p>
+              <p class="val">${vacantRooms} Rooms</p>
+            </div>
+          </div>
+          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Detailed Occupancy List</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Room Number</th>
+                <th>Hostel Name</th>
+                <th>Block</th>
+                <th>Floor</th>
+                <th>Capacity</th>
+                <th>Occupied Beds</th>
+                <th>Available Beds</th>
+                <th>Occupancy %</th>
+                <th>Occupancy Status</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+          <div class="footer">
+            <span>Confidential Document · HostelHub © 2026</span>
+            <span>Printed on: ${dateStr}</span>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // ── Sort & Filter logic for Occupancy Reports ────────────────────────────
-  const filteredOccupancy = occupancyData.filter(item => {
+  const getHostelName = (blockName) => {
+    if (!blockName) return 'Boys Hostel';
+    const lower = blockName.toLowerCase();
+    if (lower.includes('c') || lower.includes('d')) return 'Girls Hostel';
+    return 'Boys Hostel';
+  };
+
+  const realOccupancyData = rooms.map(room => {
+    const block = room.blockName || 'Block A';
+    const floor = room.floorNumber || '1';
+    const hostel = getHostelName(block);
+    
+    const assignedWarden = wardens.find(w => w.assignedBlocks && w.assignedBlocks.some(b => b === block || b === block.replace('Block ', '').trim()));
+    const wardenName = assignedWarden ? assignedWarden.fullName : 'Not Assigned';
+    
+    return {
+      _id: room._id || room.id,
+      hostelName: hostel,
+      block: block,
+      floor: floor,
+      roomNumber: room.roomNumber,
+      capacity: room.capacity || 4,
+      occupiedBeds: room.occupiedBeds || 0,
+      availableBeds: Math.max(0, (room.capacity || 4) - (room.occupiedBeds || 0)),
+      status: room.occupiedBeds === 0 ? 'Available' : room.occupiedBeds >= room.capacity ? 'Occupied' : 'Available',
+      warden: wardenName,
+      dept: room.assignedStudents && room.assignedStudents[0]?.department || 'N/A',
+      year: room.assignedStudents && room.assignedStudents[0]?.year || 'N/A',
+      updatedAt: room.updatedAt
+    };
+  });
+
+  const filteredOccupancy = realOccupancyData.filter(item => {
     const searchMatch = reportSearch ? (
       item.roomNumber.includes(reportSearch) ||
       item.warden.toLowerCase().includes(reportSearch.toLowerCase())
@@ -825,85 +1268,214 @@ export default function AdminDashboard({ user, onLogout }) {
         </>
       )}
 
-      {/* ── SIDEBAR Collapsible Navigation ──────────────────────────────────── */}
+      {/* ── SIDEBAR — Premium collapsible design ──────────────────────────────────── */}
       <aside
-        className={`bg-white border-r border-gray-200 p-6 flex flex-col justify-between sticky top-0 h-screen overflow-y-auto flex-shrink-0 select-none no-scrollbar transition-all duration-300 ${isSidebarExpanded ? 'w-64' : 'w-20'
-          } fixed lg:relative z-40 ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`
+          flex-shrink-0 flex flex-col bg-white border-r border-gray-100/80 h-screen
+          shadow-[1px_0_20px_rgba(0,0,0,0.04)]
+          fixed lg:relative inset-y-0 left-0 z-50
+          ${isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          transition-[width,transform] duration-[280ms] ease-in-out
+        `}
+        style={{ width: isMobileDrawerOpen ? '256px' : (isSidebarExpanded ? '256px' : '72px') }}
       >
-        <div className="space-y-6">
-          {/* Logo brand */}
-          <div className={`flex items-center pb-6 border-b border-gray-100 ${isSidebarExpanded ? 'justify-between' : 'justify-center'}`}>
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-outfit font-extrabold text-xl shadow-md shrink-0">
-                H
-              </div>
-              {isSidebarExpanded && (
-                <span className="text-lg font-bold font-outfit text-gray-900 tracking-tight">
-                  Hostel<span className="text-accent text-amber-500 font-extrabold">Hub</span>
-                </span>
-              )}
+        {/* ── Header: Logo ────────────────────────────────────────────── */}
+        <div
+          className="flex items-center shrink-0 border-b border-gray-100"
+          style={{ height: '64px', padding: '0 14px', justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'space-between' : 'center' }}
+        >
+          {/* Logo mark + wordmark */}
+          <div className="flex items-center min-w-0 overflow-hidden text-left">
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+              <i className="fas fa-home text-primary" style={{ fontSize: '15px' }} />
             </div>
-            {isSidebarExpanded && (
-              <button
-                onClick={() => setIsSidebarExpanded(false)}
-                className="hidden lg:flex w-7 h-7 bg-gray-50 border border-gray-150 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                title="Collapse Sidebar"
+            <span
+              className="font-bold text-gray-900 tracking-tight select-none whitespace-nowrap transition-all duration-[280ms] ease-in-out overflow-hidden"
+              style={{
+                fontSize: '15px',
+                marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '10px' : '0px',
+                maxWidth: isSidebarExpanded || isMobileDrawerOpen ? '140px' : '0px',
+                opacity: isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              }}
+            >
+              Hostel<span className="text-primary">Hub</span>
+            </span>
+          </div>
+
+          {/* Mobile close ✕ */}
+          <button
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-150 shrink-0"
+          >
+            <i className="fas fa-times" style={{ fontSize: '14px' }} />
+          </button>
+        </div>
+
+        {/* ── Profile section ──────────────────────────────────────────── */}
+        <div className="shrink-0">
+          {/* EXPANDED profile card */}
+          <div
+            className="overflow-hidden transition-all duration-[280ms] ease-in-out"
+            style={{
+              maxHeight: isSidebarExpanded || isMobileDrawerOpen ? '150px' : '0px',
+              opacity:   isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+              margin:    isSidebarExpanded || isMobileDrawerOpen ? '14px 12px 6px' : '0 12px',
+            }}
+          >
+            <div className="bg-primary/5 rounded-2xl border border-primary/10 p-4 flex flex-col items-center text-center">
+              <div
+                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
+                style={{ fontSize: '15px' }}
               >
-                <i className="fas fa-angle-left text-sm" />
-              </button>
-            )}
-          </div>
-
-          {/* User badge */}
-          <div className={`bg-gray-50 rounded-xl p-3 flex items-center border border-gray-100 ${isSidebarExpanded ? 'space-x-3 text-left' : 'justify-center'}`}>
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-              {initials}
-            </div>
-            {isSidebarExpanded && (
-              <div className="truncate">
-                <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
-                <p className="text-[10px] text-gray-400 font-medium tracking-wide">{role}</p>
+                {initials.charAt(0)}
               </div>
-            )}
+              <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '13px' }}>{name}</p>
+              <span
+                className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
+                style={{ fontSize: '9px', letterSpacing: '0.08em' }}
+              >
+                {role}
+              </span>
+              <p className="mt-1 text-[#9CA3AF] whitespace-nowrap" style={{ fontSize: '10.5px', fontWeight: 500 }}>System Administrator</p>
+            </div>
           </div>
 
-          {/* Nav Items */}
-          <nav className="flex flex-col space-y-1">
-            {navItems.map((item, idx) => {
-              const isSelected = activeTab === item.tab;
-              return (
+          {/* COLLAPSED mini avatar */}
+          <div
+            className="flex justify-center transition-all duration-[280ms] ease-in-out overflow-hidden"
+            style={{
+              maxHeight: !isSidebarExpanded && !isMobileDrawerOpen ? '56px' : '0px',
+              opacity:   !isSidebarExpanded && !isMobileDrawerOpen ? 1 : 0,
+              paddingTop:    !isSidebarExpanded && !isMobileDrawerOpen ? '12px' : '0px',
+              paddingBottom: !isSidebarExpanded && !isMobileDrawerOpen ? '4px' : '0px',
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
+              style={{ fontSize: '13px' }}
+              title={name}
+            >
+              {initials.charAt(0)}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Navigation ───────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-1" style={{ padding: '6px 8px' }}>
+          {navItems.map(item => {
+            const active   = activeTab === item.tab;
+            const expanded = isSidebarExpanded || isMobileDrawerOpen;
+            return (
+              <div key={item.tab} className="relative group">
                 <button
-                  key={idx}
                   onClick={() => {
                     setActiveTab(item.tab);
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center rounded-xl text-xs font-semibold tracking-wide transition-all duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-                    } ${isSelected
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  className={`relative flex items-center w-full rounded-xl mb-0.5 transition-all duration-150
+                    ${active
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-gray-500 hover:bg-gray-55 hover:text-gray-800'
                     }`}
-                  title={item.label}
+                  style={{
+                    height: '42px',
+                    padding: expanded ? '0 14px' : '0',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    fontWeight: active ? 600 : 500,
+                    fontSize: '14px',
+                  }}
                 >
-                  <i className={`fas ${item.icon} w-5 text-center ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
-                  {isSidebarExpanded && <span>{item.label}</span>}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+                  {/* Active indicator bar */}
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-full" />
+                  )}
 
-        {/* Sign Out Button */}
-        <div className="pt-6 border-t border-gray-100">
-          <button
-            onClick={onLogout}
-            className={`w-full flex items-center rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors duration-200 outline-none ${isSidebarExpanded ? 'px-4 py-2.5 space-x-3 text-left' : 'p-3 justify-center'
-              }`}
-            title="Sign Out"
-          >
-            <i className="fas fa-sign-out-alt w-5 text-center" />
-            {isSidebarExpanded && <span>Sign Out</span>}
-          </button>
+                  {/* Icon */}
+                  <span
+                    className="flex items-center justify-center shrink-0"
+                    style={{ width: '22px', height: '22px' }}
+                  >
+                    <i
+                      className={`fas ${item.icon} transition-colors`}
+                      style={{
+                        fontSize: '15px',
+                        color: active ? 'var(--tw-color-primary, #1a237e)' : undefined,
+                      }}
+                    />
+                  </span>
+
+                  {/* Label */}
+                  <span
+                    className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out text-left"
+                    style={{
+                      marginLeft: expanded ? '11px' : '0px',
+                      maxWidth:   expanded ? '160px' : '0px',
+                      opacity:    expanded ? 1 : 0,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+
+                {/* CSS Tooltip (collapsed only) */}
+                {!expanded && (
+                  <div
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                      bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                      opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                      whitespace-nowrap z-[999] shadow-lg"
+                    style={{ fontSize: '12px' }}
+                  >
+                    {item.label}
+                    <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* ── Sign Out ─────────────────────────────────────────────────── */}
+        <div className="shrink-0 border-t border-gray-100 py-2" style={{ padding: '8px 8px' }}>
+          <div className="relative group">
+            <button
+              onClick={onLogout}
+              className="flex items-center w-full rounded-xl text-red-500 hover:text-red-750 hover:bg-red-50 transition-all duration-150"
+              style={{
+                height: '42px',
+                padding: isSidebarExpanded || isMobileDrawerOpen ? '0 14px' : '0',
+                justifyContent: isSidebarExpanded || isMobileDrawerOpen ? 'flex-start' : 'center',
+                fontWeight: 600,
+                fontSize: '14px',
+              }}
+            >
+              <span className="flex items-center justify-center shrink-0" style={{ width: '22px', height: '22px' }}>
+                <i className="fas fa-sign-out-alt" style={{ fontSize: '15px' }} />
+              </span>
+              <span
+                className="whitespace-nowrap overflow-hidden transition-all duration-[280ms] ease-in-out text-left"
+                style={{
+                  marginLeft: isSidebarExpanded || isMobileDrawerOpen ? '11px' : '0px',
+                  maxWidth:   isSidebarExpanded || isMobileDrawerOpen ? '160px' : '0px',
+                  opacity:    isSidebarExpanded || isMobileDrawerOpen ? 1 : 0,
+                }}
+              >
+                Sign Out
+              </span>
+            </button>
+
+            {!isSidebarExpanded && !isMobileDrawerOpen && (
+              <div
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3
+                  bg-gray-900 text-white text-xs font-medium rounded-lg px-2.5 py-1.5
+                  opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                  whitespace-nowrap z-[999] shadow-lg"
+              >
+                Sign Out
+                <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -915,74 +1487,81 @@ export default function AdminDashboard({ user, onLogout }) {
         />
       )}
 
-      {/* ── MAIN CONTENT PANE ────────────────────────────────────────────────── */}
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto overflow-x-hidden h-screen custom-scrollbar flex flex-col justify-start max-w-full">
+      {/* ── CONTENT WRAPPER ────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden min-w-0 bg-[#F8FAFC]">
 
         {/* Top Navbar Header */}
-        <header className="flex justify-between items-center pb-5 border-b border-gray-200 mb-8 select-none">
-          <div className="flex items-center space-x-4">
+        <header
+          className="shrink-0 bg-white border-b border-gray-100 flex items-center justify-between"
+          style={{ height: '64px', zIndex: 30, padding: '0 20px' }}
+        >
+          {/* Left: Hamburger & Page Title */}
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsMobileDrawerOpen(true)}
-              className="lg:hidden w-10 h-10 border border-gray-200 bg-white hover:bg-gray-55 rounded-xl flex items-center justify-center text-gray-500 focus:outline-none"
+              onClick={() => {
+                if (window.innerWidth >= 1024) {
+                  setIsSidebarExpanded(prev => !prev);
+                } else {
+                  setIsMobileDrawerOpen(prev => !prev);
+                }
+              }}
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all duration-150 shrink-0"
+              aria-label="Toggle sidebar"
             >
-              <i className="fas fa-bars text-lg" />
+              <i className="fas fa-bars" style={{ fontSize: '16px' }} />
             </button>
-            {!isSidebarExpanded && (
-              <button
-                onClick={() => setIsSidebarExpanded(true)}
-                className="hidden lg:flex w-8 h-8 bg-white border border-gray-250 rounded-lg items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-50"
-                title="Expand Sidebar"
-              >
-                <i className="fas fa-angle-right text-base" />
-              </button>
-            )}
-            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-gray-900 font-outfit uppercase">
-              {activeTab === 'dashboard' && 'Command Analytics Center'}
-              {activeTab === 'students' && 'Student Accounts Master Portal'}
-              {activeTab === 'wardens' && 'Warden Management Console'}
-              {activeTab === 'rooms' && 'Room Assets Management'}
-              {activeTab === 'hostels' && 'Hostel Assets Management'}
-              {activeTab === 'leaves' && 'Student Leave Approvals'}
-              {activeTab === 'complaints' && 'Student Complaints Hub'}
-              {activeTab === 'visitors' && 'Visitor Security Logs'}
-              {activeTab === 'announcements' && 'Broadcast Information System'}
-              {activeTab === 'occupancy_reports' && 'Occupancy Intelligence Center'}
-              {activeTab === 'settings' && 'System Parameters Settings'}
-            </h1>
+            
+            <span className="hidden sm:block font-semibold text-[#1F2937]" style={{ fontSize: '15px' }}>
+              {activeTab === 'dashboard' && 'Dashboard'}
+              {activeTab === 'students' && 'Student Management'}
+              {activeTab === 'wardens' && 'Warden Management'}
+              {activeTab === 'rooms' && 'Room Assets'}
+              {activeTab === 'hostels' && 'Hostel Assets'}
+              {activeTab === 'leaves' && 'Leave Requests'}
+              {activeTab === 'complaints' && 'Complaints'}
+              {activeTab === 'visitors' && 'Visitor Management'}
+              {activeTab === 'announcements' && 'Announcements'}
+              {activeTab === 'occupancy_reports' && 'Occupancy Reports'}
+              {activeTab === 'settings' && 'Settings'}
+            </span>
           </div>
 
-          <div className="flex items-center space-x-4 text-xs font-semibold text-gray-600">
+          {/* Right: Notifications & Profile dropdown */}
+          <div className="flex items-center space-x-4">
+            
             {/* Notifications Button */}
             <div className="relative" ref={notifDropdownRef}>
               <button
                 onClick={() => setIsNotifOpen(!isNotifOpen)}
-                className="w-10 h-10 bg-white border border-gray-200 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-50 shadow-sm relative focus:outline-none"
+                className="relative p-2 text-gray-500 hover:bg-gray-50 rounded-xl transition-colors border border-gray-100"
               >
                 <i className="fas fa-bell text-base" />
                 {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold ring-2 ring-white">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
                 )}
               </button>
 
               {isNotifOpen && (
-                <div className="absolute right-0 mt-3 bg-white border border-gray-150 rounded-2xl shadow-xl w-72 py-3 z-50 text-left">
-                  <div className="px-4 pb-2 border-b border-gray-100 flex justify-between items-center">
-                    <span className="font-bold text-gray-800">Notifications</span>
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 p-4 origin-top-right animate-scaleIn text-left">
+                  <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-[#1F2937]">Notifications</span>
                     <button
                       onClick={() => setNotifications(notifications.map(n => ({ ...n, read: true })))}
-                      className="text-[10px] text-primary hover:underline"
+                      className="text-xs text-primary font-medium hover:underline"
                     >
                       Mark all read
                     </button>
                   </div>
-                  <div className="divide-y divide-gray-50 max-h-60 overflow-y-auto custom-scrollbar">
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                     {notifications.length === 0 ? (
                       <p className="p-4 text-xs text-gray-400 text-center">No new notifications.</p>
                     ) : (
                       notifications.map(notif => (
-                        <div key={notif._id} className={`p-3 hover:bg-gray-50 text-left text-xs ${!notif.read ? 'bg-primary-light/5' : ''}`}>
-                          <p className="font-bold text-gray-800">{notif.title}</p>
-                          <p className="text-gray-500 mt-0.5">{notif.message}</p>
+                        <div key={notif._id} className={`p-2.5 rounded-xl text-xs ${notif.read ? '' : 'bg-primary/5'}`}>
+                          <p className="text-[#374151] font-bold">{notif.title}</p>
+                          <p className="text-[#6B7280] mt-0.5">{notif.message}</p>
                         </div>
                       ))
                     )}
@@ -991,13 +1570,13 @@ export default function AdminDashboard({ user, onLogout }) {
               )}
             </div>
 
-            {/* Profile Dropdown */}
+            {/* Profile dropdown */}
             <div className="relative" ref={profileDropdownRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center space-x-2.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl shadow-sm focus:outline-none"
+                className="flex items-center space-x-3 pl-2 pr-3 py-2 rounded-xl hover:bg-gray-55 transition-colors border border-gray-100"
               >
-                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
                   {initials}
                 </div>
                 <span className="hidden md:inline font-bold text-gray-700">{name}</span>
@@ -1030,39 +1609,64 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         </header>
 
-        {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
+        {/* ── MAIN BODY ─────────────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col justify-start max-w-full custom-scrollbar text-left">
+
+          {/* ── TAB CONTENT ────────────────────────────────────────────────────── */}
 
         {/* ── TAB: DASHBOARD OVERVIEW ────────────────────────────────────────── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fadeIn text-left">
 
-            {/* Welcome banner card */}
-            <div className="bg-primary-gradient text-white rounded-3xl p-6 md:p-8 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0 w-full max-w-full">
+            {/* Welcome row (matching Student Dashboard design) */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-2xl md:text-3xl font-extrabold font-outfit">Welcome Back, {name}</h2>
-                <p className="text-white/80 text-sm mt-1.5 font-sans">
-                  Here is the operational overview for the hostel campus today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.
-                </p>
+                <h1 className="font-bold text-[#111827] leading-tight tracking-tight font-outfit text-left" style={{ fontSize: '42px' }}>
+                  Welcome Back, {name.split(' ')[0]} {"\uD83D\uDC4B"}
+                </h1>
+                <p className="text-[#4B5563] mt-2 text-left" style={{ fontSize: '18px', fontWeight: 500 }}>Here's what's happening in your hostel today.</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl px-4 py-3 border border-white/20 text-center md:text-right shrink-0">
-                <span className="text-[10px] uppercase font-bold tracking-wider block text-amber-300">Operational Status</span>
-                <span className="text-base font-extrabold">All Services Running</span>
+              
+              {/* Date card */}
+              <div className="flex items-center space-x-3 px-5 py-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 text-left shrink-0">
+                <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <i className="fas fa-calendar-alt text-primary text-base" />
+                </div>
+                <div>
+                  <p className="font-semibold text-[#1F2937] leading-tight" style={{ fontSize: '14px' }}>
+                    {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                  <p className="text-[#6B7280] font-medium" style={{ fontSize: '12px' }}>
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Expanded Stats Grid (3 columns, large items) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Expanded Stats Grid (3 columns, student card size) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {stats.map((stat, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between items-start cursor-pointer hover:-translate-y-1"
+                  onClick={() => {
+                    if (stat.tab) {
+                      setActiveTab(stat.tab);
+                    }
+                  }}
+                  className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-primary/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 cursor-pointer flex flex-col justify-between h-full group"
                 >
-                  <div className={`w-14 h-14 rounded-2xl ${stat.colorBg} flex items-center justify-center text-2xl mb-6 shadow-inner`}>
-                    <i className={`fas ${stat.icon}`} />
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`w-9 h-9 ${stat.colorBg.split(' ')[0]} rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
+                      <i className={`fas ${stat.icon} ${stat.colorBg.split(' ')[1]} text-base`} />
+                    </div>
+                    <span className="w-6 h-6 rounded-full bg-gray-55 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                      <i className="fas fa-chevron-right text-gray-400 group-hover:text-primary text-[9px] transition-transform duration-300 group-hover:translate-x-0.5" />
+                    </span>
                   </div>
                   <div>
-                    <h3 className="text-4xl font-black text-gray-900 mb-2">{stat.value}</h3>
-                    <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest leading-relaxed">{stat.label}</p>
+                    <p className="uppercase tracking-wider mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{stat.label}</p>
+                    <p className="font-semibold text-[#111827] mb-1 leading-tight" style={{ fontSize: '22px' }}>{stat.value}</p>
+                    <p className="text-[#6B7280]" style={{ fontSize: '13px', fontWeight: 500 }}>{stat.sub}</p>
                   </div>
                 </div>
               ))}
@@ -1667,54 +2271,112 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Review and process student leave applications. Administrative actions are logged automatically.</p>
             </div>
 
-            {/* Leaves List */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="divide-y divide-gray-100">
-                {leaves.length === 0 ? (
-                  <p className="p-8 text-center text-gray-400 text-sm">No leave requests currently pending.</p>
-                ) : (
-                  leaves.map(leave => (
-                    <div key={leave._id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-                      <div className="space-y-2 text-left max-w-xl">
-                        <div className="flex items-center space-x-3">
-                          <span className="font-extrabold text-gray-900 text-base">{leave.student?.fullName}</span>
-                          <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{leave.leaveType}</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-550">
-                          Period: <strong className="text-gray-800">{new Date(leave.fromDate).toLocaleDateString()}</strong> to <strong className="text-gray-800">{new Date(leave.toDate).toLocaleDateString()}</strong>
-                        </p>
-                        <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl italic">
-                          " {leave.reason} "
-                        </p>
-                      </div>
-
-                      <div className="flex items-center space-x-3 shrink-0">
-                        {leave.status === 'Pending' ? (
-                          <>
-                            <button
-                              onClick={() => handleLeaveApproval(leave._id, 'Approved')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleLeaveApproval(leave._id, 'Rejected')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs px-4 py-2.5 rounded-xl transition"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        ) : (
-                          <span className={`text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider ${leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                            }`}>{leave.status}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by student name…"
+                    value={leaveSearch}
+                    onChange={e => { setLeaveSearch(e.target.value); setLeavesPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
+                </div>
               </div>
-            </div>
 
+              {(() => {
+                const filtered = leaves.filter(l => 
+                  (l.student?.fullName || '').toLowerCase().includes(leaveSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (leavesPage - 1) * ITEMS_PER_PAGE,
+                  leavesPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left">Student</th>
+                            <th className="pb-3 text-left">Room</th>
+                            <th className="pb-3 text-left">Leave Type</th>
+                            <th className="pb-3 text-left">From</th>
+                            <th className="pb-3 text-left">To</th>
+                            <th className="pb-3 text-left">Reason</th>
+                            <th className="pb-3 text-left">Status</th>
+                            <th className="pb-3 text-left">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(l => (
+                            <tr key={l._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{l.student?.fullName || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {l.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">{l.leaveType}</td>
+                              <td className="py-4 text-gray-600">{l.fromDate ? new Date(l.fromDate).toLocaleDateString() : 'N/A'}</td>
+                              <td className="py-4 text-gray-600">{l.toDate ? new Date(l.toDate).toLocaleDateString() : 'N/A'}</td>
+                              <td className="py-4 text-gray-500 max-w-[150px] truncate" title={l.reason}>{l.reason}</td>
+                              <td className="py-4"><StatusBadge status={l.status} /></td>
+                              <td className="py-4">
+                                {l.status === 'Pending' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleLeaveApproval(l._id, 'Approved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Approve
+                                    </button>
+                                    <button onClick={() => handleLeaveApproval(l._id, 'Rejected')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">
+                                      Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Actioned</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={8} className="py-12 text-center text-gray-400">
+                                No leave requests found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((leavesPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(leavesPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setLeavesPage(p => Math.max(1, p - 1))}
+                            disabled={leavesPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setLeavesPage(p => Math.min(totalPages, p + 1))}
+                            disabled={leavesPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -1725,51 +2387,115 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Track and update student complaints. Mark tickets to resolve operational and maintenance issues.</p>
             </div>
 
-            {/* Complaints Feed */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {complaints.map(comp => (
-                <div key={comp._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition">
-                  <div className="flex justify-between items-start">
-                    <div className="text-left">
-                      <h4 className="font-extrabold text-gray-900 text-base">{comp.title}</h4>
-                      <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Category: {comp.category} · Room {comp.student?.roomNumber} ({comp.student?.block})</p>
-                    </div>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${comp.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
-                      }`}>{comp.priority} Priority</span>
-                  </div>
-
-                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{comp.description}</p>
-
-                  <div className="pt-2 border-t border-gray-50 flex justify-between items-center text-xs">
-                    <div className="flex items-center space-x-1">
-                      <span className="text-gray-400">Status:</span>
-                      <span className={`font-bold uppercase text-[10px] ${comp.status === 'Pending' ? 'text-red-500' : comp.status === 'In Progress' ? 'text-amber-500' : 'text-emerald-500'
-                        }`}>{comp.status}</span>
-                    </div>
-
-                    <div className="flex space-x-1">
-                      {comp.status !== 'Resolved' && (
-                        <>
-                          <button
-                            onClick={() => handleComplaintStatus(comp._id, 'In Progress')}
-                            className="bg-amber-55 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
-                          >
-                            Work
-                          </button>
-                          <button
-                            onClick={() => handleComplaintStatus(comp._id, 'Resolved')}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
-                          >
-                            Resolve
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by student name or complaint title…"
+                    value={complaintSearch}
+                    onChange={e => { setComplaintSearch(e.target.value); setComplaintsPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
                 </div>
-              ))}
-            </div>
+              </div>
 
+              {(() => {
+                const filtered = complaints.filter(c => 
+                  (c.student?.fullName || '').toLowerCase().includes(complaintSearch.toLowerCase()) ||
+                  (c.title || '').toLowerCase().includes(complaintSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (complaintsPage - 1) * ITEMS_PER_PAGE,
+                  complaintsPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left">Student</th>
+                            <th className="pb-3 text-left">Room</th>
+                            <th className="pb-3 text-left">Title</th>
+                            <th className="pb-3 text-left">Category</th>
+                            <th className="pb-3 text-left">Priority</th>
+                            <th className="pb-3 text-left font-medium">Status</th>
+                            <th className="pb-3 text-left font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(c => (
+                            <tr key={c._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{c.student?.fullName || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {c.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-900 font-semibold">{c.title}</td>
+                              <td className="py-4 text-gray-600">{c.category}</td>
+                              <td className="py-4">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${c.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
+                                  {c.priority}
+                                </span>
+                              </td>
+                              <td className="py-4"><StatusBadge status={c.status} /></td>
+                              <td className="py-4">
+                                {c.status !== 'Resolved' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleComplaintStatus(c._id, 'In Progress')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+                                      Work
+                                    </button>
+                                    <button onClick={() => handleComplaintStatus(c._id, 'Resolved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Resolve
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Resolved</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-gray-400">
+                                No complaints found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((complaintsPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(complaintsPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setComplaintsPage(p => Math.max(1, p - 1))}
+                            disabled={complaintsPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setComplaintsPage(p => Math.min(totalPages, p + 1))}
+                            disabled={complaintsPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -1780,59 +2506,114 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Verify guest entries and emergency visits. Review secure QR-coded pre-authorization requests.</p>
             </div>
 
-            {/* Visitor Table */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
-                    <th className="px-6 py-4 text-left">Visitor Name</th>
-                    <th className="px-6 py-4 text-left">Relationship</th>
-                    <th className="px-6 py-4 text-left">Host Student</th>
-                    <th className="px-6 py-4 text-left">Visit Date</th>
-                    <th className="px-6 py-4 text-left">Status</th>
-                    <th className="px-6 py-4 text-center w-36">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                  {visitors.map(visitor => (
-                    <tr key={visitor._id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 text-left font-bold text-gray-900">{visitor.visitorName}</td>
-                      <td className="px-6 py-4 text-left font-medium text-gray-600">{visitor.relationship}</td>
-                      <td className="px-6 py-4 text-left">
-                        <p className="font-semibold text-gray-800">{visitor.student?.fullName}</p>
-                        <p className="text-[10px] text-gray-400">Room {visitor.student?.roomNumber} ({visitor.student?.block})</p>
-                      </td>
-                      <td className="px-6 py-4 text-left font-bold text-gray-700">{visitor.visitDate} ({visitor.expectedArrivalTime})</td>
-                      <td className="px-6 py-4 text-left">
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${visitor.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : visitor.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                          }`}>{visitor.status}</span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {visitor.status === 'Pending' ? (
-                          <div className="flex items-center justify-center space-x-1.5">
-                            <button
-                              onClick={() => handleVisitorApproval(visitor._id, 'Approved')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1.5 rounded-lg text-[10px]"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleVisitorApproval(visitor._id, 'Rejected')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-2 py-1.5 rounded-lg text-[10px]"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by visitor or student name…"
+                    value={visitorSearch}
+                    onChange={e => { setVisitorSearch(e.target.value); setVisitorsPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
+                </div>
+              </div>
 
+              {(() => {
+                const filtered = visitors.filter(v => 
+                  (v.visitorName || '').toLowerCase().includes(visitorSearch.toLowerCase()) ||
+                  (v.student?.fullName || '').toLowerCase().includes(visitorSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (visitorsPage - 1) * ITEMS_PER_PAGE,
+                  visitorsPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left font-medium">Visitor Name</th>
+                            <th className="pb-3 text-left font-medium">Student</th>
+                            <th className="pb-3 text-left font-medium">Relationship</th>
+                            <th className="pb-3 text-left font-medium">Visit Date</th>
+                            <th className="pb-3 text-left font-medium">Status</th>
+                            <th className="pb-3 text-left font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(v => (
+                            <tr key={v._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{v.visitorName}</td>
+                              <td className="py-4 text-gray-600">
+                                <p className="font-semibold text-gray-800">{v.student?.fullName || 'N/A'}</p>
+                                <p className="text-[10px] text-gray-400">Rm {v.student?.roomNumber || 'N/A'} ({v.student?.block || 'N/A'})</p>
+                              </td>
+                              <td className="py-4 text-gray-600">{v.relationship}</td>
+                              <td className="py-4 text-gray-600">
+                                {v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'} ({v.expectedArrivalTime || 'Anytime'})
+                              </td>
+                              <td className="py-4"><StatusBadge status={v.status} /></td>
+                              <td className="py-4">
+                                {v.status === 'Pending' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleVisitorApproval(v._id, 'Approved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Approve
+                                    </button>
+                                    <button onClick={() => handleVisitorApproval(v._id, 'Rejected')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">
+                                      Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Actioned</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-gray-400">
+                                No visitor requests found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((visitorsPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(visitorsPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setVisitorsPage(p => Math.max(1, p - 1))}
+                            disabled={visitorsPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setVisitorsPage(p => Math.min(totalPages, p + 1))}
+                            disabled={visitorsPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -1845,61 +2626,71 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
               <button
                 onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
-                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
+                className="bg-primary hover:bg-primary/95 text-white text-xs font-bold py-2.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
               >
                 <i className="fas fa-plus" />
                 <span>Post Announcement</span>
               </button>
             </div>
 
-            {/* Announcement Feed */}
-            <div className="space-y-4">
+            {/* Announcement Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {announcements.map(ann => (
-                <div key={ann._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition space-y-4 relative">
+                <div key={ann._id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between relative">
                   {ann.pinned && (
                     <span className="absolute top-6 right-6 text-amber-500 text-sm" title="Pinned to top">
                       <i className="fas fa-thumbtack rotate-45" />
                     </span>
                   )}
-                  <div className="flex items-center space-x-3 text-left">
-                    <span className="text-base font-extrabold text-gray-900">{ann.title}</span>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${ann.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
-                      }`}>{ann.priority} Priority</span>
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 leading-tight mb-1 text-lg">{ann.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <PriorityBadge priority={ann.priority} />
+                        <span className="text-gray-400 text-xs font-medium">
+                          {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString() : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-gray-650 font-normal leading-relaxed text-sm mb-4">{ann.description}</p>
                   </div>
 
-                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{ann.description}</p>
-
-                  <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400 font-medium">
-                    <span>Target Audience: <strong className="text-gray-600 capitalize">{ann.visibleTo}</strong> · Posted on {ann.createdAt}</span>
-
-                    <div className="flex space-x-1">
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-450 font-bold uppercase tracking-wider">
+                      To: <strong className="text-gray-700">{ann.visibleTo}</strong>
+                    </span>
+                    <div className="flex space-x-1.5">
                       <button
                         onClick={() => toggleAnnPin(ann)}
-                        className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center transition"
+                        className={`px-2 py-1.5 text-xs font-semibold rounded-lg transition ${ann.pinned ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
                         title={ann.pinned ? 'Unpin' : 'Pin to top'}
                       >
-                        <i className="fas fa-thumbtack text-xs" />
+                        <i className="fas fa-thumbtack" />
                       </button>
                       <button
                         onClick={() => { setSelectedAnn(ann); setAnnForm({ title: ann.title, description: ann.description, priority: ann.priority, visibleTo: ann.visibleTo || 'all', pinned: ann.pinned }); setShowAnnAddEditModal(true); }}
-                        className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition"
-                        title="Edit Alert"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition"
                       >
-                        <i className="fas fa-pencil-alt text-xs" />
+                        Edit
                       </button>
                       <button
                         onClick={() => deleteAnnouncement(ann._id)}
-                        className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition"
-                        title="Delete Broadcast"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition"
                       >
-                        <i className="fas fa-trash-alt text-xs" />
+                        Delete
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
+              {announcements.length === 0 && (
+                <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-16 flex flex-col items-center justify-center text-center">
+                  <i className="fas fa-bullhorn text-gray-300 text-5xl mb-4" />
+                  <p className="text-base font-semibold text-gray-800 mb-1">No announcements yet</p>
+                  <p className="text-sm text-gray-400 font-normal max-w-sm">Click "Post Announcement" to broadcast one.</p>
+                </div>
+              )}
             </div>
-
           </div>
         )}
 
@@ -1908,55 +2699,79 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
 
             {/* KPI Metrics Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Total Hostel Capacity</span>
-                <span className="text-2xl font-black text-gray-900 mt-1 block">384 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds (Allotted)</span>
-                <span className="text-2xl font-black text-primary mt-1 block">284 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds (Vacant)</span>
-                <span className="text-2xl font-black text-emerald-600 mt-1 block">100 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-2xl font-black text-amber-500">73.9%</span>
-                  <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
-                    <div className="bg-amber-500 h-full rounded-full" style={{ width: '73.9%' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
+            {(() => {
+              const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+              const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
+              
+              const vacantRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) === 0).length;
+              const fullyOccupiedRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) >= (r.capacity || 0)).length;
 
-            {/* Boys / Girls / Vacant Rooms Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
-                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Vacant Rooms</span>
-                <span className="text-xl font-extrabold text-gray-800 mt-1 block">12 Rooms</span>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
-                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Fully Occupied Rooms</span>
-                <span className="text-xl font-extrabold text-gray-800 mt-1 block">48 Rooms</span>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Boys Hostel Summary</span>
-                  <span className="text-sm font-black text-gray-800 block mt-1">144 / 192 Beds Allotted</span>
-                </div>
-                <div className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold">75%</div>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Girls Hostel Summary</span>
-                  <span className="text-sm font-black text-gray-800 block mt-1">108 / 144 Beds Allotted</span>
-                </div>
-                <div className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded-lg font-bold">75%</div>
-              </div>
-            </div>
+              const boysRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('a') || r.blockName?.toLowerCase().includes('b') || r.roomNumber.startsWith('A') || r.roomNumber.startsWith('B') || r.roomNumber.startsWith('a') || r.roomNumber.startsWith('b'));
+              const boysBeds = boysRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const boysOccupied = boysRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const boysRate = boysBeds > 0 ? Math.round((boysOccupied / boysBeds) * 100) : 0;
+
+              const girlsRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('c') || r.blockName?.toLowerCase().includes('d') || r.roomNumber.startsWith('C') || r.roomNumber.startsWith('D') || r.roomNumber.startsWith('c') || r.roomNumber.startsWith('d'));
+              const girlsBeds = girlsRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const girlsOccupied = girlsRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const girlsRate = girlsBeds > 0 ? Math.round((girlsOccupied / girlsBeds) * 100) : 0;
+
+              return (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Total Hostel Capacity</span>
+                      <span className="text-2xl font-black text-gray-900 mt-1 block">{totalBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds (Allotted)</span>
+                      <span className="text-2xl font-black text-primary mt-1 block">{occupiedBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds (Vacant)</span>
+                      <span className="text-2xl font-black text-emerald-600 mt-1 block">{availableBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-2xl font-black text-amber-500">{occupancyRate}%</span>
+                        <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
+                          <div className="bg-amber-500 h-full rounded-full" style={{ width: `${occupancyRate}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Boys / Girls / Vacant Rooms Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                      <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Vacant Rooms</span>
+                      <span className="text-xl font-extrabold text-gray-800 mt-1 block">{vacantRoomsCount} Rooms</span>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                      <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Fully Occupied Rooms</span>
+                      <span className="text-xl font-extrabold text-gray-800 mt-1 block">{fullyOccupiedRoomsCount} Rooms</span>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                      <div>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Boys Hostel Summary</span>
+                        <span className="text-sm font-black text-gray-800 block mt-1">{boysOccupied} / {boysBeds} Beds Allotted</span>
+                      </div>
+                      <div className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold">{boysRate}%</div>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                      <div>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Girls Hostel Summary</span>
+                        <span className="text-sm font-black text-gray-800 block mt-1">{girlsOccupied} / {girlsBeds} Beds Allotted</span>
+                      </div>
+                      <div className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded-lg font-bold">{girlsRate}%</div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Multi-Criteria Filters */}
             <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
@@ -2085,14 +2900,14 @@ export default function AdminDashboard({ user, onLogout }) {
               <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">{sortedOccupancy.length} Rooms Filtered</span>
               <div className="flex items-center space-x-3 w-full sm:w-auto">
                 <button
-                  onClick={triggerPrint}
+                  onClick={triggerPrintReport}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-print" />
                   <span>Print Report</span>
                 </button>
                 <button
-                  onClick={() => mockExport('PDF')}
+                  onClick={exportOccupancyReportPDF}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-file-pdf text-rose-500" />
@@ -3350,6 +4165,7 @@ export default function AdminDashboard({ user, onLogout }) {
         </div>
       )}
 
+      </div>
     </div>
   );
 }

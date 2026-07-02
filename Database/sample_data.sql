@@ -1,7 +1,8 @@
-INSERT INTO admin(name,email,password)
+INSERT INTO Admin
+(name,email,password,phone)
 VALUES
-('Priya','priya@gmail.com','admin123'),
-('Kumar','kumar@gmail.com','admin456');
+('Priya','priya@gmail.com','admin123','9876543210'),
+('Kumar','kumar@gmail.com','admin456','9876543211');
 INSERT INTO Warden(name,email,phone)
 VALUES
 ('Arun','arun@gmail.com','9876543210'),

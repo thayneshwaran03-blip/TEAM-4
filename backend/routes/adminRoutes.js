@@ -27,4 +27,16 @@ router.put('/wardens/:id', adminController.updateWarden);
 router.delete('/wardens/:id', adminController.deleteWarden);
 router.put('/wardens/:id/reset-password', adminController.resetWardenPassword);
 
+// Leave Requests Management
+router.get('/leaves', adminController.listLeaveRequests);
+router.put('/leaves/:id', adminController.reviewLeaveRequest);
+
+// Complaints Management
+router.get('/complaints', adminController.listComplaints);
+router.put('/complaints/:id/status', adminController.updateComplaintStatus);
+
+// Visitor Requests Management
+router.get('/visitors', adminController.listVisitorRequests);
+router.put('/visitors/:id', adminController.reviewVisitorRequest);
+
 module.exports = router;
