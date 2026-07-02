@@ -24,7 +24,11 @@ const getStudentProfile = async (req, res) => {
       .select('-password -resetOtp -resetOtpExpiry')
       .populate({
         path: 'room',
-        select: 'roomNumber blockName floorNumber capacity occupiedBeds status',
+        select: 'roomNumber blockName floorNumber capacity occupiedBeds status assignedStudents',
+        populate: {
+          path: 'assignedStudents',
+          select: 'fullName department year',
+        },
       });
 
     if (!student) {
@@ -60,7 +64,11 @@ const updateStudentProfile = async (req, res) => {
       select: '-password -resetOtp -resetOtpExpiry',
     }).populate({
       path: 'room',
-      select: 'roomNumber blockName floorNumber capacity occupiedBeds status',
+      select: 'roomNumber blockName floorNumber capacity occupiedBeds status assignedStudents',
+      populate: {
+        path: 'assignedStudents',
+        select: 'fullName department year',
+      },
     });
 
     if (!updatedStudent) {
@@ -149,10 +157,18 @@ const submitLeaveRequest = async (req, res) => {
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
     const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
     const warden = await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel,
-      assignedBlocks: studentBlock
+      assignedBlocks: { $in: blocksToTry }
     }) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
@@ -288,10 +304,18 @@ const submitComplaint = async (req, res) => {
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
     const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
     const warden = await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel,
-      assignedBlocks: studentBlock
+      assignedBlocks: { $in: blocksToTry }
     }) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
@@ -343,7 +367,7 @@ const submitVisitorRequest = async (req, res) => {
   try {
     const { visitorName, relationship, phoneNumber, visitDate, expectedArrivalTime } = req.body;
 
-    if (!visitorName || !relationship || !phoneNumber || !visitDate || !expectedArrivalTime) {
+    if (!visitorName || !relationship || !phoneNumber || !visitDate) {
       return res.status(400).json({ success: false, message: 'All visitor request fields are required' });
     }
 
@@ -358,16 +382,24 @@ const submitVisitorRequest = async (req, res) => {
       relationship,
       phoneNumber,
       visitDate,
-      expectedArrivalTime,
+      expectedArrivalTime: expectedArrivalTime || 'Anytime',
       history: [{ status: 'Pending', changedBy: student._id, comment: 'Visitor request submitted' }],
     });
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
     const studentBlock = student.block || (student.room ? student.room.blockName : '');
+    const blocksToTry = [studentBlock];
+    if (studentBlock) {
+      if (studentBlock.startsWith('Block ')) {
+        blocksToTry.push(studentBlock.replace('Block ', '').trim());
+      } else {
+        blocksToTry.push(`Block ${studentBlock}`);
+      }
+    }
     const warden = await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel,
-      assignedBlocks: studentBlock
+      assignedBlocks: { $in: blocksToTry }
     }) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
