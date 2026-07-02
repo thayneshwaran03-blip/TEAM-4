@@ -94,9 +94,17 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Please provide both email and password.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({
+      $or: [
+        { email: email.toLowerCase() },
+        { studentId: email },
+        { studentId: email.toUpperCase() },
+        { employeeId: email },
+        { employeeId: email.toUpperCase() }
+      ]
+    });
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     if (user.isActive === false) {

@@ -11,11 +11,41 @@ const updateNotification = async (recipient, type, title, message, relatedTo, me
   return Notification.create({ recipient, type, title, message, relatedTo, metadata });
 };
 
+const getWardenScopeQuery = async (user) => {
+  const orConditions = [{ warden: user._id }];
+  
+  const studentQuery = { role: 'student' };
+  if (user.assignedHostel) {
+    studentQuery.hostelName = user.assignedHostel;
+  }
+  if (user.assignedBlocks && user.assignedBlocks.length > 0) {
+    const blocks = [];
+    user.assignedBlocks.forEach(b => {
+      blocks.push(b);
+      if (b.startsWith('Block ')) {
+        blocks.push(b.replace('Block ', '').trim());
+      } else {
+        blocks.push(`Block ${b}`);
+      }
+    });
+    studentQuery.block = { $in: blocks };
+  }
+  
+  const students = await User.find(studentQuery).select('_id');
+  const studentIds = students.map(s => s._id);
+  if (studentIds.length > 0) {
+    orConditions.push({ student: { $in: studentIds } });
+  }
+  
+  return { $or: orConditions };
+};
+
 const getWardenDashboard = async (req, res) => {
   try {
-    const pendingLeaveRequestsCount = await LeaveRequest.countDocuments({ status: 'Pending', warden: req.user._id });
-    const pendingComplaintsCount = await Complaint.countDocuments({ status: 'Pending', warden: req.user._id });
-    const pendingVisitorRequestsCount = await VisitorRequest.countDocuments({ status: 'Pending', warden: req.user._id });
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const pendingLeaveRequestsCount = await LeaveRequest.countDocuments({ ...scopeQuery, status: 'Pending' });
+    const pendingComplaintsCount = await Complaint.countDocuments({ ...scopeQuery, status: 'Pending' });
+    const pendingVisitorRequestsCount = await VisitorRequest.countDocuments({ ...scopeQuery, status: 'Pending' });
 
     return res.status(200).json({
       success: true,
@@ -33,7 +63,8 @@ const getWardenDashboard = async (req, res) => {
 
 const listLeaveRequests = async (req, res) => {
   try {
-    const leaveRequests = await LeaveRequest.find({ warden: req.user._id })
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const leaveRequests = await LeaveRequest.find(scopeQuery)
       .populate({ path: 'student', select: 'fullName email phoneNumber' })
       .populate({ path: 'room', select: 'roomNumber blockName' })
       .sort({ createdAt: -1 });
@@ -54,7 +85,8 @@ const reviewLeaveRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Action must be approve or reject' });
     }
 
-    const leaveRequest = await LeaveRequest.findOne({ _id: id, warden: req.user._id }).populate('student', 'fullName');
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const leaveRequest = await LeaveRequest.findOne({ _id: id, $or: scopeQuery.$or }).populate('student', 'fullName');
     if (!leaveRequest) {
       return res.status(404).json({ success: false, message: 'Leave request not found' });
     }
@@ -101,7 +133,8 @@ const reviewLeaveRequest = async (req, res) => {
 
 const listComplaints = async (req, res) => {
   try {
-    const complaints = await Complaint.find({ warden: req.user._id })
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const complaints = await Complaint.find(scopeQuery)
       .populate({ path: 'student', select: 'fullName email room' })
       .sort({ createdAt: -1 });
 
@@ -129,7 +162,8 @@ const updateComplaintStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid complaint action' });
     }
 
-    const complaint = await Complaint.findOne({ _id: id, warden: req.user._id }).populate('student', 'fullName');
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const complaint = await Complaint.findOne({ _id: id, $or: scopeQuery.$or }).populate('student', 'fullName');
     if (!complaint) {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
@@ -171,7 +205,8 @@ const updateComplaintStatus = async (req, res) => {
 
 const listVisitorRequests = async (req, res) => {
   try {
-    const visitorRequests = await VisitorRequest.find({ warden: req.user._id })
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const visitorRequests = await VisitorRequest.find(scopeQuery)
       .populate({ path: 'student', select: 'fullName email room' })
       .sort({ createdAt: -1 });
 
@@ -191,7 +226,8 @@ const reviewVisitorRequest = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Action must be approve or reject' });
     }
 
-    const request = await VisitorRequest.findOne({ _id: id, warden: req.user._id }).populate('student', 'fullName');
+    const scopeQuery = await getWardenScopeQuery(req.user);
+    const request = await VisitorRequest.findOne({ _id: id, $or: scopeQuery.$or }).populate('student', 'fullName');
     if (!request) {
       return res.status(404).json({ success: false, message: 'Visitor request not found' });
     }
@@ -224,7 +260,24 @@ const reviewVisitorRequest = async (req, res) => {
 // ── Student Management ──────────────────────────────────────────────────────
 const listStudents = async (req, res) => {
   try {
-    const students = await User.find({ role: 'student' })
+    const studentQuery = { role: 'student' };
+    if (req.user.assignedHostel) {
+      studentQuery.hostelName = req.user.assignedHostel;
+    }
+    if (req.user.assignedBlocks && req.user.assignedBlocks.length > 0) {
+      const blocks = [];
+      req.user.assignedBlocks.forEach(b => {
+        blocks.push(b);
+        if (b.startsWith('Block ')) {
+          blocks.push(b.replace('Block ', '').trim());
+        } else {
+          blocks.push(`Block ${b}`);
+        }
+      });
+      studentQuery.block = { $in: blocks };
+    }
+
+    const students = await User.find(studentQuery)
       .populate({ path: 'room', select: 'roomNumber blockName' })
       .select('-password -resetOtp -resetOtpExpiry');
     return res.status(200).json({ success: true, students });
@@ -424,7 +477,20 @@ const deleteAnnouncement = async (req, res) => {
 
 const listRooms = async (req, res) => {
   try {
-    const rooms = await Room.find().sort({ blockName: 1, floorNumber: 1, roomNumber: 1 });
+    const roomQuery = {};
+    if (req.user.assignedBlocks && req.user.assignedBlocks.length > 0) {
+      const blocks = [];
+      req.user.assignedBlocks.forEach(b => {
+        blocks.push(b);
+        if (b.startsWith('Block ')) {
+          blocks.push(b.replace('Block ', '').trim());
+        } else {
+          blocks.push(`Block ${b}`);
+        }
+      });
+      roomQuery.blockName = { $in: blocks };
+    }
+    const rooms = await Room.find(roomQuery).sort({ blockName: 1, floorNumber: 1, roomNumber: 1 });
     return res.status(200).json({ success: true, rooms });
   } catch (error) {
     console.error('Warden List Rooms Error:', error);
@@ -506,8 +572,240 @@ const allocateRoom = async (req, res) => {
   }
 };
 
+const getWardenOccupancyDashboard = async (req, res) => {
+  try {
+    const warden = req.user;
+    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+      return res.status(200).json({
+        success: true,
+        stats: { totalCapacity: 0, occupiedBeds: 0, availableBeds: 0, occupancyRate: 0, occupiedRooms: 0, vacantRooms: 0 }
+      });
+    }
+
+    const blockName = warden.assignedBlocks[0];
+    const blockLetter = blockName.replace('Block ', '').trim();
+    const roomNumbers = ['101', '102', '104', '203', '204'];
+    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
+
+    for (const roomNum of roomsToEnsure) {
+      const exists = await Room.findOne({ roomNumber: roomNum });
+      if (!exists) {
+        await Room.create({
+          roomNumber: roomNum,
+          blockName: blockName,
+          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
+          capacity: 4,
+          status: 'Open'
+        });
+      }
+    }
+
+    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    
+    let totalCapacity = 0;
+    let occupiedBeds = 0;
+    let occupiedRoomsCount = 0;
+    let vacantRoomsCount = 0;
+
+    rooms.forEach(r => {
+      totalCapacity += r.capacity;
+      occupiedBeds += r.assignedStudents.length;
+      if (r.assignedStudents.length > 0) {
+        occupiedRoomsCount++;
+      } else {
+        vacantRoomsCount++;
+      }
+    });
+
+    const availableBeds = Math.max(0, totalCapacity - occupiedBeds);
+    const occupancyRate = totalCapacity > 0 ? ((occupiedBeds / totalCapacity) * 100).toFixed(1) : 0;
+
+    return res.status(200).json({
+      success: true,
+      stats: {
+        totalCapacity,
+        occupiedBeds,
+        availableBeds,
+        occupancyRate,
+        occupiedRooms: occupiedRoomsCount,
+        vacantRooms: vacantRoomsCount
+      }
+    });
+  } catch (error) {
+    console.error('Warden Occupancy Dashboard Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const getWardenOccupancyReport = async (req, res) => {
+  try {
+    const warden = req.user;
+    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+      return res.status(200).json({ success: true, rooms: [] });
+    }
+
+    const blockName = warden.assignedBlocks[0];
+    const blockLetter = blockName.replace('Block ', '').trim();
+    const roomNumbers = ['101', '102', '104', '203', '204'];
+    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
+
+    for (const roomNum of roomsToEnsure) {
+      const exists = await Room.findOne({ roomNumber: roomNum });
+      if (!exists) {
+        await Room.create({
+          roomNumber: roomNum,
+          blockName: blockName,
+          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
+          capacity: 4,
+          status: 'Open'
+        });
+      }
+    }
+
+    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    
+    const formattedRooms = rooms.map(r => ({
+      _id: r._id,
+      roomNumber: r.roomNumber,
+      floorNumber: r.floorNumber,
+      capacity: r.capacity,
+      occupiedBeds: r.assignedStudents.length,
+      availableBeds: Math.max(0, r.capacity - r.assignedStudents.length),
+      status: r.assignedStudents.length >= r.capacity ? 'FULL' : 'OPEN'
+    }));
+
+    return res.status(200).json({ success: true, rooms: formattedRooms });
+  } catch (error) {
+    console.error('Warden Occupancy Report Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const getWardenOccupancyExport = async (req, res) => {
+  try {
+    const warden = req.user;
+    const blockName = warden.assignedBlocks ? warden.assignedBlocks[0] : 'N/A';
+    const hostelName = warden.assignedHostel || 'N/A';
+    
+    const blockLetter = blockName.replace('Block ', '').trim();
+    const roomNumbers = ['101', '102', '104', '203', '204'];
+    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
+
+    for (const roomNum of roomsToEnsure) {
+      const exists = await Room.findOne({ roomNumber: roomNum });
+      if (!exists) {
+        await Room.create({
+          roomNumber: roomNum,
+          blockName: blockName,
+          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
+          capacity: 4,
+          status: 'Open'
+        });
+      }
+    }
+
+    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    
+    let totalCapacity = 0;
+    let occupiedBeds = 0;
+    let occupiedRoomsCount = 0;
+    let vacantRoomsCount = 0;
+
+    rooms.forEach(r => {
+      totalCapacity += r.capacity;
+      occupiedBeds += r.assignedStudents.length;
+      if (r.assignedStudents.length > 0) {
+        occupiedRoomsCount++;
+      } else {
+        vacantRoomsCount++;
+      }
+    });
+
+    const availableBeds = Math.max(0, totalCapacity - occupiedBeds);
+    const occupancyRate = totalCapacity > 0 ? ((occupiedBeds / totalCapacity) * 100).toFixed(1) : 0;
+
+    const formattedRooms = rooms.map(r => ({
+      _id: r._id,
+      roomNumber: r.roomNumber,
+      floorNumber: r.floorNumber,
+      capacity: r.capacity,
+      occupiedBeds: r.assignedStudents.length,
+      availableBeds: Math.max(0, r.capacity - r.assignedStudents.length),
+      status: r.assignedStudents.length >= r.capacity ? 'FULL' : 'OPEN'
+    }));
+
+    return res.status(200).json({
+      success: true,
+      metadata: {
+        wardenName: warden.fullName,
+        hostelName,
+        blockName,
+        exportDateTime: new Date().toLocaleString()
+      },
+      stats: {
+        totalCapacity,
+        occupiedBeds,
+        availableBeds,
+        occupancyRate,
+        occupiedRooms: occupiedRoomsCount,
+        vacantRooms: vacantRoomsCount
+      },
+      rooms: formattedRooms
+    });
+  } catch (error) {
+    console.error('Warden Occupancy Export Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const registerVisitorOnTheSpot = async (req, res) => {
+  try {
+    const warden = req.user;
+    const { studentIdentifier, visitorName, relationship, phoneNumber, visitDate, purpose } = req.body;
+
+    if (!studentIdentifier || !visitorName || !relationship || !phoneNumber || !visitDate) {
+      return res.status(400).json({ success: false, message: 'Please fill all required fields.' });
+    }
+
+    const student = await User.findOne({
+      role: 'student',
+      $or: [
+        { studentId: studentIdentifier },
+        { registerNumber: studentIdentifier },
+        { rollNumber: studentIdentifier },
+        { email: studentIdentifier.toLowerCase() }
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
+
+    if (student.hostelName !== warden.assignedHostel || !warden.assignedBlocks.includes(student.block)) {
+      return res.status(400).json({ success: false, message: 'This student is not assigned to your hostel/block.' });
+    }
+
+    const visitorRequest = await VisitorRequest.create({
+      student: student._id,
+      visitorName,
+      relationship,
+      phoneNumber,
+      visitDate,
+      expectedArrivalTime: 'Anytime',
+      purpose: purpose || 'On-the-spot Visit',
+      status: 'Approved'
+    });
+
+    return res.status(201).json({ success: true, message: 'Visitor registered successfully on the spot.', visitorRequest });
+  } catch (error) {
+    console.error('Warden Register Visitor Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getWardenDashboard,
+  registerVisitorOnTheSpot,
   listLeaveRequests,
   reviewLeaveRequest,
   listComplaints,
@@ -526,4 +824,7 @@ module.exports = {
   deleteAnnouncement,
   listRooms,
   allocateRoom,
+  getWardenOccupancyDashboard,
+  getWardenOccupancyReport,
+  getWardenOccupancyExport,
 };

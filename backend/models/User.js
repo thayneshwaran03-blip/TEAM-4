@@ -90,6 +90,12 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    studentId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
     // New fields for Warden
     employeeId: {
       type: String,

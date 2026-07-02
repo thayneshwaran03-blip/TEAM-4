@@ -12,7 +12,7 @@ const updateNotification = async (recipient, type, title, message, relatedTo, me
 };
 
 // ── Helper: Send credentials email via nodemailer ───────────────────────────
-const sendCredentialsEmail = async (toEmail, tempPassword, userName, role) => {
+const sendCredentialsEmail = async (toEmail, tempPassword, userName, role, userId = '') => {
   const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
   const loginUrl = 'http://localhost:5173/login';
 
@@ -53,6 +53,11 @@ const sendCredentialsEmail = async (toEmail, tempPassword, userName, role) => {
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
                 <strong>Role:</strong> ${displayRole}
               </p>
+              ${userId ? `
+              <p style="margin: 6px 0; color: #444; font-size: 14px;">
+                <strong>${role === 'student' ? 'Student ID' : 'Employee ID'}:</strong> <code style="background: #e3ebff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #1a237e;">${userId}</code>
+              </p>
+              ` : ''}
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
                 <strong>Email:</strong> <a href="mailto:${toEmail}" style="color: #3949ab; text-decoration: none;">${toEmail}</a>
               </p>
@@ -238,10 +243,19 @@ const createStudent = async (req, res) => {
       studentRoomId = targetRoom._id;
     }
 
+    // Generate unique Student ID
+    let studentId = 'STU-' + Math.floor(100000 + Math.random() * 900000);
+    let studentIdExists = await User.findOne({ studentId });
+    while (studentIdExists) {
+      studentId = 'STU-' + Math.floor(100000 + Math.random() * 900000);
+      studentIdExists = await User.findOne({ studentId });
+    }
+
     const student = new User({
       fullName,
       registerNumber,
       rollNumber,
+      studentId,
       email: email.toLowerCase(),
       phoneNumber,
       department,
@@ -280,7 +294,7 @@ const createStudent = async (req, res) => {
     }
 
     try {
-      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student');
+      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student', studentId);
     } catch (mailErr) {
       console.error('Failed to send credentials email to student:', mailErr);
     }

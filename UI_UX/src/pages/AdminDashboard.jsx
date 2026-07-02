@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 export default function AdminDashboard({ user, onLogout }) {
   const name = user ? user.fullName : 'System Admin';
@@ -93,6 +95,17 @@ export default function AdminDashboard({ user, onLogout }) {
   const [roomSearch, setRoomSearch] = useState('');
   const [roomFilterBlock, setRoomFilterBlock] = useState('');
   const [roomFilterStatus, setRoomFilterStatus] = useState('');
+
+  // Leaves / Complaints / Visitors / Announcements UI States
+  const [leaveSearch, setLeaveSearch] = useState('');
+  const [complaintSearch, setComplaintSearch] = useState('');
+  const [visitorSearch, setVisitorSearch] = useState('');
+  const [announcementSearch, setAnnouncementSearch] = useState('');
+  const [leavesPage, setLeavesPage] = useState(1);
+  const [complaintsPage, setComplaintsPage] = useState(1);
+  const [visitorsPage, setVisitorsPage] = useState(1);
+  const [announcementsPage, setAnnouncementsPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
 
   const [announcements, setAnnouncements] = useState([]);
   const [stats, setStats] = useState([]);
@@ -818,6 +831,37 @@ export default function AdminDashboard({ user, onLogout }) {
     }
   };
 
+  const StatusBadge = ({ status }) => {
+    const cfg = {
+      Pending:     'bg-amber-50 text-amber-600',
+      Approved:    'bg-green-50 text-green-600',
+      Rejected:    'bg-red-50 text-red-600',
+      'In Progress': 'bg-blue-50 text-blue-600',
+      Resolved:    'bg-emerald-50 text-emerald-600',
+      Active:      'bg-green-50 text-green-600',
+      'On Leave':  'bg-orange-50 text-orange-600',
+    };
+    return (
+      <span className={`px-2.5 py-1 rounded-full font-semibold text-xs uppercase ${cfg[status] || 'bg-gray-100 text-gray-500'}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const PriorityBadge = ({ priority }) => {
+    const cfg = {
+      High:   'bg-red-50 text-red-600',
+      Medium: 'bg-amber-50 text-amber-600',
+      Low:    'bg-gray-100 text-gray-500',
+      Normal: 'bg-blue-50 text-blue-600',
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] uppercase ${cfg[priority] || 'bg-gray-100 text-gray-500'}`}>
+        {priority}
+      </span>
+    );
+  };
+
   const handleVisitorApproval = async (id, status) => {
     try {
       const action = status === 'Approved' ? 'approve' : 'reject';
@@ -835,19 +879,321 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   // ── Helper: Printing & Export Reports ────────────────────────────────────
-  const triggerPrint = () => {
-    window.print();
+  const exportOccupancyReportPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const primaryColor = [26, 35, 126];
+
+    doc.setFillColor(26, 35, 126);
+    doc.rect(0, 0, 297, 25, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('HostelHub - Hostel Occupancy Report', 15, 16);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    const dateStr = new Date().toLocaleString();
+    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
+    const academicYear = '2026 - 2027';
+
+    doc.text(`Report ID: ${reportId}`, 15, 35);
+    doc.text(`Printed By: ${name} (Admin)`, 15, 41);
+    doc.text(`Academic Year: ${academicYear}`, 15, 47);
+    doc.text(`Generated Date: ${dateStr}`, 15, 53);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Executive Summary', 15, 65);
+
+    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
+
+    const statLabels = [
+      { label: 'Total Capacity', val: `${totalBeds} Beds` },
+      { label: 'Occupied Beds', val: `${occupiedBeds} Beds` },
+      { label: 'Available Beds', val: `${availableBeds} Beds` },
+      { label: 'Occupancy Rate', val: `${occupancyRate}%` },
+      { label: 'Total Rooms', val: `${totalRooms} Rooms` },
+      { label: 'Occupied Rooms', val: `${occupiedRooms} Rooms` },
+      { label: 'Vacant Rooms', val: `${vacantRooms} Rooms` }
+    ];
+
+    let currentX = 15;
+    const cardWidth = 36;
+    const cardHeight = 18;
+
+    statLabels.forEach((stat) => {
+      doc.setFillColor(240, 244, 255);
+      doc.setDrawColor(180, 198, 252);
+      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+      
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.label, currentX + 3, 77);
+
+      doc.setTextColor(26, 35, 126);
+      doc.setFontSize(10.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.val, currentX + 3, 85);
+
+      currentX += cardWidth + 2;
+    });
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Occupancy Details', 15, 102);
+
+    const tableHeaders = [['Room Number', 'Hostel', 'Block', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy %', 'Room Status', 'Last Updated']];
+    
+    const tableRows = filteredOccupancy.map(r => [
+      r.roomNumber,
+      r.hostelName,
+      r.block,
+      r.floor,
+      r.capacity,
+      r.occupiedBeds,
+      r.availableBeds,
+      r.capacity > 0 ? `${Math.round((r.occupiedBeds / r.capacity) * 100)}%` : '0%',
+      r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL',
+      r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'
+    ]);
+
+    doc.autoTable({
+      startY: 108,
+      head: tableHeaders,
+      body: tableRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [26, 35, 126],
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [55, 65, 81],
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold' }
+      },
+      didParseCell: (data) => {
+        if (data.column.index === 8 && data.cell.section === 'body') {
+          const val = data.cell.raw;
+          if (val === 'FULL') {
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (val === 'PARTIAL') {
+            data.cell.styles.textColor = [217, 119, 6];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (val === 'AVAILABLE') {
+            data.cell.styles.textColor = [4, 120, 87];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        const str = 'Page ' + doc.internal.getNumberOfPages();
+        doc.setFontSize(8.5);
+        doc.setTextColor(107, 114, 128);
+        doc.text(str, 280, 202, { align: 'right' });
+        doc.text('HostelHub © 2026 · Confidential Document · Printed By Admin', 15, 202);
+      }
+    });
+
+    doc.save(`Occupancy_Report_Admin_${Date.now()}.pdf`);
   };
 
-  const mockExport = (format) => {
-    showToastMsg(`Generating ${format} file...`);
-    setTimeout(() => {
-      showToastMsg(`Download completed for Occupancy_Report.${format === 'Excel' ? 'xlsx' : 'pdf'}`);
-    }, 1500);
+  const triggerPrintReport = () => {
+    const dateStr = new Date().toLocaleString();
+    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
+    const academicYear = '2026 - 2027';
+
+    const printWindow = window.open('', '_blank');
+
+    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
+
+    const tableRowsHtml = filteredOccupancy.map(r => {
+      const status = r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL';
+      const statusColor = status === 'FULL' ? '#b91c1c' : status === 'PARTIAL' ? '#d97706' : '#047857';
+      const statusBg = status === 'FULL' ? '#fef2f2' : status === 'PARTIAL' ? '#fffbeb' : '#ecfdf5';
+      const pct = r.capacity > 0 ? Math.round((r.occupiedBeds / r.capacity) * 100) : 0;
+      
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${r.roomNumber}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.hostelName}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.block}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.floor}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.capacity}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #1a237e; font-weight: bold;">${r.occupiedBeds}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #10b981; font-weight: bold;">${r.availableBeds}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${pct}%</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+            <span style="padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; background-color: ${statusBg}; color: ${statusColor};">${status}</span>
+          </td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Occupancy Report - Admin</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 30px; color: #333; }
+            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .header-bar h1 { margin: 0; font-size: 24px; }
+            .meta-info { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 13px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            .meta-col { flex: 1; }
+            .stats-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 25px; }
+            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; text-align: center; }
+            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+            .stat-card p.val { margin: 0; color: #1a237e; font-size: 15px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+            th { background-color: #1a237e; color: white; padding: 10px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
+            .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 15px; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <h1>HostelHub - Hostel Occupancy Report</h1>
+            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
+          </div>
+          <div class="meta-info">
+            <div class="meta-col">
+              <p><strong>Printed By:</strong> ${name} (Admin)</p>
+              <p><strong>Academic Year:</strong> ${academicYear}</p>
+            </div>
+            <div class="meta-col" style="text-align: right;">
+              <p><strong>Report ID:</strong> ${reportId}</p>
+              <p><strong>Generated Date:</strong> ${dateStr}</p>
+            </div>
+          </div>
+          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Executive Summary</h2>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="label">Total Capacity</p>
+              <p class="val">${totalBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Beds</p>
+              <p class="val">${occupiedBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Available Beds</p>
+              <p class="val">${availableBeds} Beds</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupancy Rate</p>
+              <p class="val">${occupancyRate}%</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Total Rooms</p>
+              <p class="val">${totalRooms} Rooms</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Occupied Rooms</p>
+              <p class="val">${occupiedRooms} Rooms</p>
+            </div>
+            <div class="stat-card">
+              <p class="label">Vacant Rooms</p>
+              <p class="val">${vacantRooms} Rooms</p>
+            </div>
+          </div>
+          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Detailed Occupancy List</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Room Number</th>
+                <th>Hostel Name</th>
+                <th>Block</th>
+                <th>Floor</th>
+                <th>Capacity</th>
+                <th>Occupied Beds</th>
+                <th>Available Beds</th>
+                <th>Occupancy %</th>
+                <th>Occupancy Status</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+          <div class="footer">
+            <span>Confidential Document · HostelHub © 2026</span>
+            <span>Printed on: ${dateStr}</span>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // ── Sort & Filter logic for Occupancy Reports ────────────────────────────
-  const filteredOccupancy = occupancyData.filter(item => {
+  const getHostelName = (blockName) => {
+    if (!blockName) return 'Boys Hostel';
+    const lower = blockName.toLowerCase();
+    if (lower.includes('c') || lower.includes('d')) return 'Girls Hostel';
+    return 'Boys Hostel';
+  };
+
+  const realOccupancyData = rooms.map(room => {
+    const block = room.blockName || 'Block A';
+    const floor = room.floorNumber || '1';
+    const hostel = getHostelName(block);
+    
+    const assignedWarden = wardens.find(w => w.assignedBlocks && w.assignedBlocks.some(b => b === block || b === block.replace('Block ', '').trim()));
+    const wardenName = assignedWarden ? assignedWarden.fullName : 'Not Assigned';
+    
+    return {
+      _id: room._id || room.id,
+      hostelName: hostel,
+      block: block,
+      floor: floor,
+      roomNumber: room.roomNumber,
+      capacity: room.capacity || 4,
+      occupiedBeds: room.occupiedBeds || 0,
+      availableBeds: Math.max(0, (room.capacity || 4) - (room.occupiedBeds || 0)),
+      status: room.occupiedBeds === 0 ? 'Available' : room.occupiedBeds >= room.capacity ? 'Occupied' : 'Available',
+      warden: wardenName,
+      dept: room.assignedStudents && room.assignedStudents[0]?.department || 'N/A',
+      year: room.assignedStudents && room.assignedStudents[0]?.year || 'N/A',
+      updatedAt: room.updatedAt
+    };
+  });
+
+  const filteredOccupancy = realOccupancyData.filter(item => {
     const searchMatch = reportSearch ? (
       item.roomNumber.includes(reportSearch) ||
       item.warden.toLowerCase().includes(reportSearch.toLowerCase())
@@ -1925,54 +2271,112 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Review and process student leave applications. Administrative actions are logged automatically.</p>
             </div>
 
-            {/* Leaves List */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="divide-y divide-gray-100">
-                {leaves.length === 0 ? (
-                  <p className="p-8 text-center text-gray-400 text-sm">No leave requests currently pending.</p>
-                ) : (
-                  leaves.map(leave => (
-                    <div key={leave._id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-                      <div className="space-y-2 text-left max-w-xl">
-                        <div className="flex items-center space-x-3">
-                          <span className="font-extrabold text-gray-900 text-base">{leave.student?.fullName}</span>
-                          <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">{leave.leaveType}</span>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-550">
-                          Period: <strong className="text-gray-800">{new Date(leave.fromDate).toLocaleDateString()}</strong> to <strong className="text-gray-800">{new Date(leave.toDate).toLocaleDateString()}</strong>
-                        </p>
-                        <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl italic">
-                          " {leave.reason} "
-                        </p>
-                      </div>
-
-                      <div className="flex items-center space-x-3 shrink-0">
-                        {leave.status === 'Pending' ? (
-                          <>
-                            <button
-                              onClick={() => handleLeaveApproval(leave._id, 'Approved')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleLeaveApproval(leave._id, 'Rejected')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs px-4 py-2.5 rounded-xl transition"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        ) : (
-                          <span className={`text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider ${leave.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                            }`}>{leave.status}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by student name…"
+                    value={leaveSearch}
+                    onChange={e => { setLeaveSearch(e.target.value); setLeavesPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
+                </div>
               </div>
-            </div>
 
+              {(() => {
+                const filtered = leaves.filter(l => 
+                  (l.student?.fullName || '').toLowerCase().includes(leaveSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (leavesPage - 1) * ITEMS_PER_PAGE,
+                  leavesPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left">Student</th>
+                            <th className="pb-3 text-left">Room</th>
+                            <th className="pb-3 text-left">Leave Type</th>
+                            <th className="pb-3 text-left">From</th>
+                            <th className="pb-3 text-left">To</th>
+                            <th className="pb-3 text-left">Reason</th>
+                            <th className="pb-3 text-left">Status</th>
+                            <th className="pb-3 text-left">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(l => (
+                            <tr key={l._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{l.student?.fullName || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {l.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">{l.leaveType}</td>
+                              <td className="py-4 text-gray-600">{l.fromDate ? new Date(l.fromDate).toLocaleDateString() : 'N/A'}</td>
+                              <td className="py-4 text-gray-600">{l.toDate ? new Date(l.toDate).toLocaleDateString() : 'N/A'}</td>
+                              <td className="py-4 text-gray-500 max-w-[150px] truncate" title={l.reason}>{l.reason}</td>
+                              <td className="py-4"><StatusBadge status={l.status} /></td>
+                              <td className="py-4">
+                                {l.status === 'Pending' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleLeaveApproval(l._id, 'Approved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Approve
+                                    </button>
+                                    <button onClick={() => handleLeaveApproval(l._id, 'Rejected')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">
+                                      Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Actioned</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={8} className="py-12 text-center text-gray-400">
+                                No leave requests found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((leavesPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(leavesPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setLeavesPage(p => Math.max(1, p - 1))}
+                            disabled={leavesPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setLeavesPage(p => Math.min(totalPages, p + 1))}
+                            disabled={leavesPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -1983,51 +2387,115 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Track and update student complaints. Mark tickets to resolve operational and maintenance issues.</p>
             </div>
 
-            {/* Complaints Feed */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {complaints.map(comp => (
-                <div key={comp._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition">
-                  <div className="flex justify-between items-start">
-                    <div className="text-left">
-                      <h4 className="font-extrabold text-gray-900 text-base">{comp.title}</h4>
-                      <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Category: {comp.category} · Room {comp.student?.roomNumber} ({comp.student?.block})</p>
-                    </div>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${comp.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
-                      }`}>{comp.priority} Priority</span>
-                  </div>
-
-                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{comp.description}</p>
-
-                  <div className="pt-2 border-t border-gray-50 flex justify-between items-center text-xs">
-                    <div className="flex items-center space-x-1">
-                      <span className="text-gray-400">Status:</span>
-                      <span className={`font-bold uppercase text-[10px] ${comp.status === 'Pending' ? 'text-red-500' : comp.status === 'In Progress' ? 'text-amber-500' : 'text-emerald-500'
-                        }`}>{comp.status}</span>
-                    </div>
-
-                    <div className="flex space-x-1">
-                      {comp.status !== 'Resolved' && (
-                        <>
-                          <button
-                            onClick={() => handleComplaintStatus(comp._id, 'In Progress')}
-                            className="bg-amber-55 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
-                          >
-                            Work
-                          </button>
-                          <button
-                            onClick={() => handleComplaintStatus(comp._id, 'Resolved')}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-[10px] transition"
-                          >
-                            Resolve
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by student name or complaint title…"
+                    value={complaintSearch}
+                    onChange={e => { setComplaintSearch(e.target.value); setComplaintsPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
                 </div>
-              ))}
-            </div>
+              </div>
 
+              {(() => {
+                const filtered = complaints.filter(c => 
+                  (c.student?.fullName || '').toLowerCase().includes(complaintSearch.toLowerCase()) ||
+                  (c.title || '').toLowerCase().includes(complaintSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (complaintsPage - 1) * ITEMS_PER_PAGE,
+                  complaintsPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left">Student</th>
+                            <th className="pb-3 text-left">Room</th>
+                            <th className="pb-3 text-left">Title</th>
+                            <th className="pb-3 text-left">Category</th>
+                            <th className="pb-3 text-left">Priority</th>
+                            <th className="pb-3 text-left font-medium">Status</th>
+                            <th className="pb-3 text-left font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(c => (
+                            <tr key={c._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{c.student?.fullName || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {c.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-900 font-semibold">{c.title}</td>
+                              <td className="py-4 text-gray-600">{c.category}</td>
+                              <td className="py-4">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${c.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
+                                  {c.priority}
+                                </span>
+                              </td>
+                              <td className="py-4"><StatusBadge status={c.status} /></td>
+                              <td className="py-4">
+                                {c.status !== 'Resolved' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleComplaintStatus(c._id, 'In Progress')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+                                      Work
+                                    </button>
+                                    <button onClick={() => handleComplaintStatus(c._id, 'Resolved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Resolve
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Resolved</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-gray-400">
+                                No complaints found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((complaintsPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(complaintsPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setComplaintsPage(p => Math.max(1, p - 1))}
+                            disabled={complaintsPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setComplaintsPage(p => Math.min(totalPages, p + 1))}
+                            disabled={complaintsPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -2038,59 +2506,114 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Verify guest entries and emergency visits. Review secure QR-coded pre-authorization requests.</p>
             </div>
 
-            {/* Visitor Table */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider">
-                    <th className="px-6 py-4 text-left">Visitor Name</th>
-                    <th className="px-6 py-4 text-left">Relationship</th>
-                    <th className="px-6 py-4 text-left">Host Student</th>
-                    <th className="px-6 py-4 text-left">Visit Date</th>
-                    <th className="px-6 py-4 text-left">Status</th>
-                    <th className="px-6 py-4 text-center w-36">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                  {visitors.map(visitor => (
-                    <tr key={visitor._id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 text-left font-bold text-gray-900">{visitor.visitorName}</td>
-                      <td className="px-6 py-4 text-left font-medium text-gray-600">{visitor.relationship}</td>
-                      <td className="px-6 py-4 text-left">
-                        <p className="font-semibold text-gray-800">{visitor.student?.fullName}</p>
-                        <p className="text-[10px] text-gray-400">Room {visitor.student?.roomNumber} ({visitor.student?.block})</p>
-                      </td>
-                      <td className="px-6 py-4 text-left font-bold text-gray-700">{visitor.visitDate} ({visitor.expectedArrivalTime})</td>
-                      <td className="px-6 py-4 text-left">
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${visitor.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : visitor.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
-                          }`}>{visitor.status}</span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {visitor.status === 'Pending' ? (
-                          <div className="flex items-center justify-center space-x-1.5">
-                            <button
-                              onClick={() => handleVisitorApproval(visitor._id, 'Approved')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1.5 rounded-lg text-[10px]"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleVisitorApproval(visitor._id, 'Rejected')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-2 py-1.5 rounded-lg text-[10px]"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Search by visitor or student name…"
+                    value={visitorSearch}
+                    onChange={e => { setVisitorSearch(e.target.value); setVisitorsPage(1); }}
+                    className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
+                  />
+                </div>
+              </div>
 
+              {(() => {
+                const filtered = visitors.filter(v => 
+                  (v.visitorName || '').toLowerCase().includes(visitorSearch.toLowerCase()) ||
+                  (v.student?.fullName || '').toLowerCase().includes(visitorSearch.toLowerCase())
+                );
+                const paginated = filtered.slice(
+                  (visitorsPage - 1) * ITEMS_PER_PAGE,
+                  visitorsPage * ITEMS_PER_PAGE
+                );
+                const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-450 uppercase tracking-wider text-[11px] font-bold">
+                            <th className="pb-3 text-left font-medium">Visitor Name</th>
+                            <th className="pb-3 text-left font-medium">Student</th>
+                            <th className="pb-3 text-left font-medium">Relationship</th>
+                            <th className="pb-3 text-left font-medium">Visit Date</th>
+                            <th className="pb-3 text-left font-medium">Status</th>
+                            <th className="pb-3 text-left font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {paginated.map(v => (
+                            <tr key={v._id} className="hover:bg-gray-50/30 transition-colors">
+                              <td className="py-4 font-semibold text-gray-900">{v.visitorName}</td>
+                              <td className="py-4 text-gray-600">
+                                <p className="font-semibold text-gray-800">{v.student?.fullName || 'N/A'}</p>
+                                <p className="text-[10px] text-gray-400">Rm {v.student?.roomNumber || 'N/A'} ({v.student?.block || 'N/A'})</p>
+                              </td>
+                              <td className="py-4 text-gray-600">{v.relationship}</td>
+                              <td className="py-4 text-gray-600">
+                                {v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'} ({v.expectedArrivalTime || 'Anytime'})
+                              </td>
+                              <td className="py-4"><StatusBadge status={v.status} /></td>
+                              <td className="py-4">
+                                {v.status === 'Pending' ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleVisitorApproval(v._id, 'Approved')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                                      Approve
+                                    </button>
+                                    <button onClick={() => handleVisitorApproval(v._id, 'Rejected')}
+                                      className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">
+                                      Reject
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">Actioned</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filtered.length === 0 && (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-gray-400">
+                                No visitor requests found.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-5 pt-5 border-t border-gray-100">
+                        <p className="text-xs text-gray-400">
+                          Showing {((visitorsPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(visitorsPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setVisitorsPage(p => Math.max(1, p - 1))}
+                            disabled={visitorsPage === 1}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            onClick={() => setVisitorsPage(p => Math.min(totalPages, p + 1))}
+                            disabled={visitorsPage === totalPages}
+                            className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-40 transition-colors"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
 
@@ -2103,61 +2626,71 @@ export default function AdminDashboard({ user, onLogout }) {
               </div>
               <button
                 onClick={() => { setSelectedAnn(null); setAnnForm({ title: '', description: '', priority: 'Normal', visibleTo: 'all', pinned: false }); setShowAnnAddEditModal(true); }}
-                className="bg-primary hover:bg-primary-light text-white text-xs font-bold py-3.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
+                className="bg-primary hover:bg-primary/95 text-white text-xs font-bold py-2.5 px-5 rounded-xl shadow flex items-center space-x-2 transition-all shrink-0"
               >
                 <i className="fas fa-plus" />
                 <span>Post Announcement</span>
               </button>
             </div>
 
-            {/* Announcement Feed */}
-            <div className="space-y-4">
+            {/* Announcement Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {announcements.map(ann => (
-                <div key={ann._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 hover:shadow-md transition space-y-4 relative">
+                <div key={ann._id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between relative">
                   {ann.pinned && (
                     <span className="absolute top-6 right-6 text-amber-500 text-sm" title="Pinned to top">
                       <i className="fas fa-thumbtack rotate-45" />
                     </span>
                   )}
-                  <div className="flex items-center space-x-3 text-left">
-                    <span className="text-base font-extrabold text-gray-900">{ann.title}</span>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${ann.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'
-                      }`}>{ann.priority} Priority</span>
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 leading-tight mb-1 text-lg">{ann.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <PriorityBadge priority={ann.priority} />
+                        <span className="text-gray-400 text-xs font-medium">
+                          {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString() : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-gray-650 font-normal leading-relaxed text-sm mb-4">{ann.description}</p>
                   </div>
 
-                  <p className="text-xs text-gray-650 leading-relaxed font-sans">{ann.description}</p>
-
-                  <div className="pt-3 border-t border-gray-50 flex justify-between items-center text-xs text-gray-400 font-medium">
-                    <span>Target Audience: <strong className="text-gray-600 capitalize">{ann.visibleTo}</strong> · Posted on {ann.createdAt}</span>
-
-                    <div className="flex space-x-1">
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <span className="text-[10px] text-gray-450 font-bold uppercase tracking-wider">
+                      To: <strong className="text-gray-700">{ann.visibleTo}</strong>
+                    </span>
+                    <div className="flex space-x-1.5">
                       <button
                         onClick={() => toggleAnnPin(ann)}
-                        className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 flex items-center justify-center transition"
+                        className={`px-2 py-1.5 text-xs font-semibold rounded-lg transition ${ann.pinned ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}
                         title={ann.pinned ? 'Unpin' : 'Pin to top'}
                       >
-                        <i className="fas fa-thumbtack text-xs" />
+                        <i className="fas fa-thumbtack" />
                       </button>
                       <button
                         onClick={() => { setSelectedAnn(ann); setAnnForm({ title: ann.title, description: ann.description, priority: ann.priority, visibleTo: ann.visibleTo || 'all', pinned: ann.pinned }); setShowAnnAddEditModal(true); }}
-                        className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center transition"
-                        title="Edit Alert"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition"
                       >
-                        <i className="fas fa-pencil-alt text-xs" />
+                        Edit
                       </button>
                       <button
                         onClick={() => deleteAnnouncement(ann._id)}
-                        className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition"
-                        title="Delete Broadcast"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition"
                       >
-                        <i className="fas fa-trash-alt text-xs" />
+                        Delete
                       </button>
                     </div>
                   </div>
                 </div>
               ))}
+              {announcements.length === 0 && (
+                <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-16 flex flex-col items-center justify-center text-center">
+                  <i className="fas fa-bullhorn text-gray-300 text-5xl mb-4" />
+                  <p className="text-base font-semibold text-gray-800 mb-1">No announcements yet</p>
+                  <p className="text-sm text-gray-400 font-normal max-w-sm">Click "Post Announcement" to broadcast one.</p>
+                </div>
+              )}
             </div>
-
           </div>
         )}
 
@@ -2166,55 +2699,79 @@ export default function AdminDashboard({ user, onLogout }) {
           <div className="flex flex-col space-y-6 w-full text-left animate-fadeIn">
 
             {/* KPI Metrics Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Total Hostel Capacity</span>
-                <span className="text-2xl font-black text-gray-900 mt-1 block">384 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds (Allotted)</span>
-                <span className="text-2xl font-black text-primary mt-1 block">284 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds (Vacant)</span>
-                <span className="text-2xl font-black text-emerald-600 mt-1 block">100 Beds</span>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
-                <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-2xl font-black text-amber-500">73.9%</span>
-                  <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
-                    <div className="bg-amber-500 h-full rounded-full" style={{ width: '73.9%' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
+            {(() => {
+              const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+              const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
+              
+              const vacantRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) === 0).length;
+              const fullyOccupiedRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) >= (r.capacity || 0)).length;
 
-            {/* Boys / Girls / Vacant Rooms Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
-                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Vacant Rooms</span>
-                <span className="text-xl font-extrabold text-gray-800 mt-1 block">12 Rooms</span>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
-                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Fully Occupied Rooms</span>
-                <span className="text-xl font-extrabold text-gray-800 mt-1 block">48 Rooms</span>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Boys Hostel Summary</span>
-                  <span className="text-sm font-black text-gray-800 block mt-1">144 / 192 Beds Allotted</span>
-                </div>
-                <div className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold">75%</div>
-              </div>
-              <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
-                <div>
-                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Girls Hostel Summary</span>
-                  <span className="text-sm font-black text-gray-800 block mt-1">108 / 144 Beds Allotted</span>
-                </div>
-                <div className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded-lg font-bold">75%</div>
-              </div>
-            </div>
+              const boysRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('a') || r.blockName?.toLowerCase().includes('b') || r.roomNumber.startsWith('A') || r.roomNumber.startsWith('B') || r.roomNumber.startsWith('a') || r.roomNumber.startsWith('b'));
+              const boysBeds = boysRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const boysOccupied = boysRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const boysRate = boysBeds > 0 ? Math.round((boysOccupied / boysBeds) * 100) : 0;
+
+              const girlsRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('c') || r.blockName?.toLowerCase().includes('d') || r.roomNumber.startsWith('C') || r.roomNumber.startsWith('D') || r.roomNumber.startsWith('c') || r.roomNumber.startsWith('d'));
+              const girlsBeds = girlsRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+              const girlsOccupied = girlsRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+              const girlsRate = girlsBeds > 0 ? Math.round((girlsOccupied / girlsBeds) * 100) : 0;
+
+              return (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Total Hostel Capacity</span>
+                      <span className="text-2xl font-black text-gray-900 mt-1 block">{totalBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupied Beds (Allotted)</span>
+                      <span className="text-2xl font-black text-primary mt-1 block">{occupiedBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-455 font-black uppercase tracking-wider block">Available Beds (Vacant)</span>
+                      <span className="text-2xl font-black text-emerald-600 mt-1 block">{availableBeds} Beds</span>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                      <span className="text-[10px] text-gray-450 font-black uppercase tracking-wider block">Occupancy Rate</span>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-2xl font-black text-amber-500">{occupancyRate}%</span>
+                        <div className="w-16 bg-gray-100 h-2 rounded-full overflow-hidden shrink-0">
+                          <div className="bg-amber-500 h-full rounded-full" style={{ width: `${occupancyRate}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Boys / Girls / Vacant Rooms Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                      <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Vacant Rooms</span>
+                      <span className="text-xl font-extrabold text-gray-800 mt-1 block">{vacantRoomsCount} Rooms</span>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm">
+                      <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Fully Occupied Rooms</span>
+                      <span className="text-xl font-extrabold text-gray-800 mt-1 block">{fullyOccupiedRoomsCount} Rooms</span>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                      <div>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Boys Hostel Summary</span>
+                        <span className="text-sm font-black text-gray-800 block mt-1">{boysOccupied} / {boysBeds} Beds Allotted</span>
+                      </div>
+                      <div className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg font-bold">{boysRate}%</div>
+                    </div>
+                    <div className="bg-white border border-gray-100 p-5 rounded-2xl shadow-sm flex justify-between items-center">
+                      <div>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Girls Hostel Summary</span>
+                        <span className="text-sm font-black text-gray-800 block mt-1">{girlsOccupied} / {girlsBeds} Beds Allotted</span>
+                      </div>
+                      <div className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded-lg font-bold">{girlsRate}%</div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Multi-Criteria Filters */}
             <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-4">
@@ -2343,14 +2900,14 @@ export default function AdminDashboard({ user, onLogout }) {
               <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">{sortedOccupancy.length} Rooms Filtered</span>
               <div className="flex items-center space-x-3 w-full sm:w-auto">
                 <button
-                  onClick={triggerPrint}
+                  onClick={triggerPrintReport}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-print" />
                   <span>Print Report</span>
                 </button>
                 <button
-                  onClick={() => mockExport('PDF')}
+                  onClick={exportOccupancyReportPDF}
                   className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
                 >
                   <i className="fas fa-file-pdf text-rose-500" />
