@@ -99,6 +99,8 @@ const loginUser = async (req, res) => {
         { email: email.toLowerCase() },
         { studentId: email },
         { studentId: email.toUpperCase() },
+        { registerNumber: email },
+        { registerNumber: email.toUpperCase() },
         { employeeId: email },
         { employeeId: email.toUpperCase() }
       ]
@@ -135,6 +137,8 @@ const loginUser = async (req, res) => {
         parentContact: user.parentContact,
         mustChangePassword: user.mustChangePassword,
         isFirstLogin: user.isFirstLogin,
+        profileCompleted: user.profileCompleted || false,
+        passwordChanged: user.passwordChanged || false,
       },
     });
   } catch (error) {
@@ -325,6 +329,7 @@ const firstLoginChangePassword = async (req, res) => {
     user.password = newPassword;
     user.mustChangePassword = false;
     user.isFirstLogin = false;
+    user.passwordChanged = true;
     await user.save();
 
     return res.status(200).json({
@@ -343,6 +348,8 @@ const firstLoginChangePassword = async (req, res) => {
         parentContact: user.parentContact,
         mustChangePassword: false,
         isFirstLogin: false,
+        profileCompleted: user.profileCompleted || false,
+        passwordChanged: true,
       }
     });
   } catch (error) {

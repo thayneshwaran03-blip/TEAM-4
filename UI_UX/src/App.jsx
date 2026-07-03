@@ -5,6 +5,7 @@ import StudentDashboard from './pages/StudentDashboard.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import WardenDashboard from './pages/WardenDashboard.jsx';
 import FirstLoginChangePassword from './pages/FirstLoginChangePassword.jsx';
+import CompleteProfile from './pages/CompleteProfile.jsx';
 
 // ── Decode JWT payload without any library ────────────────────────────────────
 function decodeJwtPayload(token) {
@@ -112,6 +113,18 @@ export default function App() {
 
     switch (user.role) {
       case 'student':
+        if (!user.profileCompleted) {
+          return (
+            <CompleteProfile
+              user={user}
+              onLogout={handleLogout}
+              onProfileCompleted={(updatedUser) => {
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                setUser(updatedUser);
+              }}
+            />
+          );
+        }
         return <StudentDashboard user={user} onLogout={handleLogout} />;
       case 'warden':
         return <WardenDashboard user={user} onLogout={handleLogout} />;

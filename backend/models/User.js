@@ -21,7 +21,6 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      required: [true, 'Phone number is required'],
       trim: true,
     },
     department: {
@@ -96,6 +95,18 @@ const userSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    parentDetails: {
+      parentName: { type: String, trim: true },
+      parentContact: { type: String, trim: true }
+    },
+    address: {
+      type: String,
+      trim: true,
+    },
+    profilePhoto: {
+      type: String,
+      trim: true,
+    },
     // New fields for Warden
     employeeId: {
       type: String,
@@ -121,6 +132,14 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
     isFirstLogin: {
+      type: Boolean,
+      default: true,
+    },
+    profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    passwordChanged: {
       type: Boolean,
       default: false,
     },
