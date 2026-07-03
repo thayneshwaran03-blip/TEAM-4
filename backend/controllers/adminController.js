@@ -1,6 +1,7 @@
 const Announcement = require('../models/Announcement');
 const Room = require('../models/Room');
 const User = require('../models/User');
+const { syncRoomStats } = require('../utils/roomHelper');
 const LeaveRequest = require('../models/LeaveRequest');
 const Complaint = require('../models/Complaint');
 const VisitorRequest = require('../models/VisitorRequest');
@@ -55,7 +56,7 @@ const sendCredentialsEmail = async (toEmail, tempPassword, userName, role, userI
               </p>
               ${userId ? `
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
-                <strong>${role === 'student' ? 'Student ID' : 'Employee ID'}:</strong> <code style="background: #e3ebff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #1a237e;">${userId}</code>
+                <strong>${role === 'student' ? 'Register No' : 'Employee ID'}:</strong> <code style="background: #e3ebff; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #1a237e;">${userId}</code>
               </p>
               ` : ''}
               <p style="margin: 6px 0; color: #444; font-size: 14px;">
@@ -147,18 +148,25 @@ const createRoom = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Room number, block, floor, and capacity are required' });
     }
 
-    const existingRoom = await Room.findOne({ roomNumber });
+    const blockLetter = blockName.replace('Block ', '').trim();
+    const formattedRoomNum = roomNumber.trim().startsWith(blockLetter) ? roomNumber.trim() : `${blockLetter}${roomNumber.trim()}`;
+
+    const existingRoom = await Room.findOne({ roomNumber: formattedRoomNum });
     if (existingRoom) {
       return res.status(400).json({ success: false, message: 'Room with that number already exists' });
     }
 
+    const hostelName = (blockName.trim() === 'Block A' || blockName.trim() === 'Block B') ? 'Boys Hostel' : 'Girls Hostel';
+
     const room = await Room.create({
-      roomNumber,
-      blockName,
-      floorNumber,
-      capacity,
-      status: status || 'Open',
+      roomNumber: formattedRoomNum,
+      blockName: blockName.trim(),
+      floorNumber: floorNumber.trim(),
+      capacity: Number(capacity),
+      hostelName,
+      status: status || 'VACANT',
       occupiedBeds: 0,
+      assignedStudents: []
     });
 
     return res.status(201).json({ success: true, message: 'Room created successfully', room });
@@ -170,7 +178,12 @@ const createRoom = async (req, res) => {
 
 const listRooms = async (req, res) => {
   try {
-    const rooms = await Room.find().sort({ blockName: 1, floorNumber: 1, roomNumber: 1 });
+    const rooms = await Room.find()
+      .populate({
+        path: 'assignedStudents',
+        select: 'fullName email department year registerNumber'
+      })
+      .sort({ blockName: 1, floorNumber: 1, roomNumber: 1 });
     return res.status(200).json({ success: true, rooms });
   } catch (error) {
     console.error('List Rooms Error:', error);
@@ -202,8 +215,8 @@ const createStudent = async (req, res) => {
       temporaryPassword
     } = req.body;
 
-    if (!fullName || !registerNumber || !email || !phoneNumber || !gender) {
-      return res.status(400).json({ success: false, message: 'Required fields are missing: Name, Reg Number, Email, Phone, Gender' });
+    if (!fullName || !registerNumber || !email || !gender) {
+      return res.status(400).json({ success: false, message: 'Required fields are missing: Name, Reg Number, Email, Gender' });
     }
 
     const emailExists = await User.findOne({ email: email.toLowerCase() });
@@ -226,18 +239,24 @@ const createStudent = async (req, res) => {
       if (!block || !floor) {
         return res.status(400).json({ success: false, message: 'Block and Floor are required when Room Number is provided' });
       }
-      let targetRoom = await Room.findOne({ roomNumber: roomNumber.trim() });
+      const blockLetter = block.replace('Block ', '').trim();
+      const formattedRoomNum = roomNumber.trim().startsWith(blockLetter) ? roomNumber.trim() : `${blockLetter}${roomNumber.trim()}`;
+      
+      let targetRoom = await Room.findOne({ roomNumber: formattedRoomNum });
       if (targetRoom) {
         if (targetRoom.occupiedBeds >= targetRoom.capacity) {
-          return res.status(400).json({ success: false, message: `Room ${roomNumber} is already full` });
+          return res.status(400).json({ success: false, message: `Room ${formattedRoomNum} is already full` });
         }
       } else {
+        const hostelName = (block.trim() === 'Block A' || block.trim() === 'Block B') ? 'Boys Hostel' : 'Girls Hostel';
         targetRoom = await Room.create({
-          roomNumber: roomNumber.trim(),
+          roomNumber: formattedRoomNum,
           blockName: block.trim(),
           floorNumber: floor.trim(),
           capacity: 4,
-          status: 'Open'
+          hostelName,
+          status: 'VACANT',
+          assignedStudents: []
         });
       }
       studentRoomId = targetRoom._id;
@@ -273,6 +292,8 @@ const createStudent = async (req, res) => {
       isActive: status !== 'Inactive',
       mustChangePassword: true,
       isFirstLogin: true,
+      profileCompleted: false,
+      passwordChanged: false,
       password: tempPassword,
       room: studentRoomId
     });
@@ -280,21 +301,11 @@ const createStudent = async (req, res) => {
     await student.save();
 
     if (studentRoomId) {
-      const room = await Room.findById(studentRoomId);
-      if (room) {
-        if (!room.assignedStudents.includes(student._id)) {
-          room.assignedStudents.push(student._id);
-          room.occupiedBeds = room.assignedStudents.length;
-          if (room.occupiedBeds >= room.capacity) {
-            room.status = 'Full';
-          }
-          await room.save();
-        }
-      }
+      await syncRoomStats(studentRoomId);
     }
 
     try {
-      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student', studentId);
+      await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student', registerNumber);
     } catch (mailErr) {
       console.error('Failed to send credentials email to student:', mailErr);
     }
@@ -426,16 +437,12 @@ const updateStudent = async (req, res) => {
       student.isActive = status === 'Active';
     }
 
-    if (roomNumber !== oldRoomNumber) {
+    if (roomNumber !== oldRoomNumber || block !== student.block || floor !== student.floor) {
       // Deallocate from old room
       if (oldRoomId) {
         const oldRoom = await Room.findById(oldRoomId);
         if (oldRoom) {
           oldRoom.assignedStudents = oldRoom.assignedStudents.filter(sid => sid.toString() !== student._id.toString());
-          oldRoom.occupiedBeds = oldRoom.assignedStudents.length;
-          if (oldRoom.occupiedBeds < oldRoom.capacity && oldRoom.status === 'Full') {
-            oldRoom.status = 'Open';
-          }
           await oldRoom.save();
         }
       }
@@ -444,26 +451,28 @@ const updateStudent = async (req, res) => {
         if (!block || !floor) {
           return res.status(400).json({ success: false, message: 'Block and Floor are required to assign a room' });
         }
-        let newRoom = await Room.findOne({ roomNumber: roomNumber.trim() });
+        const blockLetter = block.replace('Block ', '').trim();
+        const formattedRoomNum = roomNumber.trim().startsWith(blockLetter) ? roomNumber.trim() : `${blockLetter}${roomNumber.trim()}`;
+        
+        let newRoom = await Room.findOne({ roomNumber: formattedRoomNum });
         if (newRoom) {
-          if (newRoom.occupiedBeds >= newRoom.capacity) {
-            return res.status(400).json({ success: false, message: `Room ${roomNumber} is full` });
+          if (newRoom.occupiedBeds >= newRoom.capacity && student.room?.toString() !== newRoom._id.toString()) {
+            return res.status(400).json({ success: false, message: `Room ${formattedRoomNum} is full` });
           }
         } else {
+          const hostelName = (block.trim() === 'Block A' || block.trim() === 'Block B') ? 'Boys Hostel' : 'Girls Hostel';
           newRoom = await Room.create({
-            roomNumber: roomNumber.trim(),
+            roomNumber: formattedRoomNum,
             blockName: block.trim(),
             floorNumber: floor.trim(),
             capacity: 4,
-            status: 'Open'
+            hostelName,
+            status: 'VACANT',
+            assignedStudents: []
           });
         }
         if (!newRoom.assignedStudents.includes(student._id)) {
           newRoom.assignedStudents.push(student._id);
-        }
-        newRoom.occupiedBeds = newRoom.assignedStudents.length;
-        if (newRoom.occupiedBeds >= newRoom.capacity) {
-          newRoom.status = 'Full';
         }
         await newRoom.save();
         student.room = newRoom._id;
@@ -473,6 +482,13 @@ const updateStudent = async (req, res) => {
     }
 
     await student.save();
+
+    if (oldRoomId) {
+      await syncRoomStats(oldRoomId);
+    }
+    if (student.room) {
+      await syncRoomStats(student.room);
+    }
 
     await updateNotification(
       student._id,
@@ -499,20 +515,20 @@ const deleteStudent = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
-    // Deallocate from room
-    if (student.room) {
-      const room = await Room.findById(student.room);
+    const oldRoomId = student.room;
+    if (oldRoomId) {
+      const room = await Room.findById(oldRoomId);
       if (room) {
         room.assignedStudents = room.assignedStudents.filter(sid => sid.toString() !== student._id.toString());
-        room.occupiedBeds = room.assignedStudents.length;
-        if (room.occupiedBeds < room.capacity && room.status === 'Full') {
-          room.status = 'Open';
-        }
         await room.save();
       }
     }
 
     await User.findByIdAndDelete(id);
+
+    if (oldRoomId) {
+      await syncRoomStats(oldRoomId);
+    }
     return res.status(200).json({ success: true, message: 'Student deleted successfully' });
   } catch (error) {
     console.error('Delete Student Error:', error);
@@ -768,7 +784,11 @@ const resetWardenPassword = async (req, res) => {
 const listLeaveRequests = async (req, res) => {
   try {
     const leaveRequests = await LeaveRequest.find()
-      .populate({ path: 'student', select: 'fullName email phoneNumber block hostelName' })
+      .populate({
+        path: 'student',
+        select: 'fullName email phoneNumber room roomNumber block hostelName',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .populate({ path: 'room', select: 'roomNumber blockName' })
       .populate({ path: 'warden', select: 'fullName email' })
       .sort({ createdAt: -1 });
@@ -838,7 +858,11 @@ const reviewLeaveRequest = async (req, res) => {
 const listComplaints = async (req, res) => {
   try {
     const complaints = await Complaint.find()
-      .populate({ path: 'student', select: 'fullName email room block hostelName' })
+      .populate({
+        path: 'student',
+        select: 'fullName email room roomNumber block hostelName',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .populate({ path: 'warden', select: 'fullName email' })
       .sort({ createdAt: -1 });
 
@@ -902,7 +926,11 @@ const updateComplaintStatus = async (req, res) => {
 const listVisitorRequests = async (req, res) => {
   try {
     const visitorRequests = await VisitorRequest.find()
-      .populate({ path: 'student', select: 'fullName email room block hostelName' })
+      .populate({
+        path: 'student',
+        select: 'fullName email room roomNumber block hostelName',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .populate({ path: 'warden', select: 'fullName email' })
       .sort({ createdAt: -1 });
 
