@@ -506,16 +506,12 @@ export default function StudentDashboard({ user, onLogout }) {
             }}
           >
             <div className="bg-primary/5 rounded-2xl border border-primary/10 p-4 flex flex-col items-center text-center">
-              {user?.profilePhoto ? (
-                <img src={user.profilePhoto} alt="Profile" className="w-10 h-10 rounded-full object-cover shadow-sm mb-2" />
-              ) : (
-                <div
-                  className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
-                  style={{ fontSize: '15px' }}
-                >
-                  {initials.charAt(0)}
-                </div>
-              )}
+              <div
+                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
+                style={{ fontSize: '15px' }}
+              >
+                {initials.charAt(0)}
+              </div>
               <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '13px' }}>{name}</p>
               <span
                 className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
@@ -535,17 +531,13 @@ export default function StudentDashboard({ user, onLogout }) {
               paddingBottom: !isSidebarExpanded && !isMobileDrawerOpen ? '4px' : '0px',
             }}
           >
-            {user?.profilePhoto ? (
-              <img src={user.profilePhoto} alt="Profile" className="w-8 h-8 rounded-full object-cover" title={name} />
-            ) : (
-              <div
-                className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
-                style={{ fontSize: '13px' }}
-                title={name}
-              >
-                {initials.charAt(0)}
-              </div>
-            )}
+            <div
+              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
+              style={{ fontSize: '13px' }}
+              title={name}
+            >
+              {initials.charAt(0)}
+            </div>
           </div>
         </div>
 
@@ -758,13 +750,9 @@ export default function StudentDashboard({ user, onLogout }) {
                 onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
                 className="flex items-center space-x-3 pl-2 pr-3 py-2 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
               >
-                {user?.profilePhoto ? (
-                  <img src={user.profilePhoto} alt="Profile" className="w-10 h-10 rounded-full object-cover border border-gray-100" />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
-                    {initials.charAt(0)}
-                  </div>
-                )}
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
+                  {initials.charAt(0)}
+                </div>
                 <span className="hidden sm:block font-semibold text-[#1F2937] leading-none" style={{ fontSize: '17px' }}>{name}</span>
                 <i className={`fas fa-chevron-down text-[11px] text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -1487,11 +1475,7 @@ export default function StudentDashboard({ user, onLogout }) {
               <i className="fas fa-times" />
             </button>
             <div className="flex items-center space-x-4 mb-6">
-              {user?.profilePhoto ? (
-                <img src={user.profilePhoto} alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm" />
-              ) : (
-                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">{initials}</div>
-              )}
+              <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">{initials}</div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{name}</h3>
                 <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold uppercase rounded-full">{role}</span>
