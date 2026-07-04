@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Announcement = require('../models/Announcement');
 const Room = require('../models/Room');
+const { syncRoomStats } = require('../utils/roomHelper');
 
 
 const updateNotification = async (recipient, type, title, message, relatedTo, metadata = {}) => {
@@ -78,7 +79,11 @@ const listLeaveRequests = async (req, res) => {
   try {
     const scopeQuery = await getWardenScopeQuery(req.user);
     const leaveRequests = await LeaveRequest.find(scopeQuery)
-      .populate({ path: 'student', select: 'fullName email phoneNumber' })
+      .populate({
+        path: 'student',
+        select: 'fullName email phoneNumber room roomNumber block hostelName',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .populate({ path: 'room', select: 'roomNumber blockName' })
       .sort({ createdAt: -1 });
 
@@ -148,7 +153,11 @@ const listComplaints = async (req, res) => {
   try {
     const scopeQuery = await getWardenScopeQuery(req.user);
     const complaints = await Complaint.find(scopeQuery)
-      .populate({ path: 'student', select: 'fullName email room' })
+      .populate({
+        path: 'student',
+        select: 'fullName email room roomNumber',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, complaints });
@@ -220,7 +229,11 @@ const listVisitorRequests = async (req, res) => {
   try {
     const scopeQuery = await getWardenScopeQuery(req.user);
     const visitorRequests = await VisitorRequest.find(scopeQuery)
-      .populate({ path: 'student', select: 'fullName email room' })
+      .populate({
+        path: 'student',
+        select: 'fullName email room roomNumber',
+        populate: { path: 'room', select: 'roomNumber blockName' }
+      })
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, visitorRequests });
@@ -518,10 +531,6 @@ const allocateRoom = async (req, res) => {
       const oldRoom = await Room.findById(oldRoomId);
       if (oldRoom) {
         oldRoom.assignedStudents = oldRoom.assignedStudents.filter(id => id.toString() !== studentId);
-        oldRoom.occupiedBeds = Math.max(0, oldRoom.assignedStudents.length);
-        if (oldRoom.occupiedBeds < oldRoom.capacity && oldRoom.status === 'Full') {
-          oldRoom.status = 'Open';
-        }
         await oldRoom.save();
       }
     }
@@ -539,15 +548,12 @@ const allocateRoom = async (req, res) => {
       }
 
       if (newRoom.occupiedBeds >= newRoom.capacity) {
+      if (newRoom.occupiedBeds >= newRoom.capacity && student.room?.toString() !== newRoom._id.toString()) {
         return res.status(400).json({ success: false, message: 'New room is already full' });
       }
 
       if (!newRoom.assignedStudents.includes(studentId)) {
         newRoom.assignedStudents.push(studentId);
-      }
-      newRoom.occupiedBeds = newRoom.assignedStudents.length;
-      if (newRoom.occupiedBeds >= newRoom.capacity) {
-        newRoom.status = 'Full';
       }
       await newRoom.save();
 
@@ -558,6 +564,13 @@ const allocateRoom = async (req, res) => {
     }
 
     await student.save();
+
+    if (oldRoomId) {
+      await syncRoomStats(oldRoomId);
+    }
+    if (roomId) {
+      await syncRoomStats(roomId);
+    }
 
     await updateNotification(
       studentId,
@@ -587,6 +600,8 @@ const getWardenOccupancyDashboard = async (req, res) => {
     }
 
     const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
+    const blockName = warden.assignedBlocks[0];
+    const rooms = await Room.find({ blockName });
     
     let totalCapacity = 0;
     let occupiedBeds = 0;
@@ -594,9 +609,9 @@ const getWardenOccupancyDashboard = async (req, res) => {
     let vacantRoomsCount = 0;
 
     rooms.forEach(r => {
-      totalCapacity += r.capacity;
-      occupiedBeds += r.assignedStudents.length;
-      if (r.assignedStudents.length > 0) {
+      totalCapacity += (r.capacity || 4);
+      occupiedBeds += (r.occupiedBeds || 0);
+      if (r.occupiedBeds > 0) {
         occupiedRoomsCount++;
       } else {
         vacantRoomsCount++;
@@ -632,15 +647,17 @@ const getWardenOccupancyReport = async (req, res) => {
     }
 
     const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
+    const blockName = warden.assignedBlocks[0];
+    const rooms = await Room.find({ blockName }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
     
     const formattedRooms = rooms.map(r => ({
       _id: r._id,
       roomNumber: r.roomNumber,
       floorNumber: r.floorNumber,
-      capacity: r.capacity,
-      occupiedBeds: r.assignedStudents.length,
-      availableBeds: Math.max(0, r.capacity - r.assignedStudents.length),
-      status: r.assignedStudents.length >= r.capacity ? 'FULL' : 'OPEN'
+      capacity: r.capacity || 4,
+      occupiedBeds: r.occupiedBeds || 0,
+      availableBeds: Math.max(0, (r.capacity || 4) - (r.occupiedBeds || 0)),
+      status: r.status || 'VACANT'
     }));
 
     return res.status(200).json({ success: true, rooms: formattedRooms });
@@ -679,15 +696,17 @@ const getWardenOccupancyExport = async (req, res) => {
 
     const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
     
+    const rooms = await Room.find({ blockName }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
+    
     let totalCapacity = 0;
     let occupiedBeds = 0;
     let occupiedRoomsCount = 0;
     let vacantRoomsCount = 0;
 
     rooms.forEach(r => {
-      totalCapacity += r.capacity;
-      occupiedBeds += r.assignedStudents.length;
-      if (r.assignedStudents.length > 0) {
+      totalCapacity += (r.capacity || 4);
+      occupiedBeds += (r.occupiedBeds || 0);
+      if (r.occupiedBeds > 0) {
         occupiedRoomsCount++;
       } else {
         vacantRoomsCount++;
@@ -701,10 +720,10 @@ const getWardenOccupancyExport = async (req, res) => {
       _id: r._id,
       roomNumber: r.roomNumber,
       floorNumber: r.floorNumber,
-      capacity: r.capacity,
-      occupiedBeds: r.assignedStudents.length,
-      availableBeds: Math.max(0, r.capacity - r.assignedStudents.length),
-      status: r.assignedStudents.length >= r.capacity ? 'FULL' : 'OPEN'
+      capacity: r.capacity || 4,
+      occupiedBeds: r.occupiedBeds || 0,
+      availableBeds: Math.max(0, (r.capacity || 4) - (r.occupiedBeds || 0)),
+      status: r.status || 'VACANT'
     }));
 
     return res.status(200).json({

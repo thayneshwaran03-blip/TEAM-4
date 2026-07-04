@@ -28,10 +28,13 @@ const roomSchema = new mongoose.Schema(
       default: 0,
       min: [0, 'Occupied beds cannot be negative'],
     },
+    hostelName: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
-      enum: ['Open', 'Full', 'Under Maintenance', 'Closed'],
-      default: 'Open',
+      default: 'VACANT',
     },
     assignedStudents: [
       {

@@ -67,6 +67,8 @@ export default function WardenDashboard({ user, onLogout }) {
   const [showRoomModal,   setShowRoomModal]   = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [allocRoomId,     setAllocRoomId]     = useState('');
+  const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
+  const [viewStudent, setViewStudent] = useState(null);
 
   // On-the-spot visitor registration states
   const [onSpotStudentId, setOnSpotStudentId] = useState('');
@@ -372,24 +374,6 @@ export default function WardenDashboard({ user, onLogout }) {
   };
 
   const exportOccupancyReportPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    doc.setFillColor(26, 35, 126);
-    doc.rect(0, 0, 297, 25, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.text('HostelHub - Occupancy Report', 15, 16);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    
     const hostel = profile?.assignedHostel || 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
@@ -441,6 +425,10 @@ export default function WardenDashboard({ user, onLogout }) {
 
     const tableHeaders = [['Room Number', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy Status']];
     
+    const block = profile?.assignedBlocks ? profile.assignedBlocks.join(', ') : 'N/A';
+    const warden = profile?.fullName || 'N/A';
+    const dateStr = new Date().toLocaleString();
+
     const filteredRooms = rooms.filter(r => {
       const q = reportSearch.toLowerCase();
       const sMatch = q ? (r.roomNumber || '').includes(q) : true;
@@ -448,41 +436,24 @@ export default function WardenDashboard({ user, onLogout }) {
       return sMatch && fMatch;
     });
 
-    const tableRows = filteredRooms.map(r => [
-      r.roomNumber,
-      r.floorNumber,
-      r.capacity,
-      r.occupiedBeds,
-      Math.max(0, r.capacity - r.occupiedBeds),
-      r.status
-    ]);
+    const totalBeds = filteredRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = filteredRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
+    const totalRooms = filteredRooms.length;
+    const occupiedRooms = filteredRooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = filteredRooms.filter(r => r.occupiedBeds === 0).length;
 
-    doc.autoTable({
-      startY: 108,
-      head: tableHeaders,
-      body: tableRows,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [26, 35, 126],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      bodyStyles: {
-        fontSize: 9,
-        textColor: [55, 65, 81],
-        halign: 'center'
-      },
-      columnStyles: {
-        0: { fontStyle: 'bold' }
-      },
-      didDrawPage: (data) => {
-        const str = 'Page ' + doc.internal.getNumberOfPages();
-        doc.setFontSize(9);
-        doc.setTextColor(107, 114, 128);
-        doc.text(str, 280, 200, { align: 'right' });
-        doc.text('HostelHub - Centralized Hostel Management System', 15, 200);
+    const tableRowsHtml = filteredRooms.map(r => {
+      const occupied = r.occupiedBeds || 0;
+      const cap = r.capacity || 0;
+      const avail = Math.max(0, cap - occupied);
+      
+      let status = 'OPEN';
+      if (occupied >= cap) {
+        status = 'FULL';
+      } else if (occupied > 0) {
+        status = 'PARTIAL';
       }
     });
 
@@ -493,29 +464,24 @@ export default function WardenDashboard({ user, onLogout }) {
     const hostel = profile?.assignedHostel || 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
+      
+      const badgeClass = status.toLowerCase(); // open, full, partial
+      
+      return `
+        <tr>
+          <td style="font-weight: 600;">${r.roomNumber}</td>
+          <td>${r.floorNumber}</td>
+          <td>${cap}</td>
+          <td style="color: #1e3a8a; font-weight: 600;">${occupied}</td>
+          <td style="color: #047857; font-weight: 600;">${avail}</td>
+          <td>
+            <span class="status-badge ${badgeClass}">${status}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
     const printWindow = window.open('', '_blank');
-    
-    const filteredRooms = rooms.filter(r => {
-      const q = reportSearch.toLowerCase();
-      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
-      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
-      return sMatch && fMatch;
-    });
-
-    const tableRowsHtml = filteredRooms.map(r => `
-      <tr>
-        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${r.roomNumber}</td>
-        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.floorNumber}</td>
-        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${r.capacity}</td>
-        <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #1a237e; font-weight: bold;">${r.occupiedBeds}</td>
-        <td style="padding: 10px; border: 1px solid #ddd; text-align: center; color: #10b981; font-weight: bold;">${Math.max(0, r.capacity - r.occupiedBeds)}</td>
-        <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
-          <span style="padding: 4px 8px; border-radius: 9999px; font-size: 11px; font-weight: 900; background-color: ${r.status === 'FULL' ? '#fef2f2' : '#ecfdf5'}; color: ${r.status === 'FULL' ? '#b91c1c' : '#047857'};">${r.status}</span>
-        </td>
-      </tr>
-    `).join('');
-
     printWindow.document.write(`
       <html>
         <head>
@@ -548,36 +514,385 @@ export default function WardenDashboard({ user, onLogout }) {
             <div class="meta-col" style="text-align: right;">
               <p><strong>Assigned Floor:</strong> ${assignedFloorLabel}</p>
               <p><strong>Date & Time:</strong> ${dateStr}</p>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>HostelHub - Occupancy Report</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --primary: #1e3a8a;
+            --primary-dark: #172554;
+            --primary-light: #f0f4ff;
+            --success: #10b981;
+            --success-dark: #047857;
+            --success-light: #ecfdf5;
+            --warning: #d97706;
+            --warning-dark: #b45309;
+            --warning-light: #fffbeb;
+            --danger: #b91c1c;
+            --danger-dark: #991b1b;
+            --danger-light: #fef2f2;
+            --gray-50: #f8fafc;
+            --gray-150: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-600: #475569;
+            --gray-900: #0f172a;
+          }
+          
+          body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--gray-900);
+            background-color: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .report-container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 10mm 10mm;
+            box-sizing: border-box;
+            position: relative;
+          }
+
+          /* Professional Header styling */
+          .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+          }
+
+          .header-left h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            letter-spacing: -0.5px;
+          }
+
+          .header-left p {
+            margin: 4px 0 0 0;
+            font-size: 12px;
+            color: var(--gray-600);
+            font-weight: 500;
+          }
+
+          .header-right {
+            text-align: right;
+          }
+
+          .header-right .generated-date {
+            font-size: 11px;
+            color: var(--gray-600);
+            font-weight: 600;
+            background: var(--gray-150);
+            padding: 6px 12px;
+            border-radius: 8px;
+          }
+
+          /* Report Info Card */
+          .info-card {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-left: 5px solid var(--primary);
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+          }
+
+          .info-item {
+            display: flex;
+            flex-direction: column;
+          }
+
+          .info-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+          }
+
+          .info-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-900);
+          }
+
+          /* KPI Stats Grid - 3 columns */
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+
+          .stat-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 12px 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+          }
+          
+          .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--primary);
+          }
+          
+          .stat-card.available::before {
+            background: var(--success);
+          }
+          
+          .stat-card.rate::before {
+            background: var(--success);
+          }
+
+          .stat-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+          }
+
+          .stat-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin: 0;
+          }
+
+          .stat-card.available .stat-value, 
+          .stat-card.rate .stat-value {
+            color: var(--success-dark);
+          }
+
+          /* Progress bar for rate */
+          .progress-bar-container {
+            width: 100%;
+            height: 5px;
+            background-color: var(--gray-150);
+            border-radius: 9999px;
+            margin-top: 8px;
+            overflow: hidden;
+          }
+
+          .progress-bar {
+            height: 100%;
+            background-color: var(--success);
+            border-radius: 9999px;
+          }
+
+          /* Table styling */
+          .table-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin: 0 0 12px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 11px;
+          }
+
+          th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+            padding: 10px 12px;
+            border: 1px solid var(--primary);
+            text-align: center;
+          }
+
+          td {
+            padding: 9px 12px;
+            border: 1px solid var(--gray-200);
+            color: var(--gray-900);
+            text-align: center;
+          }
+
+          tr:nth-child(even) {
+            background-color: var(--gray-50);
+          }
+
+          /* Badges */
+          .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            border: 1px solid transparent;
+          }
+
+          .status-badge.open {
+            background-color: var(--success-light);
+            color: var(--success-dark);
+            border-color: #a7f3d0;
+          }
+
+          .status-badge.partial {
+            background-color: var(--warning-light);
+            color: var(--warning-dark);
+            border-color: #fde68a;
+          }
+
+          .status-badge.full {
+            background-color: var(--danger-light);
+            color: var(--danger-dark);
+            border-color: #fecaca;
+          }
+
+          /* Footer styling */
+          .report-footer {
+            position: fixed;
+            bottom: -10mm;
+            left: 0;
+            right: 0;
+            height: 10mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--gray-200);
+            padding-top: 8px;
+            font-size: 10px;
+            color: var(--gray-600);
+            font-weight: 500;
+          }
+
+          .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+          }
+          
+          .footer-left::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: var(--primary);
+            border-radius: 50%;
+          }
+
+          @media print {
+            @page {
+              size: A4 portrait;
+              margin: 15mm 15mm 20mm 15mm;
+            }
+            body {
+              background-color: white;
+            }
+            .report-container {
+              width: 100%;
+              margin: 0;
+              padding: 0;
+            }
+            /* Prevent breaks inside critical elements */
+            .info-card, .stats-grid, tr {
+              page-break-inside: avoid;
+            }
+            .page-number::after {
+              content: counter(page);
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="report-container">
+          <header class="report-header">
+            <div class="header-left">
+              <h1>HostelHub - Occupancy Report</h1>
+              <p>Centralized Hostel Management System</p>
             </div>
-          </div>
-          <h2 style="font-size: 18px; border-bottom: 2px solid #1a237e; padding-bottom: 8px; margin-bottom: 15px;">Dashboard Statistics</h2>
-          <div class="stats-grid">
+            <div class="header-right">
+              <div class="generated-date">Generated: ${dateStr}</div>
+            </div>
+          </header>
+
+          <section class="info-card">
+            <div class="info-item">
+              <span class="info-label">Warden Name</span>
+              <span class="info-value">${warden}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Hostel</span>
+              <span class="info-value">${hostel}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Assigned Block</span>
+              <span class="info-value">${block}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Date & Time</span>
+              <span class="info-value">${dateStr}</span>
+            </div>
+          </section>
+
+          <section class="stats-grid">
             <div class="stat-card">
-              <p class="label">Total Capacity</p>
-              <p class="val">${occupancyStats.totalCapacity} Beds</p>
+              <div class="stat-label">Total Capacity</div>
+              <div class="stat-value">${totalBeds} Beds</div>
             </div>
             <div class="stat-card">
-              <p class="label">Occupied Beds</p>
-              <p class="val">${occupancyStats.occupiedBeds} Beds</p>
+              <div class="stat-label">Occupied Beds</div>
+              <div class="stat-value">${occupiedBeds} Beds</div>
+            </div>
+            <div class="stat-card available">
+              <div class="stat-label">Available Beds</div>
+              <div class="stat-value">${availableBeds} Beds</div>
+            </div>
+            <div class="stat-card rate">
+              <div class="stat-label">Occupancy Rate</div>
+              <div class="stat-value">${occupancyRate}%</div>
+              <div class="progress-bar-container">
+                <div class="progress-bar" style="width: ${occupancyRate}%"></div>
+              </div>
             </div>
             <div class="stat-card">
-              <p class="label">Available Beds</p>
-              <p class="val">${occupancyStats.availableBeds} Beds</p>
+              <div class="stat-label">Occupied Rooms</div>
+              <div class="stat-value">${occupiedRooms} Rooms</div>
             </div>
             <div class="stat-card">
-              <p class="label">Occupancy Rate</p>
-              <p class="val">${occupancyStats.occupancyRate}%</p>
+              <div class="stat-label">Vacant Rooms</div>
+              <div class="stat-value">${vacantRooms} Rooms</div>
             </div>
-            <div class="stat-card">
-              <p class="label">Occupied Rooms</p>
-              <p class="val">${occupancyStats.occupiedRooms} Rooms</p>
-            </div>
-            <div class="stat-card">
-              <p class="label">Vacant Rooms</p>
-              <p class="val">${occupancyStats.vacantRooms} Rooms</p>
-            </div>
-          </div>
-          <h2 style="font-size: 18px; border-bottom: 2px solid #1a237e; padding-bottom: 8px; margin-bottom: 15px;">Detailed Occupancy List</h2>
+          </section>
+
+          <h2 class="table-title">Detailed Occupancy List</h2>
           <table>
             <thead>
               <tr>
@@ -593,17 +908,22 @@ export default function WardenDashboard({ user, onLogout }) {
               ${tableRowsHtml}
             </tbody>
           </table>
-          <div class="footer">
-            <span>HostelHub System - Centralized Hostel Management</span>
-            <span>Printed on: ${dateStr}</span>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
+
+          <footer class="report-footer">
+            <div class="footer-left">Generated by HostelHub</div>
+            <div class="footer-right">
+              <span class="page-number"></span>
+            </div>
+          </footer>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
       </html>
     `);
     printWindow.document.close();
@@ -618,7 +938,6 @@ export default function WardenDashboard({ user, onLogout }) {
     { id: 'Visitors',           icon: 'fa-user-friends',     label: 'Visitor Management'  },
     { id: 'Announcements',      icon: 'fa-bullhorn',         label: 'Announcements'       },
     { id: 'Occupancy Reports',  icon: 'fa-chart-pie',        label: 'Occupancy Reports'   },
-    { id: 'Settings',           icon: 'fa-cog',              label: 'Settings'            },
   ];
 
   // ── shared input style (same as StudentDashboard) ────────────────────────
@@ -658,7 +977,7 @@ export default function WardenDashboard({ user, onLogout }) {
   };
 
   // ── Filter helpers ────────────────────────────────────────────────────────
-  const filteredStudents   = students.filter(s => (s.fullName || '').toLowerCase().includes(searchStudents.toLowerCase()) || (s._id || '').toLowerCase().includes(searchStudents.toLowerCase()));
+  const filteredStudents   = students.filter(s => (s.fullName || '').toLowerCase().includes(searchStudents.toLowerCase()) || (s.registerNumber || '').toLowerCase().includes(searchStudents.toLowerCase()));
   const filteredLeaves     = leaveRequests.filter(l => (l.student?.fullName || '').toLowerCase().includes(searchLeaves.toLowerCase()));
   const filteredComplaints = complaints.filter(c => (c.student?.fullName || '').toLowerCase().includes(searchComplaints.toLowerCase()) || (c._id || '').toLowerCase().includes(searchComplaints.toLowerCase()));
   const filteredVisitors   = visitors.filter(v => (v.visitorName || '').toLowerCase().includes(searchVisitors.toLowerCase()) || (v.student?.fullName || '').toLowerCase().includes(searchVisitors.toLowerCase()));
@@ -1138,7 +1457,7 @@ export default function WardenDashboard({ user, onLogout }) {
                     <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
                     <input
                       type="text"
-                      placeholder="Search by name or ID…"
+                      placeholder="Search by name or Register No…"
                       value={searchStudents}
                       onChange={e => { setSearchStudents(e.target.value); setCurrentPage(1); }}
                       className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
@@ -1149,7 +1468,7 @@ export default function WardenDashboard({ user, onLogout }) {
                   <table className="w-full" style={{ fontSize: '15px' }}>
                     <thead>
                       <tr className="border-b border-gray-100 text-[#6B7280] uppercase tracking-wider" style={{ fontSize: '11px', fontWeight: 500 }}>
-                        <th className="pb-3 text-left font-medium">Student ID</th>
+                        <th className="pb-3 text-left font-medium">Register No</th>
                         <th className="pb-3 text-left font-medium">Name</th>
                         <th className="pb-3 text-left font-medium hidden md:table-cell">Department</th>
                         <th className="pb-3 text-left font-medium hidden sm:table-cell">Year</th>
@@ -1161,11 +1480,11 @@ export default function WardenDashboard({ user, onLogout }) {
                     <tbody className="divide-y divide-gray-50">
                       {paginate(filteredStudents).map(s => (
                         <tr key={s._id || s.id} className="hover:bg-gray-50/30 transition-colors">
-                          <td className="py-4 font-medium text-[#374151]" style={{ fontSize: '13px' }}>{(s._id || '').slice(-6).toUpperCase()}</td>
+                          <td className="py-4 font-medium text-[#374151]" style={{ fontSize: '13px' }}>{s.registerNumber || 'N/A'}</td>
                           <td className="py-4 font-semibold text-[#1F2937]">{s.fullName}</td>
                           <td className="py-4 text-[#374151] font-normal hidden md:table-cell">{s.department}</td>
                           <td className="py-4 text-[#374151] font-normal hidden sm:table-cell">{s.year}</td>
-                          <td className="py-4 text-[#374151] font-normal">Rm {s.room?.roomNumber || 'N/A'}</td>
+                          <td className="py-4 text-[#374151] font-normal">Rm {s.room?.roomNumber || s.roomNumber || 'N/A'}</td>
                           <td className="py-4"><StatusBadge status={s.room ? 'Active' : 'Inactive'} /></td>
                           <td className="py-4">
                             <div className="flex gap-2">
@@ -1173,6 +1492,8 @@ export default function WardenDashboard({ user, onLogout }) {
                                 onClick={() => {
                                   setSelectedStudentDetails(s);
                                   setShowStudentModal(true);
+                                  setViewStudent(s);
+                                  setShowStudentDetailsModal(true);
                                 }}
                                 className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors"
                               >
@@ -1249,7 +1570,7 @@ export default function WardenDashboard({ user, onLogout }) {
                       {paginate(filteredLeaves).map(l => (
                         <tr key={l._id || l.id} className="hover:bg-gray-50/30 transition-colors">
                           <td className="py-4 font-semibold text-[#1F2937]">{l.student?.fullName || 'N/A'}</td>
-                          <td className="py-4 text-[#374151] font-normal hidden sm:table-cell">Rm {l.room?.roomNumber || 'N/A'}</td>
+                          <td className="py-4 text-[#374151] font-normal hidden sm:table-cell">Rm {l.room?.roomNumber || l.student?.room?.roomNumber || l.student?.roomNumber || 'N/A'}</td>
                           <td className="py-4 text-[#374151] font-normal hidden md:table-cell">{l.leaveType}</td>
                           <td className="py-4 text-[#374151] font-normal hidden lg:table-cell">{l.fromDate ? new Date(l.fromDate).toLocaleDateString() : 'N/A'}</td>
                           <td className="py-4 text-[#374151] font-normal hidden lg:table-cell">{l.toDate ? new Date(l.toDate).toLocaleDateString() : 'N/A'}</td>
@@ -1395,10 +1716,10 @@ export default function WardenDashboard({ user, onLogout }) {
                   </h3>
                   <form onSubmit={handleRegisterVisitorOnSpot} className="space-y-3">
                     <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">Student ID / Reg No</label>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Register No</label>
                       <input
                         type="text"
-                        placeholder="e.g. STU-123456 or RegNo"
+                        placeholder="e.g. 731520104001"
                         value={onSpotStudentId}
                         onChange={e => setOnSpotStudentId(e.target.value)}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
@@ -1674,20 +1995,13 @@ export default function WardenDashboard({ user, onLogout }) {
                     return sMatch && fMatch;
                   }).length} Rooms Filtered
                 </span>
-                <div className="flex items-center space-x-3 w-full sm:w-auto">
-                  <button
-                    onClick={triggerPrintReport}
-                    className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
-                  >
-                    <i className="fas fa-print" />
-                    <span>Print Report</span>
-                  </button>
+                <div className="flex items-center w-full sm:w-auto">
                   <button
                     onClick={exportOccupancyReportPDF}
-                    className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                    className="flex-1 sm:flex-none bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-sm"
                   >
-                    <i className="fas fa-file-pdf text-rose-500" />
-                    <span>Export PDF</span>
+                    <i className="fas fa-file-pdf" />
+                    <span>Print PDF</span>
                   </button>
                 </div>
               </div>
@@ -1699,21 +2013,6 @@ export default function WardenDashboard({ user, onLogout }) {
                     <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider select-none">
                       <th onClick={() => {
                         if (sortField === 'roomNumber') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        else { setSortField('roomNumber'); setSortOrder('asc'); }
-                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
-                        Room No. <i className={`fas fa-sort ml-1 ${sortField === 'roomNumber' ? 'text-primary' : 'text-gray-300'}`} />
-                      </th>
-                      <th onClick={() => {
-                        if (sortField === 'floorNumber') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                        else { setSortField('floorNumber'); setSortOrder('asc'); }
-                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold font-sans">
-                        Floor <i className={`fas fa-sort ml-1 ${sortField === 'floorNumber' ? 'text-primary' : 'text-gray-300'}`} />
-                      </th>
-                      <th className="px-6 py-4 text-center font-bold">Capacity</th>
-                      <th className="px-6 py-4 text-center font-bold">Occupied Beds</th>
-                      <th className="px-6 py-4 text-center font-bold">Available Beds</th>
-                      <th onClick={() => {
-                        if (sortField === 'status') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                         else { setSortField('status'); setSortOrder('asc'); }
                       }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
                         Occupancy Status <i className={`fas fa-sort ml-1 ${sortField === 'status' ? 'text-primary' : 'text-gray-300'}`} />
@@ -1749,7 +2048,9 @@ export default function WardenDashboard({ user, onLogout }) {
                           <td className="px-6 py-4 text-center font-bold text-emerald-600">{room.availableBeds}</td>
                           <td className="px-6 py-4 text-left font-semibold">
                             <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                              room.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                              room.status === 'VACANT' || room.status === 'OPEN' ? 'bg-emerald-50 text-emerald-700' :
+                              room.status === 'PARTIALLY OCCUPIED' ? 'bg-blue-50 text-blue-700' :
+                              'bg-rose-50 text-rose-700'
                             }`}>{room.status}</span>
                           </td>
                         </tr>
@@ -2092,6 +2393,100 @@ export default function WardenDashboard({ user, onLogout }) {
                 Save Allocation
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: STUDENT PROFILE DETAILS ───────────────────────────────────── */}
+      {showStudentDetailsModal && viewStudent && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 text-left font-sans animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden animate-scaleIn">
+            <div className="px-6 py-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <h3 className="text-lg font-extrabold text-gray-900 font-outfit">Student Profile Details</h3>
+              <button onClick={() => { setViewStudent(null); setShowStudentDetailsModal(false); }} className="text-gray-400 hover:text-gray-700">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6 text-xs font-sans">
+              <div className="flex items-center space-x-4">
+                <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg">
+                  {viewStudent.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h4 className="text-xl font-bold text-gray-900">{viewStudent.fullName}</h4>
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-105 text-primary`}>
+                    Room: {viewStudent.room?.roomNumber || viewStudent.roomNumber || 'Not Allocated'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Register Number</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.registerNumber || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl col-span-2">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Email Address</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.email}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Phone Number</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.phoneNumber || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Gender</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.gender}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Department</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.department || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Academic Year</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.year || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Hostel</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.hostelName || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Block</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.block || 'N/A'}</p>
+                </div>
+                <div className="border border-gray-50 p-3 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Floor</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.floor || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parent/Guardian Name</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.parentName || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parent Contact Number</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.parentContact || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Emergency Contact</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.emergencyContact || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Address</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.address || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end">
+                <button
+                  onClick={() => { setViewStudent(null); setShowStudentDetailsModal(false); }}
+                  className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition"
+                >
+                  Close Details
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

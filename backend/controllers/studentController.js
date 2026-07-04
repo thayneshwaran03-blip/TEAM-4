@@ -526,6 +526,77 @@ const markNotificationRead = async (req, res) => {
   }
 };
 
+const completeProfile = async (req, res) => {
+  try {
+    const {
+      phoneNumber,
+      department,
+      year,
+      gender,
+      parentName,
+      parentContact,
+      emergencyContact,
+      address,
+      profilePhoto
+    } = req.body;
+
+    if (!phoneNumber || !department || !year || !gender || !parentName || !parentContact || !emergencyContact) {
+      return res.status(400).json({ success: false, message: 'All required details must be provided.' });
+    }
+
+    const student = await User.findById(req.user._id);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    student.phoneNumber = phoneNumber.trim();
+    student.department = department.trim();
+    student.year = year.trim();
+    student.gender = gender.trim();
+    student.parentName = parentName.trim();
+    student.parentContact = parentContact.trim();
+    student.parentDetails = {
+      parentName: parentName.trim(),
+      parentContact: parentContact.trim()
+    };
+    student.emergencyContact = emergencyContact.trim();
+    if (address !== undefined) student.address = address.trim();
+    if (profilePhoto !== undefined) student.profilePhoto = profilePhoto;
+    
+    student.profileCompleted = true;
+    
+    await student.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile completed successfully!',
+      user: {
+        id: student._id,
+        fullName: student.fullName,
+        email: student.email,
+        phoneNumber: student.phoneNumber,
+        department: student.department,
+        year: student.year,
+        gender: student.gender,
+        role: student.role,
+        parentName: student.parentName,
+        parentContact: student.parentContact,
+        mustChangePassword: student.mustChangePassword,
+        isFirstLogin: student.isFirstLogin,
+        profileCompleted: true,
+        passwordChanged: student.passwordChanged,
+        parentDetails: student.parentDetails,
+        emergencyContact: student.emergencyContact,
+        address: student.address,
+        profilePhoto: student.profilePhoto
+      }
+    });
+  } catch (error) {
+    console.error('Complete Profile Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to complete profile', error: error.message });
+  }
+};
+
 module.exports = {
   getStudentProfile,
   updateStudentProfile,
@@ -543,4 +614,5 @@ module.exports = {
   getDashboardOverview,
   getNotifications,
   markNotificationRead,
+  completeProfile,
 };
