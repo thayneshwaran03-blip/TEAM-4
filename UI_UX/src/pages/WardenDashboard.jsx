@@ -63,7 +63,9 @@ export default function WardenDashboard({ user, onLogout }) {
   const [occupancyPage,   setOccupancyPage]   = useState(1);
   const occupancyPerPage = 8;
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
   const [showRoomModal,   setShowRoomModal]   = useState(false);
+  const [showStudentModal, setShowStudentModal] = useState(false);
   const [allocRoomId,     setAllocRoomId]     = useState('');
   const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
   const [viewStudent, setViewStudent] = useState(null);
@@ -79,6 +81,9 @@ export default function WardenDashboard({ user, onLogout }) {
   const name     = profile?.fullName || user?.fullName || 'Keerthana';
   const email    = profile?.email    || user?.email    || 'keerthana.warden@hostel.com';
   const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const assignedFloorLabel = profile?.assignedBlocks && profile.assignedBlocks.length > 0
+    ? profile.assignedBlocks.join(', ')
+    : 'N/A';
 
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
@@ -370,6 +375,56 @@ export default function WardenDashboard({ user, onLogout }) {
 
   const exportOccupancyReportPDF = () => {
     const hostel = profile?.assignedHostel || 'N/A';
+    const warden = profile?.fullName || 'N/A';
+    const dateStr = new Date().toLocaleString();
+
+    doc.text(`Warden Name: ${warden}`, 15, 35);
+    doc.text(`Hostel: ${hostel}`, 15, 41);
+    doc.text(`Assigned Floor: ${assignedFloorLabel}`, 15, 47);
+    doc.text(`Date & Time: ${dateStr}`, 15, 53);
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Dashboard Statistics', 15, 65);
+
+    const statLabels = [
+      { label: 'Total Capacity', val: `${occupancyStats.totalCapacity} Beds` },
+      { label: 'Occupied Beds', val: `${occupancyStats.occupiedBeds} Beds` },
+      { label: 'Available Beds', val: `${occupancyStats.availableBeds} Beds` },
+      { label: 'Occupancy Rate', val: `${occupancyStats.occupancyRate}%` },
+      { label: 'Occupied Rooms', val: `${occupancyStats.occupiedRooms} Rooms` },
+      { label: 'Vacant Rooms', val: `${occupancyStats.vacantRooms} Rooms` }
+    ];
+
+    let currentX = 15;
+    const cardWidth = 42;
+    const cardHeight = 18;
+
+    statLabels.forEach((stat) => {
+      doc.setFillColor(240, 244, 255);
+      doc.setDrawColor(180, 198, 252);
+      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+      
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.label, currentX + 4, 77);
+
+      doc.setTextColor(26, 35, 126);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(stat.val, currentX + 4, 85);
+
+      currentX += cardWidth + 5;
+    });
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Occupancy Table', 15, 102);
+
+    const tableHeaders = [['Room Number', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy Status']];
+    
     const block = profile?.assignedBlocks ? profile.assignedBlocks.join(', ') : 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
@@ -400,6 +455,15 @@ export default function WardenDashboard({ user, onLogout }) {
       } else if (occupied > 0) {
         status = 'PARTIAL';
       }
+    });
+
+    doc.save(`Occupancy_Report_${assignedFloorLabel}_${Date.now()}.pdf`);
+  };
+
+  const triggerPrintReport = () => {
+    const hostel = profile?.assignedHostel || 'N/A';
+    const warden = profile?.fullName || 'N/A';
+    const dateStr = new Date().toLocaleString();
       
       const badgeClass = status.toLowerCase(); // open, full, partial
       
@@ -419,6 +483,37 @@ export default function WardenDashboard({ user, onLogout }) {
 
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
+      <html>
+        <head>
+          <title>Occupancy Report - ${assignedFloorLabel}</title>
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 40px; color: #333; }
+            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .header-bar h1 { margin: 0; font-size: 24px; }
+            .meta-info { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
+            .meta-col { flex: 1; }
+            .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 30px; }
+            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 15px; text-align: center; }
+            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+            .stat-card p.val { margin: 0; color: #1a237e; font-size: 18px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #1a237e; color: white; padding: 12px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
+            .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; border-t: 1px solid #e5e7eb; pt-10; }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <h1>HostelHub - Occupancy Report</h1>
+            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
+          </div>
+          <div class="meta-info">
+            <div class="meta-col">
+              <p><strong>Warden Name:</strong> ${warden}</p>
+              <p><strong>Hostel:</strong> ${hostel}</p>
+            </div>
+            <div class="meta-col" style="text-align: right;">
+              <p><strong>Assigned Floor:</strong> ${assignedFloorLabel}</p>
+              <p><strong>Date & Time:</strong> ${dateStr}</p>
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -890,6 +985,7 @@ export default function WardenDashboard({ user, onLogout }) {
   const ITEMS_PER_PAGE = 5;
   const paginate = arr => arr.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const totalPages = arr => Math.ceil(arr.length / ITEMS_PER_PAGE);
+  const floorOptions = Array.from(new Set([...(profile?.assignedBlocks || []), ...rooms.map(r => String(r.floorNumber)).filter(Boolean)]));
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
@@ -1394,6 +1490,8 @@ export default function WardenDashboard({ user, onLogout }) {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => {
+                                  setSelectedStudentDetails(s);
+                                  setShowStudentModal(true);
                                   setViewStudent(s);
                                   setShowStudentDetailsModal(true);
                                 }}
@@ -1869,8 +1967,9 @@ export default function WardenDashboard({ user, onLogout }) {
                     <label className="text-[10px] font-bold text-gray-600">Select Floor</label>
                     <select value={reportFloor} onChange={e => setReportFloor(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white">
                       <option value="">All Floors</option>
-                      <option value="1">1st Floor</option>
-                      <option value="2">2nd Floor</option>
+                      {floorOptions.map(floor => (
+                        <option key={floor} value={String(floor)}>{String(floor).replace(/^/, 'Floor ')}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -2158,7 +2257,7 @@ export default function WardenDashboard({ user, onLogout }) {
                 ['Email',       user?.email       || 'keerthana.warden@hostel.com'],
                 ['Phone',       user?.phoneNumber  || '+91 99001 23456'],
                 ['Employee ID', user?.employeeId   || 'W-2024-001'],
-                ['Hostel Block','Blocks A, B & C'],
+                ['Assigned Floor', assignedFloorLabel],
                 ['Gender',      user?.gender       || 'Female'],
                 ['Joined',      '2020-08-01'],
               ].map(([k, v]) => (
@@ -2214,6 +2313,54 @@ export default function WardenDashboard({ user, onLogout }) {
               ))}
             </div>
             <button onClick={() => { showToast('Preferences saved!'); setShowSettingsModal(false); }} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
+          </div>
+        </div>
+      )}
+
+      {/* Student Details Modal */}
+      {showStudentModal && selectedStudentDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} />
+          <div className="bg-white rounded-2xl p-7 w-full max-w-lg shadow-2xl relative z-10 animate-scaleIn text-left">
+            <button onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
+              <i className="fas fa-times" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Student Profile</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Student ID</p>
+                <p className="font-medium text-gray-800">{(selectedStudentDetails._id || '').slice(-6).toUpperCase()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Name</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.fullName}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Department</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.department || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Year</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.year || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Hostel</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.hostelName || profile?.assignedHostel || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Floor</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.floor || selectedStudentDetails.room?.floorNumber || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Room</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.room?.roomNumber ? `Rm ${selectedStudentDetails.room.roomNumber}` : 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Phone</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.phone || 'N/A'}</p>
+              </div>
+            </div>
+            <button onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Close</button>
           </div>
         </div>
       )}
