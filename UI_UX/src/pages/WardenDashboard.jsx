@@ -63,7 +63,9 @@ export default function WardenDashboard({ user, onLogout }) {
   const [occupancyPage,   setOccupancyPage]   = useState(1);
   const occupancyPerPage = 8;
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState(null);
   const [showRoomModal,   setShowRoomModal]   = useState(false);
+  const [showStudentModal, setShowStudentModal] = useState(false);
   const [allocRoomId,     setAllocRoomId]     = useState('');
 
   // On-the-spot visitor registration states
@@ -77,6 +79,9 @@ export default function WardenDashboard({ user, onLogout }) {
   const name     = profile?.fullName || user?.fullName || 'Keerthana';
   const email    = profile?.email    || user?.email    || 'keerthana.warden@hostel.com';
   const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const assignedFloorLabel = profile?.assignedBlocks && profile.assignedBlocks.length > 0
+    ? profile.assignedBlocks.join(', ')
+    : 'N/A';
 
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
@@ -386,13 +391,12 @@ export default function WardenDashboard({ user, onLogout }) {
     doc.setFont('helvetica', 'normal');
     
     const hostel = profile?.assignedHostel || 'N/A';
-    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
 
     doc.text(`Warden Name: ${warden}`, 15, 35);
     doc.text(`Hostel: ${hostel}`, 15, 41);
-    doc.text(`Assigned Block: ${block}`, 15, 47);
+    doc.text(`Assigned Floor: ${assignedFloorLabel}`, 15, 47);
     doc.text(`Date & Time: ${dateStr}`, 15, 53);
 
     doc.setFontSize(14);
@@ -482,12 +486,11 @@ export default function WardenDashboard({ user, onLogout }) {
       }
     });
 
-    doc.save(`Occupancy_Report_${block}_${Date.now()}.pdf`);
+    doc.save(`Occupancy_Report_${assignedFloorLabel}_${Date.now()}.pdf`);
   };
 
   const triggerPrintReport = () => {
     const hostel = profile?.assignedHostel || 'N/A';
-    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
 
@@ -516,7 +519,7 @@ export default function WardenDashboard({ user, onLogout }) {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Occupancy Report - ${block}</title>
+          <title>Occupancy Report - ${assignedFloorLabel}</title>
           <style>
             body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 40px; color: #333; }
             .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -543,7 +546,7 @@ export default function WardenDashboard({ user, onLogout }) {
               <p><strong>Hostel:</strong> ${hostel}</p>
             </div>
             <div class="meta-col" style="text-align: right;">
-              <p><strong>Assigned Block:</strong> ${block}</p>
+              <p><strong>Assigned Floor:</strong> ${assignedFloorLabel}</p>
               <p><strong>Date & Time:</strong> ${dateStr}</p>
             </div>
           </div>
@@ -663,6 +666,7 @@ export default function WardenDashboard({ user, onLogout }) {
   const ITEMS_PER_PAGE = 5;
   const paginate = arr => arr.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const totalPages = arr => Math.ceil(arr.length / ITEMS_PER_PAGE);
+  const floorOptions = Array.from(new Set([...(profile?.assignedBlocks || []), ...rooms.map(r => String(r.floorNumber)).filter(Boolean)]));
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   return (
@@ -1165,7 +1169,13 @@ export default function WardenDashboard({ user, onLogout }) {
                           <td className="py-4"><StatusBadge status={s.room ? 'Active' : 'Inactive'} /></td>
                           <td className="py-4">
                             <div className="flex gap-2">
-                              <button className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors">
+                              <button
+                                onClick={() => {
+                                  setSelectedStudentDetails(s);
+                                  setShowStudentModal(true);
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors"
+                              >
                                 <i className="fas fa-eye mr-1" />Profile
                               </button>
                               <button
@@ -1636,8 +1646,9 @@ export default function WardenDashboard({ user, onLogout }) {
                     <label className="text-[10px] font-bold text-gray-600">Select Floor</label>
                     <select value={reportFloor} onChange={e => setReportFloor(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white">
                       <option value="">All Floors</option>
-                      <option value="1">1st Floor</option>
-                      <option value="2">2nd Floor</option>
+                      {floorOptions.map(floor => (
+                        <option key={floor} value={String(floor)}>{String(floor).replace(/^/, 'Floor ')}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
@@ -1945,7 +1956,7 @@ export default function WardenDashboard({ user, onLogout }) {
                 ['Email',       user?.email       || 'keerthana.warden@hostel.com'],
                 ['Phone',       user?.phoneNumber  || '+91 99001 23456'],
                 ['Employee ID', user?.employeeId   || 'W-2024-001'],
-                ['Hostel Block','Blocks A, B & C'],
+                ['Assigned Floor', assignedFloorLabel],
                 ['Gender',      user?.gender       || 'Female'],
                 ['Joined',      '2020-08-01'],
               ].map(([k, v]) => (
@@ -2001,6 +2012,54 @@ export default function WardenDashboard({ user, onLogout }) {
               ))}
             </div>
             <button onClick={() => { showToast('Preferences saved!'); setShowSettingsModal(false); }} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
+          </div>
+        </div>
+      )}
+
+      {/* Student Details Modal */}
+      {showStudentModal && selectedStudentDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} />
+          <div className="bg-white rounded-2xl p-7 w-full max-w-lg shadow-2xl relative z-10 animate-scaleIn text-left">
+            <button onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors">
+              <i className="fas fa-times" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-6">Student Profile</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Student ID</p>
+                <p className="font-medium text-gray-800">{(selectedStudentDetails._id || '').slice(-6).toUpperCase()}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Name</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.fullName}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Department</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.department || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Year</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.year || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Hostel</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.hostelName || profile?.assignedHostel || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Floor</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.floor || selectedStudentDetails.room?.floorNumber || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Room</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.room?.roomNumber ? `Rm ${selectedStudentDetails.room.roomNumber}` : 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Phone</p>
+                <p className="font-medium text-gray-800">{selectedStudentDetails.phone || 'N/A'}</p>
+              </div>
+            </div>
+            <button onClick={() => { setShowStudentModal(false); setSelectedStudentDetails(null); }} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Close</button>
           </div>
         </div>
       )}

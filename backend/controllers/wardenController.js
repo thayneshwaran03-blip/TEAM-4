@@ -11,26 +11,39 @@ const updateNotification = async (recipient, type, title, message, relatedTo, me
   return Notification.create({ recipient, type, title, message, relatedTo, metadata });
 };
 
+const normalizeAssignedFloors = (user) => {
+  const raw = user?.assignedBlocks || user?.assignedFloors || [];
+  const values = Array.isArray(raw) ? raw : (typeof raw === 'string' ? raw.split(',') : []);
+
+  const floors = values
+    .flatMap((item) => String(item).split(','))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const floorMatch = item.match(/floor\s*(\d+)/i);
+      if (floorMatch) {
+        return floorMatch[1];
+      }
+      return item.replace(/^block\s+/i, '').trim();
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(floors));
+};
+
 const getWardenScopeQuery = async (user) => {
   const orConditions = [{ warden: user._id }];
-  
+
   const studentQuery = { role: 'student' };
   if (user.assignedHostel) {
     studentQuery.hostelName = user.assignedHostel;
   }
-  if (user.assignedBlocks && user.assignedBlocks.length > 0) {
-    const blocks = [];
-    user.assignedBlocks.forEach(b => {
-      blocks.push(b);
-      if (b.startsWith('Block ')) {
-        blocks.push(b.replace('Block ', '').trim());
-      } else {
-        blocks.push(`Block ${b}`);
-      }
-    });
-    studentQuery.block = { $in: blocks };
+
+  const wardenFloors = normalizeAssignedFloors(user);
+  if (wardenFloors.length > 0) {
+    studentQuery.floor = { $in: wardenFloors };
   }
-  
+
   const students = await User.find(studentQuery).select('_id');
   const studentIds = students.map(s => s._id);
   if (studentIds.length > 0) {
@@ -264,17 +277,10 @@ const listStudents = async (req, res) => {
     if (req.user.assignedHostel) {
       studentQuery.hostelName = req.user.assignedHostel;
     }
-    if (req.user.assignedBlocks && req.user.assignedBlocks.length > 0) {
-      const blocks = [];
-      req.user.assignedBlocks.forEach(b => {
-        blocks.push(b);
-        if (b.startsWith('Block ')) {
-          blocks.push(b.replace('Block ', '').trim());
-        } else {
-          blocks.push(`Block ${b}`);
-        }
-      });
-      studentQuery.block = { $in: blocks };
+
+    const wardenFloors = normalizeAssignedFloors(req.user);
+    if (wardenFloors.length > 0) {
+      studentQuery.floor = { $in: wardenFloors };
     }
 
     const students = await User.find(studentQuery)
@@ -478,17 +484,9 @@ const deleteAnnouncement = async (req, res) => {
 const listRooms = async (req, res) => {
   try {
     const roomQuery = {};
-    if (req.user.assignedBlocks && req.user.assignedBlocks.length > 0) {
-      const blocks = [];
-      req.user.assignedBlocks.forEach(b => {
-        blocks.push(b);
-        if (b.startsWith('Block ')) {
-          blocks.push(b.replace('Block ', '').trim());
-        } else {
-          blocks.push(`Block ${b}`);
-        }
-      });
-      roomQuery.blockName = { $in: blocks };
+    const wardenFloors = normalizeAssignedFloors(req.user);
+    if (wardenFloors.length > 0) {
+      roomQuery.floorNumber = { $in: wardenFloors };
     }
     const rooms = await Room.find(roomQuery).sort({ blockName: 1, floorNumber: 1, roomNumber: 1 });
     return res.status(200).json({ success: true, rooms });
@@ -535,6 +533,11 @@ const allocateRoom = async (req, res) => {
         return res.status(404).json({ success: false, message: 'New room not found' });
       }
 
+      const wardenFloors = normalizeAssignedFloors(req.user);
+      if (wardenFloors.length > 0 && !wardenFloors.includes(String(newRoom.floorNumber))) {
+        return res.status(403).json({ success: false, message: 'This room is not assigned to your floor.' });
+      }
+
       if (newRoom.occupiedBeds >= newRoom.capacity) {
         return res.status(400).json({ success: false, message: 'New room is already full' });
       }
@@ -575,32 +578,15 @@ const allocateRoom = async (req, res) => {
 const getWardenOccupancyDashboard = async (req, res) => {
   try {
     const warden = req.user;
-    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+    const wardenFloors = normalizeAssignedFloors(warden);
+    if (!warden.assignedHostel || wardenFloors.length === 0) {
       return res.status(200).json({
         success: true,
         stats: { totalCapacity: 0, occupiedBeds: 0, availableBeds: 0, occupancyRate: 0, occupiedRooms: 0, vacantRooms: 0 }
       });
     }
 
-    const blockName = warden.assignedBlocks[0];
-    const blockLetter = blockName.replace('Block ', '').trim();
-    const roomNumbers = ['101', '102', '104', '203', '204'];
-    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
-
-    for (const roomNum of roomsToEnsure) {
-      const exists = await Room.findOne({ roomNumber: roomNum });
-      if (!exists) {
-        await Room.create({
-          roomNumber: roomNum,
-          blockName: blockName,
-          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
-          capacity: 4,
-          status: 'Open'
-        });
-      }
-    }
-
-    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
     
     let totalCapacity = 0;
     let occupiedBeds = 0;
@@ -640,29 +626,12 @@ const getWardenOccupancyDashboard = async (req, res) => {
 const getWardenOccupancyReport = async (req, res) => {
   try {
     const warden = req.user;
-    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+    const wardenFloors = normalizeAssignedFloors(warden);
+    if (!warden.assignedHostel || wardenFloors.length === 0) {
       return res.status(200).json({ success: true, rooms: [] });
     }
 
-    const blockName = warden.assignedBlocks[0];
-    const blockLetter = blockName.replace('Block ', '').trim();
-    const roomNumbers = ['101', '102', '104', '203', '204'];
-    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
-
-    for (const roomNum of roomsToEnsure) {
-      const exists = await Room.findOne({ roomNumber: roomNum });
-      if (!exists) {
-        await Room.create({
-          roomNumber: roomNum,
-          blockName: blockName,
-          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
-          capacity: 4,
-          status: 'Open'
-        });
-      }
-    }
-
-    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
     
     const formattedRooms = rooms.map(r => ({
       _id: r._id,
@@ -684,27 +653,31 @@ const getWardenOccupancyReport = async (req, res) => {
 const getWardenOccupancyExport = async (req, res) => {
   try {
     const warden = req.user;
-    const blockName = warden.assignedBlocks ? warden.assignedBlocks[0] : 'N/A';
+    const wardenFloors = normalizeAssignedFloors(warden);
     const hostelName = warden.assignedHostel || 'N/A';
-    
-    const blockLetter = blockName.replace('Block ', '').trim();
-    const roomNumbers = ['101', '102', '104', '203', '204'];
-    const roomsToEnsure = roomNumbers.map(rn => `${blockLetter}${rn}`);
 
-    for (const roomNum of roomsToEnsure) {
-      const exists = await Room.findOne({ roomNumber: roomNum });
-      if (!exists) {
-        await Room.create({
-          roomNumber: roomNum,
-          blockName: blockName,
-          floorNumber: roomNum.startsWith(blockLetter + '1') ? '1' : '2',
-          capacity: 4,
-          status: 'Open'
-        });
-      }
+    if (!warden.assignedHostel || wardenFloors.length === 0) {
+      return res.status(200).json({
+        success: true,
+        metadata: {
+          wardenName: warden.fullName,
+          hostelName,
+          blockName: 'N/A',
+          exportDateTime: new Date().toLocaleString()
+        },
+        stats: {
+          totalCapacity: 0,
+          occupiedBeds: 0,
+          availableBeds: 0,
+          occupancyRate: 0,
+          occupiedRooms: 0,
+          vacantRooms: 0
+        },
+        rooms: []
+      });
     }
 
-    const rooms = await Room.find({ blockName }).populate('assignedStudents');
+    const rooms = await Room.find({ floorNumber: { $in: wardenFloors } }).populate('assignedStudents');
     
     let totalCapacity = 0;
     let occupiedBeds = 0;
@@ -781,10 +754,16 @@ const registerVisitorOnTheSpot = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Student not found.' });
     }
 
-    if (student.hostelName !== warden.assignedHostel || !warden.assignedBlocks.includes(student.block)) {
-      return res.status(400).json({ success: false, message: 'This student is not assigned to your hostel/block.' });
+    const studentFloor = student.floor || (student.room && student.room.floorNumber) || '';
+    const wardenFloors = normalizeAssignedFloors(warden);
+    if (student.hostelName !== warden.assignedHostel || (wardenFloors.length > 0 && studentFloor && !wardenFloors.includes(String(studentFloor)))) {
+      return res.status(400).json({ success: false, message: 'This student is not assigned to your hostel/floor.' });
     }
-
+    const studentFloor = student.floor || (student.room && student.room.floorNumber) || '';
+    const wardenFloors = normalizeAssignedFloors(warden);
+    if (wardenFloors.length > 0 && studentFloor && !wardenFloors.includes(String(studentFloor))) {
+      return res.status(400).json({ success: false, message: 'This student is not assigned to your floor.' });
+    }
     const visitorRequest = await VisitorRequest.create({
       student: student._id,
       visitorName,

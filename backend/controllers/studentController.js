@@ -18,6 +18,26 @@ const updateNotification = async (recipient, type, title, message, relatedTo, me
   });
 };
 
+const normalizeAssignedFloors = (user) => {
+  const raw = user?.assignedBlocks || user?.assignedFloors || [];
+  const values = Array.isArray(raw) ? raw : (typeof raw === 'string' ? raw.split(',') : []);
+
+  const floors = values
+    .flatMap((item) => String(item).split(','))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const floorMatch = item.match(/floor\s*(\d+)/i);
+      if (floorMatch) {
+        return floorMatch[1];
+      }
+      return item.replace(/^block\s+/i, '').trim();
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(floors));
+};
+
 const getStudentProfile = async (req, res) => {
   try {
     const student = await User.findById(req.user._id)
@@ -156,20 +176,12 @@ const submitLeaveRequest = async (req, res) => {
     });
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
-    const studentBlock = student.block || (student.room ? student.room.blockName : '');
-    const blocksToTry = [studentBlock];
-    if (studentBlock) {
-      if (studentBlock.startsWith('Block ')) {
-        blocksToTry.push(studentBlock.replace('Block ', '').trim());
-      } else {
-        blocksToTry.push(`Block ${studentBlock}`);
-      }
+    const studentFloor = student.floor || (student.room ? student.room.floorNumber : '');
+    const wardenQuery = { role: 'warden', assignedHostel: studentHostel };
+    if (studentFloor) {
+      wardenQuery.assignedBlocks = { $in: [studentFloor] };
     }
-    const warden = await User.findOne({
-      role: 'warden',
-      assignedHostel: studentHostel,
-      assignedBlocks: { $in: blocksToTry }
-    }) || await User.findOne({
+    const warden = await User.findOne(wardenQuery) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
     }) || await User.findOne({ role: 'warden' });
@@ -303,20 +315,12 @@ const submitComplaint = async (req, res) => {
     });
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
-    const studentBlock = student.block || (student.room ? student.room.blockName : '');
-    const blocksToTry = [studentBlock];
-    if (studentBlock) {
-      if (studentBlock.startsWith('Block ')) {
-        blocksToTry.push(studentBlock.replace('Block ', '').trim());
-      } else {
-        blocksToTry.push(`Block ${studentBlock}`);
-      }
+    const studentFloor = student.floor || (student.room ? student.room.floorNumber : '');
+    const wardenQuery = { role: 'warden', assignedHostel: studentHostel };
+    if (studentFloor) {
+      wardenQuery.assignedBlocks = { $in: [studentFloor] };
     }
-    const warden = await User.findOne({
-      role: 'warden',
-      assignedHostel: studentHostel,
-      assignedBlocks: { $in: blocksToTry }
-    }) || await User.findOne({
+    const warden = await User.findOne(wardenQuery) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
     }) || await User.findOne({ role: 'warden' });
@@ -387,20 +391,12 @@ const submitVisitorRequest = async (req, res) => {
     });
 
     const studentHostel = student.hostelName || (student.room ? student.room.hostelName : '');
-    const studentBlock = student.block || (student.room ? student.room.blockName : '');
-    const blocksToTry = [studentBlock];
-    if (studentBlock) {
-      if (studentBlock.startsWith('Block ')) {
-        blocksToTry.push(studentBlock.replace('Block ', '').trim());
-      } else {
-        blocksToTry.push(`Block ${studentBlock}`);
-      }
+    const studentFloor = student.floor || (student.room ? student.room.floorNumber : '');
+    const wardenQuery = { role: 'warden', assignedHostel: studentHostel };
+    if (studentFloor) {
+      wardenQuery.assignedBlocks = { $in: [studentFloor] };
     }
-    const warden = await User.findOne({
-      role: 'warden',
-      assignedHostel: studentHostel,
-      assignedBlocks: { $in: blocksToTry }
-    }) || await User.findOne({
+    const warden = await User.findOne(wardenQuery) || await User.findOne({
       role: 'warden',
       assignedHostel: studentHostel
     }) || await User.findOne({ role: 'warden' });
