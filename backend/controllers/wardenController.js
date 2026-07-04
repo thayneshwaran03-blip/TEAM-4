@@ -12,6 +12,28 @@ const updateNotification = async (recipient, type, title, message, relatedTo, me
   return Notification.create({ recipient, type, title, message, relatedTo, metadata });
 };
 
+const normalizeAssignedBlocks = (user) => {
+  const rawBlocks = user?.assignedBlocks || [];
+  if (!Array.isArray(rawBlocks)) return [];
+
+  const normalizedBlocks = new Set();
+  rawBlocks.forEach((block) => {
+    if (!block) return;
+
+    const value = String(block).trim();
+    if (!value) return;
+
+    normalizedBlocks.add(value);
+    if (value.startsWith('Block ')) {
+      normalizedBlocks.add(value.replace('Block ', '').trim());
+    } else {
+      normalizedBlocks.add(`Block ${value}`);
+    }
+  });
+
+  return Array.from(normalizedBlocks);
+};
+
 const getWardenScopeQuery = async (user) => {
   const orConditions = [{ warden: user._id }];
   
@@ -19,17 +41,9 @@ const getWardenScopeQuery = async (user) => {
   if (user.assignedHostel) {
     studentQuery.hostelName = user.assignedHostel;
   }
-  if (user.assignedBlocks && user.assignedBlocks.length > 0) {
-    const blocks = [];
-    user.assignedBlocks.forEach(b => {
-      blocks.push(b);
-      if (b.startsWith('Block ')) {
-        blocks.push(b.replace('Block ', '').trim());
-      } else {
-        blocks.push(`Block ${b}`);
-      }
-    });
-    studentQuery.block = { $in: blocks };
+  const assignedBlocks = normalizeAssignedBlocks(user);
+  if (assignedBlocks.length > 0) {
+    studentQuery.block = { $in: assignedBlocks };
   }
   
   const students = await User.find(studentQuery).select('_id');
@@ -514,9 +528,8 @@ const listRooms = async (req, res) => {
 const allocateRoom = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { roomId } = req.body; // can be null to deallocate
+    const { roomId } = req.body;
 
-    // Find student
     const student = await User.findById(studentId);
     if (!student || student.role !== 'student') {
       return res.status(404).json({ success: false, message: 'Student not found' });
@@ -528,7 +541,6 @@ const allocateRoom = async (req, res) => {
       return res.status(200).json({ success: true, message: 'Student is already allocated to this room' });
     }
 
-    // If student has an old room, remove student from old room
     if (oldRoomId) {
       const oldRoom = await Room.findById(oldRoomId);
       if (oldRoom) {
@@ -537,14 +549,13 @@ const allocateRoom = async (req, res) => {
       }
     }
 
-    // Allocate new room
     if (roomId) {
       const newRoom = await Room.findById(roomId);
       if (!newRoom) {
         return res.status(404).json({ success: false, message: 'New room not found' });
       }
 
-      if (newRoom.occupiedBeds >= newRoom.capacity && student.room?.toString() !== newRoom._id.toString()) {
+      if (newRoom.occupiedBeds >= newRoom.capacity && oldRoomId?.toString() !== newRoom._id.toString()) {
         return res.status(400).json({ success: false, message: 'New room is already full' });
       }
 
@@ -553,9 +564,8 @@ const allocateRoom = async (req, res) => {
       }
       await newRoom.save();
 
-       student.room = roomId;
+      student.room = roomId;
     } else {
-      // Deallocate
       student.room = null;
     }
 
@@ -587,16 +597,16 @@ const allocateRoom = async (req, res) => {
 const getWardenOccupancyDashboard = async (req, res) => {
   try {
     const warden = req.user;
-    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+    const assignedBlocks = normalizeAssignedBlocks(warden);
+    if (!warden.assignedHostel || assignedBlocks.length === 0) {
       return res.status(200).json({
         success: true,
         stats: { totalCapacity: 0, occupiedBeds: 0, availableBeds: 0, occupancyRate: 0, occupiedRooms: 0, vacantRooms: 0 }
       });
     }
 
-    const blockName = warden.assignedBlocks[0];
-    const rooms = await Room.find({ blockName });
-    
+    const rooms = await Room.find({ blockName: { $in: assignedBlocks } }).populate('assignedStudents');
+
     let totalCapacity = 0;
     let occupiedBeds = 0;
     let occupiedRoomsCount = 0;
@@ -635,13 +645,13 @@ const getWardenOccupancyDashboard = async (req, res) => {
 const getWardenOccupancyReport = async (req, res) => {
   try {
     const warden = req.user;
-    if (!warden.assignedHostel || !warden.assignedBlocks || warden.assignedBlocks.length === 0) {
+    const assignedBlocks = normalizeAssignedBlocks(warden);
+    if (!warden.assignedHostel || assignedBlocks.length === 0) {
       return res.status(200).json({ success: true, rooms: [] });
     }
 
-    const blockName = warden.assignedBlocks[0];
-    const rooms = await Room.find({ blockName }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
-    
+    const rooms = await Room.find({ blockName: { $in: assignedBlocks } }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
+
     const formattedRooms = rooms.map(r => ({
       _id: r._id,
       roomNumber: r.roomNumber,
@@ -662,11 +672,12 @@ const getWardenOccupancyReport = async (req, res) => {
 const getWardenOccupancyExport = async (req, res) => {
   try {
     const warden = req.user;
-    const blockName = warden.assignedBlocks ? warden.assignedBlocks[0] : 'N/A';
+    const assignedBlocks = normalizeAssignedBlocks(warden);
+    const blockName = assignedBlocks.length > 0 ? assignedBlocks[0] : 'N/A';
     const hostelName = warden.assignedHostel || 'N/A';
-    
-    const rooms = await Room.find({ blockName }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
-    
+
+    const rooms = await Room.find({ blockName: { $in: assignedBlocks.length > 0 ? assignedBlocks : [blockName] } }).populate('assignedStudents').sort({ floorNumber: 1, roomNumber: 1 });
+
     let totalCapacity = 0;
     let occupiedBeds = 0;
     let occupiedRoomsCount = 0;
@@ -742,7 +753,13 @@ const registerVisitorOnTheSpot = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Student not found.' });
     }
 
-    if (student.hostelName !== warden.assignedHostel || !warden.assignedBlocks.includes(student.block)) {
+    const assignedBlocks = normalizeAssignedBlocks(warden);
+    const isAssignedBlock = assignedBlocks.some((block) => {
+      const studentBlock = student.block ? String(student.block).trim() : '';
+      return studentBlock === block || studentBlock === `Block ${block}` || block === `Block ${studentBlock}`;
+    });
+
+    if (student.hostelName !== warden.assignedHostel || !isAssignedBlock) {
       return res.status(400).json({ success: false, message: 'This student is not assigned to your hostel/block.' });
     }
 

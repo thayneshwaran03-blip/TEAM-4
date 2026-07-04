@@ -12,13 +12,32 @@ connectDB();
 const app = express();
 
 // Middlewares
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://team-4-beryl.vercel.app',
+  'https://team-4-tau.vercel.app',
+  'https://team-4-glcutmso6-hostelhub4.vercel.app'
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://team-4-beryl.vercel.app'
-  ],
+  origin: (origin, callback) => {
+    // allow requests with no origin (like curl, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+
+    if (
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/team-4-[a-z0-9]+-hostelhub4\.vercel\.app$/.test(origin) ||
+      /^https:\/\/team-4(-[a-z0-9]+)?\.vercel\.app$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+
+    console.warn('Blocked by CORS:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
