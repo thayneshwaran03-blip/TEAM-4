@@ -2284,7 +2284,7 @@ export default function AdminDashboard({ user, onLogout }) {
                             <>
                               <p className="font-bold text-gray-850">{warden.assignedHostel}</p>
                               {warden.assignedBlocks && warden.assignedBlocks.length > 0 && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">Floor: {warden.assignedBlocks.join(', ')}</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Block: {warden.assignedBlocks.join(', ')}</p>
                               )}
                             </>
                           ) : (
@@ -3828,15 +3828,17 @@ export default function AdminDashboard({ user, onLogout }) {
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Assigned Floor</label>
+                    <label className="text-xs font-bold text-gray-600">Assigned Block</label>
                     <select
                       value={wardenForm.assignedBlocks}
                       onChange={(e) => setWardenForm({ ...wardenForm, assignedBlocks: e.target.value })}
                       className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
                     >
-                      <option value="">Select Floor</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
+                      <option value="">Select Block</option>
+                      <option value="Block A">Block A</option>
+                      <option value="Block B">Block B</option>
+                      <option value="Block C">Block C</option>
+                      <option value="Block D">Block D</option>
                     </select>
                   </div>
                 </div>
@@ -4326,7 +4328,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Managed Block(s)</p>
                 <p className="text-xs font-semibold text-gray-800">
                   {viewWarden.assignedBlocks && viewWarden.assignedBlocks.length > 0
-                    ? "Floor " + viewWarden.assignedBlocks.join(', ')
+                    ? "Block " + viewWarden.assignedBlocks.join(', ')
                     : 'No blocks assigned'}
                 </p>
               </div>
