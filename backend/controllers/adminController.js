@@ -993,6 +993,124 @@ const reviewVisitorRequest = async (req, res) => {
   }
 };
 
+const registerVisitorOnTheSpot = async (req, res) => {
+  try {
+    const { studentIdentifier, visitorName, relationship, phoneNumber, visitDate, purpose } = req.body;
+
+    if (!studentIdentifier || !visitorName || !relationship || !phoneNumber || !visitDate) {
+      return res.status(400).json({ success: false, message: 'All fields are required.' });
+    }
+
+    const student = await User.findOne({
+      role: 'student',
+      $or: [
+        { studentId: studentIdentifier },
+        { studentId: studentIdentifier.toUpperCase() },
+        { registerNumber: studentIdentifier },
+        { rollNumber: studentIdentifier },
+        { email: studentIdentifier.toLowerCase() }
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
+
+    const visitorRequest = await VisitorRequest.create({
+      student: student._id,
+      visitorName,
+      relationship,
+      phoneNumber,
+      visitDate,
+      expectedArrivalTime: 'Anytime',
+      purpose: purpose || 'On-the-spot Visit',
+      status: 'Approved'
+    });
+
+    return res.status(201).json({ success: true, message: 'Visitor registered successfully on the spot.', visitorRequest });
+  } catch (error) {
+    console.error('Admin Register Visitor Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const getAdminProfile = async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id).select('-password');
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin profile not found' });
+    }
+    return res.status(200).json({ success: true, admin });
+  } catch (error) {
+    console.error('Get Admin Profile Error:', error);
+    return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const updateAdminProfile = async (req, res) => {
+  try {
+    const allowedFields = ['fullName', 'phoneNumber', 'notificationPreferences', 'twoFactorEnabled'];
+    const updates = {};
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No allowed fields provided to update' });
+    }
+
+    const updatedAdmin = await User.findByIdAndUpdate(req.user._id, updates, {
+      new: true,
+      runValidators: true,
+      select: '-password',
+    });
+
+    if (!updatedAdmin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Profile updated successfully', admin: updatedAdmin });
+  } catch (error) {
+    console.error('Update Admin Profile Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to update profile', error: error.message });
+  }
+};
+
+const changeAdminPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new passwords are required' });
+    }
+
+    const admin = await User.findById(req.user._id).select('+password');
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    const isMatch = await admin.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long' });
+    }
+
+    admin.password = newPassword;
+    await admin.save();
+
+    return res.status(200).json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change Admin Password Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to change password', error: error.message });
+  }
+};
+
 module.exports = {
   createAnnouncement,
   listAnnouncements,
@@ -1016,4 +1134,8 @@ module.exports = {
   updateComplaintStatus,
   listVisitorRequests,
   reviewVisitorRequest,
+  registerVisitorOnTheSpot,
+  getAdminProfile,
+  updateAdminProfile,
+  changeAdminPassword,
 };

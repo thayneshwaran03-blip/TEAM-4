@@ -37,6 +37,12 @@ router.put('/complaints/:id/status', adminController.updateComplaintStatus);
 
 // Visitor Requests Management
 router.get('/visitors', adminController.listVisitorRequests);
+router.post('/visitors/on-the-spot', adminController.registerVisitorOnTheSpot);
 router.put('/visitors/:id', adminController.reviewVisitorRequest);
+
+// Admin Settings and Profile
+router.get('/profile', adminController.getAdminProfile);
+router.put('/profile', adminController.updateAdminProfile);
+router.put('/change-password', adminController.changeAdminPassword);
 
 module.exports = router;

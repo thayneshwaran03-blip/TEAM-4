@@ -316,7 +316,7 @@ const getWardenProfile = async (req, res) => {
 
 const updateWardenProfile = async (req, res) => {
   try {
-    const allowedFields = ['fullName', 'phoneNumber', 'gender'];
+    const allowedFields = ['fullName', 'phoneNumber', 'gender', 'notificationPreferences', 'twoFactorEnabled'];
     const updates = {};
 
     allowedFields.forEach((field) => {

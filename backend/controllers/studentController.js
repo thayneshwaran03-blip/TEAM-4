@@ -44,7 +44,11 @@ const getStudentProfile = async (req, res) => {
 
 const updateStudentProfile = async (req, res) => {
   try {
-    const allowedFields = ['fullName', 'phoneNumber', 'department', 'year', 'gender', 'parentName', 'parentContact'];
+    const allowedFields = [
+      'fullName', 'phoneNumber', 'department', 'year', 'gender',
+      'parentName', 'parentContact', 'parentDetails', 'emergencyContact', 'address',
+      'notificationPreferences', 'privacySettings', 'twoFactorEnabled'
+    ];
     const updates = {};
 
     allowedFields.forEach((field) => {
