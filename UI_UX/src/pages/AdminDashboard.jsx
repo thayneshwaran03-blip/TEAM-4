@@ -34,7 +34,6 @@ export default function AdminDashboard({ user, onLogout }) {
     { icon: 'fa-address-book', label: 'Visitor Management', tab: 'visitors' },
     { icon: 'fa-bullhorn', label: 'Announcements', tab: 'announcements' },
     { icon: 'fa-chart-pie', label: 'Occupancy Reports', tab: 'occupancy_reports' },
-    { icon: 'fa-cog', label: 'Settings', tab: 'settings' },
   ];
 
   // ── Shared Refs for Outside Clicks ────────────────────────────────────────
@@ -193,15 +192,16 @@ export default function AdminDashboard({ user, onLogout }) {
   const [reportHostel, setReportHostel] = useState('');
   const [reportBlock, setReportBlock] = useState('');
   const [reportFloor, setReportFloor] = useState('');
-  const [reportDept, setReportDept] = useState('');
-  const [reportYear, setReportYear] = useState('');
-
   const [reportStatus, setReportStatus] = useState('');
 
   const [sortField, setSortField] = useState('roomNumber');
   const [sortOrder, setSortOrder] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [reportHostel, reportBlock, reportFloor, reportStatus, reportSearch]);
 
   // Static/Mock Database of Rooms for Occupancy Report (Extends real API data when loaded)
   const [occupancyData, setOccupancyData] = useState([
@@ -458,12 +458,15 @@ export default function AdminDashboard({ user, onLogout }) {
     e.preventDefault();
     setStudentErrors({});
 
-    if (!studentForm.fullName || !studentForm.registerNumber || !studentForm.email || !studentForm.phoneNumber || !studentForm.gender) {
+    const isCreate = !selectedStudent;
+    const isPhoneRequired = !isCreate;
+
+    if (!studentForm.fullName || !studentForm.registerNumber || !studentForm.email || (isPhoneRequired && !studentForm.phoneNumber) || !studentForm.gender) {
       const errs = {};
       if (!studentForm.fullName) errs.fullName = 'Full Name is required';
       if (!studentForm.registerNumber) errs.registerNumber = 'Register Number is required';
       if (!studentForm.email) errs.email = 'Email address is required';
-      if (!studentForm.phoneNumber) errs.phoneNumber = 'Phone Number is required';
+      if (isPhoneRequired && !studentForm.phoneNumber) errs.phoneNumber = 'Phone Number is required';
       if (!studentForm.gender) errs.gender = 'Gender is required';
       setStudentErrors(errs);
       showToastMsg('All mandatory fields are required.', 'error');
@@ -880,281 +883,470 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // ── Helper: Printing & Export Reports ────────────────────────────────────
   const exportOccupancyReportPDF = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
+    const getAssignedWarden = () => {
+      if (!reportBlock) return 'All Wardens';
+      const cleanBlock = reportBlock.replace('Block ', '').trim();
+      const assignedWarden = wardens.find(w => w.assignedBlocks && w.assignedBlocks.some(b => {
+        const cleanB = b.trim();
+        return cleanB === reportBlock || cleanB === cleanBlock;
+      }));
+      return assignedWarden ? assignedWarden.fullName : 'Not Assigned';
+    };
 
-    const primaryColor = [26, 35, 126];
-
-    doc.setFillColor(26, 35, 126);
-    doc.rect(0, 0, 297, 25, 'F');
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont('helvetica', 'bold');
-    doc.text('HostelHub - Hostel Occupancy Report', 15, 16);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    
+    const warden = getAssignedWarden();
+    const hostel = reportHostel || 'All Hostels';
+    const block = reportBlock || 'All Blocks';
     const dateStr = new Date().toLocaleString();
-    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
-    const academicYear = '2026 - 2027';
 
-    doc.text(`Report ID: ${reportId}`, 15, 35);
-    doc.text(`Printed By: ${name} (Admin)`, 15, 41);
-    doc.text(`Academic Year: ${academicYear}`, 15, 47);
-    doc.text(`Generated Date: ${dateStr}`, 15, 53);
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Executive Summary', 15, 65);
-
-    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
-    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const reportRooms = sortedOccupancy;
+    const totalBeds = reportRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBeds = reportRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
-    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
-    const totalRooms = rooms.length;
-    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
-    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
+    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
+    const totalRooms = reportRooms.length;
+    const occupiedRooms = reportRooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRooms = reportRooms.filter(r => r.occupiedBeds === 0).length;
 
-    const statLabels = [
-      { label: 'Total Capacity', val: `${totalBeds} Beds` },
-      { label: 'Occupied Beds', val: `${occupiedBeds} Beds` },
-      { label: 'Available Beds', val: `${availableBeds} Beds` },
-      { label: 'Occupancy Rate', val: `${occupancyRate}%` },
-      { label: 'Total Rooms', val: `${totalRooms} Rooms` },
-      { label: 'Occupied Rooms', val: `${occupiedRooms} Rooms` },
-      { label: 'Vacant Rooms', val: `${vacantRooms} Rooms` }
-    ];
-
-    let currentX = 15;
-    const cardWidth = 36;
-    const cardHeight = 18;
-
-    statLabels.forEach((stat) => {
-      doc.setFillColor(240, 244, 255);
-      doc.setDrawColor(180, 198, 252);
-      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+    const tableRowsHtml = reportRooms.map(r => {
+      const occupied = r.occupiedBeds || 0;
+      const cap = r.capacity || 0;
+      const avail = Math.max(0, cap - occupied);
       
-      doc.setTextColor(55, 65, 81);
-      doc.setFontSize(7.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text(stat.label, currentX + 3, 77);
-
-      doc.setTextColor(26, 35, 126);
-      doc.setFontSize(10.5);
-      doc.setFont('helvetica', 'bold');
-      doc.text(stat.val, currentX + 3, 85);
-
-      currentX += cardWidth + 2;
-    });
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Occupancy Details', 15, 102);
-
-    const tableHeaders = [['Room Number', 'Hostel', 'Block', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy %', 'Room Status', 'Last Updated']];
-    
-    const tableRows = filteredOccupancy.map(r => [
-      r.roomNumber,
-      r.hostelName,
-      r.block,
-      r.floor,
-      r.capacity,
-      r.occupiedBeds,
-      r.availableBeds,
-      r.capacity > 0 ? `${Math.round((r.occupiedBeds / r.capacity) * 100)}%` : '0%',
-      r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL',
-      r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'
-    ]);
-
-    doc.autoTable({
-      startY: 108,
-      head: tableHeaders,
-      body: tableRows,
-      theme: 'grid',
-      headStyles: {
-        fillColor: [26, 35, 126],
-        textColor: [255, 255, 255],
-        fontSize: 9,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      bodyStyles: {
-        fontSize: 8,
-        textColor: [55, 65, 81],
-        halign: 'center'
-      },
-      columnStyles: {
-        0: { fontStyle: 'bold' }
-      },
-      didParseCell: (data) => {
-        if (data.column.index === 8 && data.cell.section === 'body') {
-          const val = data.cell.raw;
-          if (val === 'FULL') {
-            data.cell.styles.textColor = [185, 28, 28];
-            data.cell.styles.fontStyle = 'bold';
-          } else if (val === 'PARTIAL') {
-            data.cell.styles.textColor = [217, 119, 6];
-            data.cell.styles.fontStyle = 'bold';
-          } else if (val === 'AVAILABLE') {
-            data.cell.styles.textColor = [4, 120, 87];
-            data.cell.styles.fontStyle = 'bold';
-          }
-        }
-      },
-      didDrawPage: (data) => {
-        const str = 'Page ' + doc.internal.getNumberOfPages();
-        doc.setFontSize(8.5);
-        doc.setTextColor(107, 114, 128);
-        doc.text(str, 280, 202, { align: 'right' });
-        doc.text('HostelHub © 2026 · Confidential Document · Printed By Admin', 15, 202);
+      let status = 'OPEN';
+      if (occupied >= cap) {
+        status = 'FULL';
+      } else if (occupied > 0) {
+        status = 'PARTIAL';
       }
-    });
-
-    doc.save(`Occupancy_Report_Admin_${Date.now()}.pdf`);
-  };
-
-  const triggerPrintReport = () => {
-    const dateStr = new Date().toLocaleString();
-    const reportId = 'REP-' + Math.floor(100000 + Math.random() * 900000);
-    const academicYear = '2026 - 2027';
-
-    const printWindow = window.open('', '_blank');
-
-    const totalBeds = rooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
-    const occupiedBeds = rooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
-    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
-    const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0';
-    const totalRooms = rooms.length;
-    const occupiedRooms = rooms.filter(r => r.occupiedBeds > 0).length;
-    const vacantRooms = rooms.filter(r => r.occupiedBeds === 0).length;
-
-    const tableRowsHtml = filteredOccupancy.map(r => {
-      const status = r.occupiedBeds === 0 ? 'AVAILABLE' : r.occupiedBeds >= r.capacity ? 'FULL' : 'PARTIAL';
-      const statusColor = status === 'FULL' ? '#b91c1c' : status === 'PARTIAL' ? '#d97706' : '#047857';
-      const statusBg = status === 'FULL' ? '#fef2f2' : status === 'PARTIAL' ? '#fffbeb' : '#ecfdf5';
-      const pct = r.capacity > 0 ? Math.round((r.occupiedBeds / r.capacity) * 100) : 0;
+      
+      const badgeClass = status.toLowerCase(); // open, full, partial
       
       return `
         <tr>
-          <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; text-align: center;">${r.roomNumber}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.hostelName}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.block}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.floor}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.capacity}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #1a237e; font-weight: bold;">${r.occupiedBeds}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center; color: #10b981; font-weight: bold;">${r.availableBeds}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${pct}%</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
-            <span style="padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900; background-color: ${statusBg}; color: ${statusColor};">${status}</span>
+          <td style="font-weight: 600;">${r.roomNumber}</td>
+          <td>${r.floor}</td>
+          <td>${cap}</td>
+          <td style="color: #1e3a8a; font-weight: 600;">${occupied}</td>
+          <td style="color: #047857; font-weight: 600;">${avail}</td>
+          <td>
+            <span class="status-badge ${badgeClass}">${status}</span>
           </td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : 'N/A'}</td>
         </tr>
       `;
     }).join('');
 
+    const printWindow = window.open('', '_blank');
     printWindow.document.write(`
-      <html>
-        <head>
-          <title>Occupancy Report - Admin</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 30px; color: #333; }
-            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-            .header-bar h1 { margin: 0; font-size: 24px; }
-            .meta-info { display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 13px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
-            .meta-col { flex: 1; }
-            .stats-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 25px; }
-            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; text-align: center; }
-            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 10px; font-weight: bold; text-transform: uppercase; }
-            .stat-card p.val { margin: 0; color: #1a237e; font-size: 15px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
-            th { background-color: #1a237e; color: white; padding: 10px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
-            .footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 15px; }
-          </style>
-        </head>
-        <body>
-          <div class="header-bar">
-            <h1>HostelHub - Hostel Occupancy Report</h1>
-            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
-          </div>
-          <div class="meta-info">
-            <div class="meta-col">
-              <p><strong>Printed By:</strong> ${name} (Admin)</p>
-              <p><strong>Academic Year:</strong> ${academicYear}</p>
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>HostelHub - Occupancy Report</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --primary: #1e3a8a;
+            --primary-dark: #172554;
+            --primary-light: #f0f4ff;
+            --success: #10b981;
+            --success-dark: #047857;
+            --success-light: #ecfdf5;
+            --warning: #d97706;
+            --warning-dark: #b45309;
+            --warning-light: #fffbeb;
+            --danger: #b91c1c;
+            --danger-dark: #991b1b;
+            --danger-light: #fef2f2;
+            --gray-50: #f8fafc;
+            --gray-150: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-600: #475569;
+            --gray-900: #0f172a;
+          }
+          
+          body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--gray-900);
+            background-color: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          .report-container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 10mm 10mm;
+            box-sizing: border-box;
+            position: relative;
+          }
+
+          /* Professional Header styling */
+          .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+          }
+
+          .header-left h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            letter-spacing: -0.5px;
+          }
+
+          .header-left p {
+            margin: 4px 0 0 0;
+            font-size: 12px;
+            color: var(--gray-600);
+            font-weight: 500;
+          }
+
+          .header-right {
+            text-align: right;
+          }
+
+          .header-right .generated-date {
+            font-size: 11px;
+            color: var(--gray-600);
+            font-weight: 600;
+            background: var(--gray-150);
+            padding: 6px 12px;
+            border-radius: 8px;
+          }
+
+          /* Report Info Card */
+          .info-card {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-left: 5px solid var(--primary);
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+          }
+
+          .info-item {
+            display: flex;
+            flex-direction: column;
+          }
+
+          .info-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+          }
+
+          .info-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-900);
+          }
+
+          /* KPI Stats Grid - 3 columns */
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+          }
+
+          .stat-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 12px 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+          }
+          
+          .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--primary);
+          }
+          
+          .stat-card.available::before {
+            background: var(--success);
+          }
+          
+          .stat-card.rate::before {
+            background: var(--success);
+          }
+
+          .stat-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--gray-600);
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+          }
+
+          .stat-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin: 0;
+          }
+
+          .stat-card.available .stat-value, 
+          .stat-card.rate .stat-value {
+            color: var(--success-dark);
+          }
+
+          /* Progress bar for rate */
+          .progress-bar-container {
+            width: 100%;
+            height: 5px;
+            background-color: var(--gray-150);
+            border-radius: 9999px;
+            margin-top: 8px;
+            overflow: hidden;
+          }
+
+          .progress-bar {
+            height: 100%;
+            background-color: var(--success);
+            border-radius: 9999px;
+          }
+
+          /* Table styling */
+          .table-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin: 0 0 12px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 11px;
+          }
+
+          th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 9px;
+            letter-spacing: 0.5px;
+            padding: 10px 12px;
+            border: 1px solid var(--primary);
+            text-align: center;
+          }
+
+          td {
+            padding: 9px 12px;
+            border: 1px solid var(--gray-200);
+            color: var(--gray-900);
+            text-align: center;
+          }
+
+          tr:nth-child(even) {
+            background-color: var(--gray-50);
+          }
+
+          /* Badges */
+          .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            border: 1px solid transparent;
+          }
+
+          .status-badge.open {
+            background-color: var(--success-light);
+            color: var(--success-dark);
+            border-color: #a7f3d0;
+          }
+
+          .status-badge.partial {
+            background-color: var(--warning-light);
+            color: var(--warning-dark);
+            border-color: #fde68a;
+          }
+
+          .status-badge.full {
+            background-color: var(--danger-light);
+            color: var(--danger-dark);
+            border-color: #fecaca;
+          }
+
+          /* Footer styling */
+          .report-footer {
+            position: fixed;
+            bottom: -10mm;
+            left: 0;
+            right: 0;
+            height: 10mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--gray-200);
+            padding-top: 8px;
+            font-size: 10px;
+            color: var(--gray-600);
+            font-weight: 500;
+          }
+
+          .footer-left {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+          }
+          
+          .footer-left::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: var(--primary);
+            border-radius: 50%;
+          }
+
+          @media print {
+            @page {
+              size: A4 portrait;
+              margin: 15mm 15mm 20mm 15mm;
+            }
+            body {
+              background-color: white;
+            }
+            .report-container {
+              width: 100%;
+              margin: 0;
+              padding: 0;
+            }
+            /* Prevent breaks inside critical elements */
+            .info-card, .stats-grid, tr {
+              page-break-inside: avoid;
+            }
+            .page-number::after {
+              content: counter(page);
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="report-container">
+          <header class="report-header">
+            <div class="header-left">
+              <h1>HostelHub - Occupancy Report</h1>
+              <p>Centralized Hostel Management System</p>
             </div>
-            <div class="meta-col" style="text-align: right;">
-              <p><strong>Report ID:</strong> ${reportId}</p>
-              <p><strong>Generated Date:</strong> ${dateStr}</p>
+            <div class="header-right">
+              <div class="generated-date">Generated: ${dateStr}</div>
             </div>
-          </div>
-          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Executive Summary</h2>
-          <div class="stats-grid">
+          </header>
+
+          <section class="info-card">
+            <div class="info-item">
+              <span class="info-label">Warden Name</span>
+              <span class="info-value">${warden}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Hostel</span>
+              <span class="info-value">${hostel}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Assigned Block</span>
+              <span class="info-value">${block}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Date & Time</span>
+              <span class="info-value">${dateStr}</span>
+            </div>
+          </section>
+
+          <section class="stats-grid">
             <div class="stat-card">
-              <p class="label">Total Capacity</p>
-              <p class="val">${totalBeds} Beds</p>
+              <div class="stat-label">Total Capacity</div>
+              <div class="stat-value">${totalBeds} Beds</div>
             </div>
             <div class="stat-card">
-              <p class="label">Occupied Beds</p>
-              <p class="val">${occupiedBeds} Beds</p>
+              <div class="stat-label">Occupied Beds</div>
+              <div class="stat-value">${occupiedBeds} Beds</div>
+            </div>
+            <div class="stat-card available">
+              <div class="stat-label">Available Beds</div>
+              <div class="stat-value">${availableBeds} Beds</div>
+            </div>
+            <div class="stat-card rate">
+              <div class="stat-label">Occupancy Rate</div>
+              <div class="stat-value">${occupancyRate}%</div>
+              <div class="progress-bar-container">
+                <div class="progress-bar" style="width: ${occupancyRate}%"></div>
+              </div>
             </div>
             <div class="stat-card">
-              <p class="label">Available Beds</p>
-              <p class="val">${availableBeds} Beds</p>
+              <div class="stat-label">Occupied Rooms</div>
+              <div class="stat-value">${occupiedRooms} Rooms</div>
             </div>
             <div class="stat-card">
-              <p class="label">Occupancy Rate</p>
-              <p class="val">${occupancyRate}%</p>
+              <div class="stat-label">Vacant Rooms</div>
+              <div class="stat-value">${vacantRooms} Rooms</div>
             </div>
-            <div class="stat-card">
-              <p class="label">Total Rooms</p>
-              <p class="val">${totalRooms} Rooms</p>
-            </div>
-            <div class="stat-card">
-              <p class="label">Occupied Rooms</p>
-              <p class="val">${occupiedRooms} Rooms</p>
-            </div>
-            <div class="stat-card">
-              <p class="label">Vacant Rooms</p>
-              <p class="val">${vacantRooms} Rooms</p>
-            </div>
-          </div>
-          <h2 style="font-size: 16px; border-bottom: 2px solid #1a237e; padding-bottom: 6px; margin-bottom: 12px;">Detailed Occupancy List</h2>
+          </section>
+
+          <h2 class="table-title">Detailed Occupancy List</h2>
           <table>
             <thead>
               <tr>
                 <th>Room Number</th>
-                <th>Hostel Name</th>
-                <th>Block</th>
                 <th>Floor</th>
                 <th>Capacity</th>
                 <th>Occupied Beds</th>
                 <th>Available Beds</th>
-                <th>Occupancy %</th>
                 <th>Occupancy Status</th>
-                <th>Last Updated</th>
               </tr>
             </thead>
             <tbody>
               ${tableRowsHtml}
             </tbody>
           </table>
-          <div class="footer">
-            <span>Confidential Document · HostelHub © 2026</span>
-            <span>Printed on: ${dateStr}</span>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
+
+          <footer class="report-footer">
+            <div class="footer-left">Generated by HostelHub</div>
+            <div class="footer-right">
+              <span class="page-number"></span>
+            </div>
+          </footer>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
       </html>
     `);
     printWindow.document.close();
@@ -1163,8 +1355,8 @@ export default function AdminDashboard({ user, onLogout }) {
   // ── Sort & Filter logic for Occupancy Reports ────────────────────────────
   const getHostelName = (blockName) => {
     if (!blockName) return 'Boys Hostel';
-    const lower = blockName.toLowerCase();
-    if (lower.includes('c') || lower.includes('d')) return 'Girls Hostel';
+    const cleanBlock = blockName.trim().toUpperCase();
+    if (cleanBlock.endsWith('C') || cleanBlock.endsWith('D') || cleanBlock === 'C' || cleanBlock === 'D') return 'Girls Hostel';
     return 'Boys Hostel';
   };
 
@@ -1185,7 +1377,7 @@ export default function AdminDashboard({ user, onLogout }) {
       capacity: room.capacity || 4,
       occupiedBeds: room.occupiedBeds || 0,
       availableBeds: Math.max(0, (room.capacity || 4) - (room.occupiedBeds || 0)),
-      status: room.occupiedBeds === 0 ? 'Available' : room.occupiedBeds >= room.capacity ? 'Occupied' : 'Available',
+      status: room.status || (room.occupiedBeds === 0 ? 'VACANT' : room.occupiedBeds >= (room.capacity || 4) ? 'FULL' : 'PARTIALLY OCCUPIED'),
       warden: wardenName,
       dept: room.assignedStudents && room.assignedStudents[0]?.department || 'N/A',
       year: room.assignedStudents && room.assignedStudents[0]?.year || 'N/A',
@@ -1201,12 +1393,14 @@ export default function AdminDashboard({ user, onLogout }) {
     const hostelMatch = reportHostel ? item.hostelName === reportHostel : true;
     const blockMatch = reportBlock ? item.block === reportBlock : true;
     const floorMatch = reportFloor ? item.floor === reportFloor : true;
-    const deptMatch = reportDept ? item.dept === reportDept : true;
-    const yearMatch = reportYear ? item.year === reportYear : true;
 
-    const statusMatch = reportStatus ? item.status === reportStatus : true;
+    const statusMatch = reportStatus ? (
+      reportStatus === 'Available' ? (item.status === 'Available' || item.status === 'VACANT' || item.status === 'PARTIALLY OCCUPIED') :
+      reportStatus === 'Occupied' ? (item.status === 'Occupied' || item.status === 'FULL') :
+      item.status === reportStatus
+    ) : true;
 
-    return searchMatch && hostelMatch && blockMatch && floorMatch && deptMatch && yearMatch && statusMatch;
+    return searchMatch && hostelMatch && blockMatch && floorMatch && statusMatch;
   });
 
   const sortedOccupancy = [...filteredOccupancy].sort((a, b) => {
@@ -1886,9 +2080,10 @@ export default function AdminDashboard({ user, onLogout }) {
                           {student.registerNumber}
                         </td>
                         <td className="px-6 py-4 text-left font-bold text-gray-800">
-                          {student.roomNumber ? (
+                          {(student.room?.roomNumber || student.roomNumber) ? (
                             <span>
-                              {student.hostelName ? `${student.hostelName} - ` : ''}{student.block} {student.roomNumber} ({student.bedNumber})
+                              {(student.room?.hostelName || student.hostelName) ? `${student.room?.hostelName || student.hostelName} - ` : ''}
+                              {student.room?.blockName || student.block} {student.room?.roomNumber || student.roomNumber} {student.bedNumber ? `(${student.bedNumber})` : ''}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs italic font-normal">Unallocated</span>
@@ -2167,8 +2362,11 @@ export default function AdminDashboard({ user, onLogout }) {
                   <div key={room._id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 space-y-4 hover:shadow-md transition duration-200">
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-bold text-gray-900">{room.blockName} - Room {room.roomNumber}</span>
-                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${room.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : room.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                        }`}>{room.status}</span>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                        room.status === 'Available' || room.status === 'VACANT' ? 'bg-emerald-50 text-emerald-700' :
+                        room.status === 'PARTIALLY OCCUPIED' ? 'bg-blue-50 text-blue-700' :
+                        'bg-rose-50 text-rose-700'
+                      }`}>{room.status}</span>
                     </div>
 
                     <div className="text-xs text-gray-500 space-y-1.5 pt-2">
@@ -2315,7 +2513,7 @@ export default function AdminDashboard({ user, onLogout }) {
                           {paginated.map(l => (
                             <tr key={l._id} className="hover:bg-gray-50/30 transition-colors">
                               <td className="py-4 font-semibold text-gray-900">{l.student?.fullName || 'N/A'}</td>
-                              <td className="py-4 text-gray-600">Rm {l.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {l.room?.roomNumber || l.student?.room?.roomNumber || l.student?.roomNumber || 'N/A'}</td>
                               <td className="py-4 text-gray-600">{l.leaveType}</td>
                               <td className="py-4 text-gray-600">{l.fromDate ? new Date(l.fromDate).toLocaleDateString() : 'N/A'}</td>
                               <td className="py-4 text-gray-600">{l.toDate ? new Date(l.toDate).toLocaleDateString() : 'N/A'}</td>
@@ -2431,7 +2629,7 @@ export default function AdminDashboard({ user, onLogout }) {
                           {paginated.map(c => (
                             <tr key={c._id} className="hover:bg-gray-50/30 transition-colors">
                               <td className="py-4 font-semibold text-gray-900">{c.student?.fullName || 'N/A'}</td>
-                              <td className="py-4 text-gray-600">Rm {c.student?.roomNumber || 'N/A'}</td>
+                              <td className="py-4 text-gray-600">Rm {c.student?.room?.roomNumber || c.student?.roomNumber || 'N/A'}</td>
                               <td className="py-4 text-gray-900 font-semibold">{c.title}</td>
                               <td className="py-4 text-gray-600">{c.category}</td>
                               <td className="py-4">
@@ -2551,7 +2749,7 @@ export default function AdminDashboard({ user, onLogout }) {
                               <td className="py-4 font-semibold text-gray-900">{v.visitorName}</td>
                               <td className="py-4 text-gray-600">
                                 <p className="font-semibold text-gray-800">{v.student?.fullName || 'N/A'}</p>
-                                <p className="text-[10px] text-gray-400">Rm {v.student?.roomNumber || 'N/A'} ({v.student?.block || 'N/A'})</p>
+                                <p className="text-[10px] text-gray-400">Rm {v.student?.room?.roomNumber || v.student?.roomNumber || 'N/A'} ({v.student?.room?.blockName || v.student?.block || 'N/A'})</p>
                               </td>
                               <td className="py-4 text-gray-600">{v.relationship}</td>
                               <td className="py-4 text-gray-600">
@@ -2708,12 +2906,12 @@ export default function AdminDashboard({ user, onLogout }) {
               const vacantRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) === 0).length;
               const fullyOccupiedRoomsCount = rooms.filter(r => (r.occupiedBeds || 0) >= (r.capacity || 0)).length;
 
-              const boysRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('a') || r.blockName?.toLowerCase().includes('b') || r.roomNumber.startsWith('A') || r.roomNumber.startsWith('B') || r.roomNumber.startsWith('a') || r.roomNumber.startsWith('b'));
+              const boysRooms = rooms.filter(r => getHostelName(r.blockName) === 'Boys Hostel');
               const boysBeds = boysRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
               const boysOccupied = boysRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
               const boysRate = boysBeds > 0 ? Math.round((boysOccupied / boysBeds) * 100) : 0;
 
-              const girlsRooms = rooms.filter(r => r.blockName?.toLowerCase().includes('c') || r.blockName?.toLowerCase().includes('d') || r.roomNumber.startsWith('C') || r.roomNumber.startsWith('D') || r.roomNumber.startsWith('c') || r.roomNumber.startsWith('d'));
+              const girlsRooms = rooms.filter(r => getHostelName(r.blockName) === 'Girls Hostel');
               const girlsBeds = girlsRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
               const girlsOccupied = girlsRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
               const girlsRate = girlsBeds > 0 ? Math.round((girlsOccupied / girlsBeds) * 100) : 0;
@@ -2782,22 +2980,21 @@ export default function AdminDashboard({ user, onLogout }) {
                 <button
                   onClick={() => {
                     setReportHostel(''); setReportBlock(''); setReportFloor('');
-                    setReportDept(''); setReportYear('');
                     setReportStatus(''); setReportSearch('');
                   }}
-                  className="text-xs font-bold text-gray-450 hover:text-primary transition border-none bg-transparent"
+                  className="text-xs font-bold text-gray-455 hover:text-primary transition border-none bg-transparent"
                 >
                   Clear Filters
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-sans">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 font-sans">
                 <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Select Hostel</label>
                   <select
                     value={reportHostel}
                     onChange={e => setReportHostel(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Hostels</option>
                     <option value="Boys Hostel">Boys Hostel</option>
@@ -2811,7 +3008,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   <select
                     value={reportBlock}
                     onChange={e => setReportBlock(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Blocks</option>
                     <option value="Block A">Block A</option>
@@ -2827,7 +3024,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   <select
                     value={reportFloor}
                     onChange={e => setReportFloor(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Floors</option>
                     <option value="1">1st Floor</option>
@@ -2837,43 +3034,11 @@ export default function AdminDashboard({ user, onLogout }) {
                 </div>
 
                 <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-bold text-gray-600">Department</label>
-                  <select
-                    value={reportDept}
-                    onChange={e => setReportDept(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
-                  >
-                    <option value="">All Departments</option>
-                    <option value="IT">IT</option>
-                    <option value="CSE">CSE</option>
-                    <option value="ECE">ECE</option>
-                    <option value="EEE">EEE</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col space-y-1">
-                  <label className="text-[10px] font-bold text-gray-600">Academic Year</label>
-                  <select
-                    value={reportYear}
-                    onChange={e => setReportYear(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
-                  >
-                    <option value="">All Years</option>
-                    <option value="I">1st Year</option>
-                    <option value="II">2nd Year</option>
-                    <option value="III">3rd Year</option>
-                    <option value="IV">4th Year</option>
-                  </select>
-                </div>
-
-
-
-                <div className="flex flex-col space-y-1">
                   <label className="text-[10px] font-bold text-gray-600">Room Status</label>
                   <select
                     value={reportStatus}
                     onChange={e => setReportStatus(e.target.value)}
-                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white"
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Statuses</option>
                     <option value="Available">Available</option>
@@ -2882,7 +3047,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   </select>
                 </div>
 
-                <div className="flex flex-col space-y-1">
+                <div className="flex flex-col space-y-1 col-span-2 lg:col-span-1">
                   <label className="text-[10px] font-bold text-gray-600">Search</label>
                   <input
                     type="text"
@@ -2898,27 +3063,13 @@ export default function AdminDashboard({ user, onLogout }) {
             {/* Print & Export Bar */}
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm">
               <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">{sortedOccupancy.length} Rooms Filtered</span>
-              <div className="flex items-center space-x-3 w-full sm:w-auto">
-                <button
-                  onClick={triggerPrintReport}
-                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
-                >
-                  <i className="fas fa-print" />
-                  <span>Print Report</span>
-                </button>
+              <div className="flex items-center w-full sm:w-auto">
                 <button
                   onClick={exportOccupancyReportPDF}
-                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                  className="flex-1 sm:flex-none bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-sm"
                 >
-                  <i className="fas fa-file-pdf text-rose-500" />
-                  <span>Export PDF</span>
-                </button>
-                <button
-                  onClick={() => mockExport('Excel')}
-                  className="flex-1 sm:flex-none border border-gray-250 hover:bg-gray-50 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
-                >
-                  <i className="fas fa-file-excel text-emerald-600" />
-                  <span>Export Excel</span>
+                  <i className="fas fa-file-pdf" />
+                  <span>Print PDF</span>
                 </button>
               </div>
             </div>
@@ -2967,8 +3118,11 @@ export default function AdminDashboard({ user, onLogout }) {
                         <td className="px-6 py-4 text-center font-bold text-primary">{row.occupiedBeds}</td>
                         <td className="px-6 py-4 text-center font-bold text-emerald-600">{row.availableBeds}</td>
                         <td className="px-6 py-4 text-left">
-                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${row.status === 'Available' ? 'bg-emerald-50 text-emerald-700' : row.status === 'Occupied' ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
-                            }`}>{row.status}</span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                            row.status === 'Available' || row.status === 'VACANT' ? 'bg-emerald-50 text-emerald-700' :
+                            row.status === 'PARTIALLY OCCUPIED' ? 'bg-blue-50 text-blue-700' :
+                            'bg-rose-50 text-rose-700'
+                          }`}>{row.status}</span>
                         </td>
                         <td className="px-6 py-4 text-left font-semibold text-gray-700 flex items-center space-x-1.5 mt-2.5">
                           <i className="fas fa-user-tie text-gray-400 text-xs" />
@@ -3018,8 +3172,9 @@ export default function AdminDashboard({ user, onLogout }) {
 
               {/* Account Security */}
               <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
-                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
-                  Account Security settings
+                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3 flex items-center">
+                  <i className="fas fa-shield-alt mr-2 text-base text-primary/80" />
+                  <span>Account Security settings</span>
                 </h3>
                 <form onSubmit={submitPw} className="space-y-4">
                   <div className="flex flex-col space-y-1.5 text-xs">
@@ -3054,17 +3209,19 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                   <button
                     type="submit"
-                    className="w-full bg-primary hover:bg-primary-light text-white font-bold text-xs py-3.5 rounded-xl shadow-md transition"
+                    className="w-full bg-primary hover:bg-primary-light text-white font-bold text-xs py-3.5 rounded-xl shadow-md transition flex items-center justify-center space-x-2"
                   >
-                    Change Password
+                    <i className="fas fa-key text-xs" />
+                    <span>Change Password</span>
                   </button>
                 </form>
               </div>
 
               {/* System Configuration */}
               <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-6">
-                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3">
-                  Campus System Configuration
+                <h3 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-150 pb-3 flex items-center">
+                  <i className="fas fa-sliders-h mr-2 text-base text-primary/80" />
+                  <span>Campus System Configuration</span>
                 </h3>
 
                 <div className="space-y-4 text-xs">
@@ -3073,12 +3230,13 @@ export default function AdminDashboard({ user, onLogout }) {
                       <span className="font-bold text-gray-800 block">Email Alerts Notifications</span>
                       <span className="text-gray-400 font-medium">Broadcast admin system notices to email accounts.</span>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={emailNotifs}
-                      onChange={e => { setEmailNotifs(e.target.checked); showToastMsg('Email preferences updated.'); }}
-                      className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => { setEmailNotifs(!emailNotifs); showToastMsg(!emailNotifs ? 'Email preferences enabled.' : 'Email preferences disabled.'); }}
+                      className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none flex-shrink-0 ${emailNotifs ? 'bg-primary' : 'bg-gray-200'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${emailNotifs ? 'translate-x-5' : ''}`} />
+                    </button>
                   </div>
 
                   <div className="flex justify-between items-center py-2.5 border-t border-gray-50">
@@ -3086,12 +3244,13 @@ export default function AdminDashboard({ user, onLogout }) {
                       <span className="font-bold text-gray-800 block">SMS Gateway Broadcasts</span>
                       <span className="text-gray-400 font-medium">Auto-dispatch entry logs & OTP pins via SMS.</span>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={smsNotifs}
-                      onChange={e => { setSmsNotifs(e.target.checked); showToastMsg('SMS preferences updated.'); }}
-                      className="w-9 h-5 bg-gray-200 checked:bg-primary text-primary border-gray-300 rounded-full cursor-pointer focus:outline-none"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => { setSmsNotifs(!smsNotifs); showToastMsg(!smsNotifs ? 'SMS preferences enabled.' : 'SMS preferences disabled.'); }}
+                      className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none flex-shrink-0 ${smsNotifs ? 'bg-primary' : 'bg-gray-200'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${smsNotifs ? 'translate-x-5' : ''}`} />
+                    </button>
                   </div>
 
                   <div className="flex justify-between items-center py-2.5 border-t border-gray-50">
@@ -3099,21 +3258,23 @@ export default function AdminDashboard({ user, onLogout }) {
                       <span className="font-bold text-gray-800 block text-rose-600">Maintenance & Offline Mode</span>
                       <span className="text-gray-400 font-medium">Disables warden room assignments temporarily.</span>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={maintenanceMode}
-                      onChange={e => { setMaintenanceMode(e.target.checked); showToastMsg(e.target.checked ? 'Campus maintenance mode activated.' : 'Campus maintenance mode disabled.'); }}
-                      className="w-9 h-5 bg-gray-200 checked:bg-rose-500 text-rose-500 border-gray-300 rounded-full cursor-pointer focus:outline-none"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => { setMaintenanceMode(!maintenanceMode); showToastMsg(!maintenanceMode ? 'Campus maintenance mode activated.' : 'Campus maintenance mode disabled.'); }}
+                      className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none flex-shrink-0 ${maintenanceMode ? 'bg-rose-500' : 'bg-gray-200'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${maintenanceMode ? 'translate-x-5' : ''}`} />
+                    </button>
                   </div>
 
                   <div className="pt-4 border-t border-gray-50 flex flex-col space-y-2">
                     <button
                       type="button"
                       onClick={() => { showToastMsg('Backing up MongoDB atlas cluster...'); setTimeout(() => showToastMsg('Backup package generated and saved successfully!'), 1500); }}
-                      className="w-full border border-primary hover:bg-primary/5 text-primary font-bold text-xs py-3 rounded-xl transition"
+                      className="w-full border border-primary hover:bg-primary/5 text-primary font-bold text-xs py-3 rounded-xl transition flex items-center justify-center space-x-2"
                     >
-                      Backup Database
+                      <i className="fas fa-database text-xs" />
+                      <span>Backup Database</span>
                     </button>
                   </div>
                 </div>
@@ -3190,17 +3351,19 @@ export default function AdminDashboard({ user, onLogout }) {
                     />
                     {studentErrors.email && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.email}</p>}
                   </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Phone Number *</label>
-                    <input
-                      type="text"
-                      value={studentForm.phoneNumber}
-                      onChange={(e) => { setStudentForm({ ...studentForm, phoneNumber: e.target.value }); if (studentErrors.phoneNumber) setStudentErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
-                      placeholder="e.g. 9876543210"
-                      className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
-                    />
-                    {studentErrors.phoneNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.phoneNumber}</p>}
-                  </div>
+                  {selectedStudent && (
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-bold text-gray-600">Phone Number *</label>
+                      <input
+                        type="text"
+                        value={studentForm.phoneNumber}
+                        onChange={(e) => { setStudentForm({ ...studentForm, phoneNumber: e.target.value }); if (studentErrors.phoneNumber) setStudentErrors(prev => ({ ...prev, phoneNumber: undefined })); }}
+                        placeholder="e.g. 9876543210"
+                        className={`px-4 py-2.5 rounded-xl text-xs focus:outline-none ${studentErrors.phoneNumber ? 'border-rose-500 border' : 'border border-gray-200 focus:border-primary'}`}
+                      />
+                      {studentErrors.phoneNumber && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.phoneNumber}</p>}
+                    </div>
+                  )}
                   <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Gender *</label>
                     <select
@@ -3214,79 +3377,81 @@ export default function AdminDashboard({ user, onLogout }) {
                     </select>
                     {studentErrors.gender && <p className="text-[10px] text-rose-600 mt-1 font-semibold">{studentErrors.gender}</p>}
                   </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Department</label>
-                    <input
-                      type="text"
-                      value={studentForm.department}
-                      onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
-                      placeholder="e.g. CSE / IT"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Academic Year</label>
-                    <input
-                      type="text"
-                      value={studentForm.year}
-                      onChange={(e) => setStudentForm({ ...studentForm, year: e.target.value })}
-                      placeholder="e.g. II / III"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  {!selectedStudent && (
-                    <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-bold text-gray-600">Temporary Password (Optional)</label>
-                      <input
-                        type="text"
-                        value={studentForm.temporaryPassword}
-                        onChange={(e) => setStudentForm({ ...studentForm, temporaryPassword: e.target.value })}
-                        placeholder="Leave blank to auto-generate"
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary bg-amber-50/20"
-                      />
-                    </div>
+                  {selectedStudent && (
+                    <>
+                      <div className="flex flex-col space-y-1">
+                        <label className="text-xs font-bold text-gray-600">Department</label>
+                        <select
+                          value={studentForm.department}
+                          onChange={(e) => setStudentForm({ ...studentForm, department: e.target.value })}
+                          className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary bg-white"
+                        >
+                          <option value="">Select Department</option>
+                          <option value="IT">IT</option>
+                          <option value="CSE">CSE</option>
+                          <option value="ECE">ECE</option>
+                          <option value="EEE">EEE</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col space-y-1">
+                        <label className="text-xs font-bold text-gray-600">Academic Year</label>
+                        <select
+                          value={studentForm.year}
+                          onChange={(e) => setStudentForm({ ...studentForm, year: e.target.value })}
+                          className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-primary bg-white"
+                        >
+                          <option value="">Select Year</option>
+                          <option value="I">I</option>
+                          <option value="II">II</option>
+                          <option value="III">III</option>
+                          <option value="IV">IV</option>
+                        </select>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
 
               {/* Parents Details */}
-              <div>
-                <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
-                  Guardian & Emergency Contact
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Parent/Guardian Name</label>
-                    <input
-                      type="text"
-                      value={studentForm.parentName}
-                      onChange={(e) => setStudentForm({ ...studentForm, parentName: e.target.value })}
-                      placeholder="e.g. Richard Doe"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Parent Contact Number</label>
-                    <input
-                      type="text"
-                      value={studentForm.parentContact}
-                      onChange={(e) => setStudentForm({ ...studentForm, parentContact: e.target.value })}
-                      placeholder="e.g. 9876501234"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Emergency Contact Number</label>
-                    <input
-                      type="text"
-                      value={studentForm.emergencyContact}
-                      onChange={(e) => setStudentForm({ ...studentForm, emergencyContact: e.target.value })}
-                      placeholder="e.g. 9876598765"
-                      className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
-                    />
+              {selectedStudent && (
+                <div>
+                  <h4 className="text-xs font-bold text-primary uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">
+                    Guardian & Emergency Contact
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-bold text-gray-600">Parent/Guardian Name</label>
+                      <input
+                        type="text"
+                        value={studentForm.parentName}
+                        onChange={(e) => setStudentForm({ ...studentForm, parentName: e.target.value })}
+                        placeholder="e.g. Richard Doe"
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-bold text-gray-600">Parent Contact Number</label>
+                      <input
+                        type="text"
+                        value={studentForm.parentContact}
+                        onChange={(e) => setStudentForm({ ...studentForm, parentContact: e.target.value })}
+                        placeholder="e.g. 9876501234"
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-bold text-gray-600">Emergency Contact Number</label>
+                      <input
+                        type="text"
+                        value={studentForm.emergencyContact}
+                        onChange={(e) => setStudentForm({ ...studentForm, emergencyContact: e.target.value })}
+                        placeholder="e.g. 9876598765"
+                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Hostel Assignment */}
               <div>
@@ -3948,8 +4113,16 @@ export default function AdminDashboard({ user, onLogout }) {
                   <p className="font-semibold text-gray-800">{viewStudent.parentName || 'N/A'}</p>
                 </div>
                 <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Parent Contact Number</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.parentContact || 'N/A'}</p>
+                </div>
+                <div>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Emergency Contact</p>
                   <p className="font-semibold text-gray-800">{viewStudent.emergencyContact || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Address</p>
+                  <p className="font-semibold text-gray-800">{viewStudent.address || 'N/A'}</p>
                 </div>
               </div>
 

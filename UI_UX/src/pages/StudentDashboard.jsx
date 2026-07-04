@@ -29,9 +29,9 @@ export default function StudentDashboard({ user, onLogout }) {
   const [visitors, setVisitors] = useState([]);
   const [profile, setProfile] = useState(null);
 
-  const roomNumber  = profile?.room?.roomNumber  || 'N/A';
-  const blockName   = profile?.room?.blockName   || 'N/A';
-  const floorNumber = profile?.room?.floorNumber || 'N/A';
+  const roomNumber  = profile?.room?.roomNumber  || profile?.roomNumber  || 'N/A';
+  const blockName   = profile?.room?.blockName   || profile?.block   || 'N/A';
+  const floorNumber = profile?.room?.floorNumber || profile?.floor || 'N/A';
   const roommatesCount = profile?.room?.occupiedBeds > 1
     ? `${profile.room.occupiedBeds - 1} Roommate${profile.room.occupiedBeds - 1 > 1 ? 's' : ''}`
     : 'No Roommates';
@@ -1131,7 +1131,6 @@ export default function StudentDashboard({ user, onLogout }) {
               {[
                 { label:'Email Notifications', sub:'Approvals & notice alerts', val:emailNotifs, set:setEmailNotifs },
                 { label:'SMS Notifications',   sub:'Emergency leave alerts',    val:smsNotifs,   set:setSmsNotifs   },
-                { label:'Auto Gate-Pass QR',   sub:'Auto-refresh scanner token',val:autoQr,      set:setAutoQr      },
               ].map(s => (
                 <div key={s.label} className="flex items-center justify-between">
                   <div><p className="text-sm font-semibold text-gray-800">{s.label}</p><p className="text-xs text-gray-400">{s.sub}</p></div>

@@ -34,4 +34,26 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+const forcePasswordChange = (req, res, next) => {
+  if (req.user && req.user.mustChangePassword) {
+    return res.status(403).json({
+      success: false,
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      message: 'You must change your password on first login before accessing this page.'
+    });
+  }
+  next();
+};
+
+const forceProfileCompletion = (req, res, next) => {
+  if (req.user && req.user.role === 'student' && !req.user.profileCompleted) {
+    return res.status(403).json({
+      success: false,
+      code: 'PROFILE_COMPLETION_REQUIRED',
+      message: 'You must complete your profile details before accessing this page.'
+    });
+  }
+  next();
+};
+
+module.exports = { protect, forcePasswordChange, forceProfileCompletion };
