@@ -21,6 +21,39 @@ export default function StudentDashboard({ user, onLogout }) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showPwModal,       setShowPwModal]       = useState(false);
 
+  // Settings states & custom confirmation modals
+  const [settingsSubTab, setSettingsSubTab] = useState('profile');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalData, setConfirmModalData] = useState({ title: '', message: '', action: null });
+
+  const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileForm, setProfileForm] = useState({
+    fullName: user?.fullName || '',
+    phoneNumber: user?.phoneNumber || '',
+    parentName: user?.parentName || '',
+    parentContact: user?.parentContact || '',
+    emergencyContact: user?.emergencyContact || '',
+    address: user?.address || ''
+  });
+
+  const [notifPrefs, setNotifPrefs] = useState({
+    emailNotifications: user?.notificationPreferences?.emailNotifications !== false,
+    inAppNotifications: user?.notificationPreferences?.inAppNotifications !== false,
+    leaveUpdates: user?.notificationPreferences?.leaveUpdates !== false,
+    complaintUpdates: user?.notificationPreferences?.complaintUpdates !== false,
+    visitorUpdates: user?.notificationPreferences?.visitorUpdates !== false,
+    announcementNotifications: user?.notificationPreferences?.announcementNotifications !== false,
+  });
+
+  const [privacyPrefs, setPrivacyPrefs] = useState({
+    shareProfile: user?.privacySettings?.shareProfile !== false,
+    showContactDetails: user?.privacySettings?.showContactDetails === true,
+  });
+
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.twoFactorEnabled === true);
+  const [activeSessions, setActiveSessions] = useState(user?.activeSessions || ['Chrome on Windows - Bangalore, India (Current Session)']);
+  const [lastLogin, setLastLogin] = useState(user?.lastLogin || new Date());
+
   // ── Data state ────────────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -116,6 +149,30 @@ export default function StudentDashboard({ user, onLogout }) {
         setEditParentName(s.parentName || '');
         setEditParentContact(s.parentContact || '');
         setEditGender(s.gender || '');
+
+        setProfileForm({
+          fullName: s.fullName || '',
+          phoneNumber: s.phoneNumber || '',
+          parentName: s.parentName || '',
+          parentContact: s.parentContact || '',
+          emergencyContact: s.emergencyContact || '',
+          address: s.address || ''
+        });
+        setNotifPrefs({
+          emailNotifications: s.notificationPreferences?.emailNotifications !== false,
+          inAppNotifications: s.notificationPreferences?.inAppNotifications !== false,
+          leaveUpdates: s.notificationPreferences?.leaveUpdates !== false,
+          complaintUpdates: s.notificationPreferences?.complaintUpdates !== false,
+          visitorUpdates: s.notificationPreferences?.visitorUpdates !== false,
+          announcementNotifications: s.notificationPreferences?.announcementNotifications !== false,
+        });
+        setPrivacyPrefs({
+          shareProfile: s.privacySettings?.shareProfile !== false,
+          showContactDetails: s.privacySettings?.showContactDetails === true,
+        });
+        setTwoFactorEnabled(s.twoFactorEnabled === true);
+        if (s.activeSessions) setActiveSessions(s.activeSessions);
+        if (s.lastLogin) setLastLogin(s.lastLogin);
       }
 
       setLeaves(leaveResp.leaveHistory || []);
@@ -222,23 +279,129 @@ export default function StudentDashboard({ user, onLogout }) {
     }
   };
 
-  const submitPw = async e => {
+  const saveStudentProfile = async (e) => {
     e.preventDefault();
-    if (!oldPw || !newPw || !confirmPw) { showToast('Please fill all password fields.', 'error'); return; }
-    if (newPw.length < 6) { showToast('New password must be at least 6 characters.', 'error'); return; }
-    if (newPw !== confirmPw) { showToast('New password and confirm password do not match.', 'error'); return; }
     try {
-      await apiFetch('/student/change-password', {
+      const res = await apiFetch('/student/profile', {
         method: 'PUT',
-        body: JSON.stringify({ currentPassword: oldPw, newPassword: newPw })
+        body: JSON.stringify(profileForm)
       });
-      showToast('Password updated successfully!');
-      setOldPw(''); setNewPw(''); setConfirmPw('');
-      setShowPwModal(false);
+      if (res.success) {
+        showToast('Profile details updated successfully!');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to update profile', 'error');
+      }
     } catch (err) {
-      console.error(err);
-      showToast('Failed to update password. Please check your current password.', 'error');
+      showToast('Failed to update profile.', 'error');
     }
+  };
+
+  const saveNotifications = async (e) => {
+    e?.preventDefault();
+    try {
+      const res = await apiFetch('/student/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ notificationPreferences: notifPrefs })
+      });
+      if (res.success) {
+        showToast('Notification settings updated!');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to update notifications', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to update notification settings.', 'error');
+    }
+  };
+
+  const savePrivacy = async (e) => {
+    e?.preventDefault();
+    try {
+      const res = await apiFetch('/student/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ privacySettings: privacyPrefs })
+      });
+      if (res.success) {
+        showToast('Privacy settings updated!');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to update privacy settings', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to update privacy settings.', 'error');
+    }
+  };
+
+  const toggle2FA = async () => {
+    const nextVal = !twoFactorEnabled;
+    setTwoFactorEnabled(nextVal);
+    try {
+      await apiFetch('/student/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ twoFactorEnabled: nextVal })
+      });
+      showToast(nextVal ? 'Two-Factor Authentication enabled!' : 'Two-Factor Authentication disabled.');
+      await fetchAll();
+    } catch (err) {
+      showToast('Failed to toggle 2FA', 'error');
+    }
+  };
+
+  const triggerChangePassword = (e) => {
+    e.preventDefault();
+    if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+      showToast('New password and confirmation do not match.', 'error');
+      return;
+    }
+    if (pwdForm.newPassword.length < 6) {
+      showToast('New password must be at least 6 characters.', 'error');
+      return;
+    }
+    setConfirmModalData({
+      title: 'Confirm Password Change',
+      message: 'Are you sure you want to update your password? You will need to log in with your new credentials next time.',
+      action: async () => {
+        try {
+          const res = await apiFetch('/student/change-password', {
+            method: 'PUT',
+            body: JSON.stringify({
+              currentPassword: pwdForm.currentPassword,
+              newPassword: pwdForm.newPassword
+            })
+          });
+          if (res.success) {
+            showToast('Password updated successfully!');
+            setPwdForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+          } else {
+            showToast(res.message || 'Failed to change password', 'error');
+          }
+        } catch (err) {
+          showToast('Failed to update password. Please check your current password.', 'error');
+        }
+      }
+    });
+    setShowConfirmModal(true);
+  };
+
+  const triggerLogoutAll = () => {
+    setConfirmModalData({
+      title: 'Sign Out from All Devices',
+      message: 'This will terminate your login sessions on all other browsers and mobile devices. Do you want to continue?',
+      action: async () => {
+        try {
+          await apiFetch('/student/profile', {
+            method: 'PUT',
+            body: JSON.stringify({ activeSessions: ['Chrome on Windows - Bangalore, India (Current Session)'] })
+          });
+          setActiveSessions(['Chrome on Windows - Bangalore, India (Current Session)']);
+          showToast('Signed out from all other devices successfully.');
+        } catch (err) {
+          showToast('Failed to sign out from all devices.', 'error');
+        }
+      }
+    });
+    setShowConfirmModal(true);
   };
   const navigate = id => { setActiveTab(id); setIsMobileDrawerOpen(false); };
 
@@ -249,6 +412,7 @@ export default function StudentDashboard({ user, onLogout }) {
     { id: 'Apply Leave',        icon: 'fa-paper-plane', label: 'Apply Leaves'      },
     { id: 'Announcements',      icon: 'fa-bullhorn',    label: 'Announcements'     },
     { id: 'My Visitor History', icon: 'fa-user-friends',label: 'My Visitor History'},
+    { id: 'Settings',           icon: 'fa-cog',          label: 'Settings'          },
   ];
 
   // ── shared input style ────────────────────────────────────────────────────
@@ -342,12 +506,16 @@ export default function StudentDashboard({ user, onLogout }) {
             }}
           >
             <div className="bg-primary/5 rounded-2xl border border-primary/10 p-4 flex flex-col items-center text-center">
-              <div
-                className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
-                style={{ fontSize: '15px' }}
-              >
-                {initials.charAt(0)}
-              </div>
+              {user?.profilePhoto ? (
+                <img src={user.profilePhoto} alt="Profile" className="w-10 h-10 rounded-full object-cover shadow-sm mb-2" />
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold shadow-sm mb-2"
+                  style={{ fontSize: '15px' }}
+                >
+                  {initials.charAt(0)}
+                </div>
+              )}
               <p className="font-semibold text-[#1F2937] leading-tight whitespace-nowrap" style={{ fontSize: '13px' }}>{name}</p>
               <span
                 className="mt-1 px-2.5 py-0.5 bg-primary/10 text-primary font-bold uppercase rounded-full whitespace-nowrap"
@@ -367,13 +535,17 @@ export default function StudentDashboard({ user, onLogout }) {
               paddingBottom: !isSidebarExpanded && !isMobileDrawerOpen ? '4px' : '0px',
             }}
           >
-            <div
-              className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
-              style={{ fontSize: '13px' }}
-              title={name}
-            >
-              {initials.charAt(0)}
-            </div>
+            {user?.profilePhoto ? (
+              <img src={user.profilePhoto} alt="Profile" className="w-8 h-8 rounded-full object-cover" title={name} />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold"
+                style={{ fontSize: '13px' }}
+                title={name}
+              >
+                {initials.charAt(0)}
+              </div>
+            )}
           </div>
         </div>
 
@@ -586,9 +758,13 @@ export default function StudentDashboard({ user, onLogout }) {
                 onClick={() => { setIsProfileOpen(!isProfileOpen); setIsNotifOpen(false); }}
                 className="flex items-center space-x-3 pl-2 pr-3 py-2 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
               >
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
-                  {initials.charAt(0)}
-                </div>
+                {user?.profilePhoto ? (
+                  <img src={user.profilePhoto} alt="Profile" className="w-10 h-10 rounded-full object-cover border border-gray-100" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '16px' }}>
+                    {initials.charAt(0)}
+                  </div>
+                )}
                 <span className="hidden sm:block font-semibold text-[#1F2937] leading-none" style={{ fontSize: '17px' }}>{name}</span>
                 <i className={`fas fa-chevron-down text-[11px] text-gray-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -600,9 +776,9 @@ export default function StudentDashboard({ user, onLogout }) {
                     <p className="text-[10px] text-[#6B7280] truncate">{email}</p>
                   </div>
                   {[
-                    { icon: 'fa-user-circle', label: 'My Profile',       action: () => { setShowProfileModal(true);  setIsProfileOpen(false); } },
-                    { icon: 'fa-cog',         label: 'Settings',         action: () => { setShowSettingsModal(true); setIsProfileOpen(false); } },
-                    { icon: 'fa-lock',        label: 'Change Password',  action: () => { setShowPwModal(true);       setIsProfileOpen(false); } },
+                    { icon: 'fa-user-circle', label: 'My Profile',       action: () => { setActiveTab('Settings'); setSettingsSubTab('profile'); setIsProfileOpen(false); } },
+                    { icon: 'fa-cog',         label: 'Settings',         action: () => { setActiveTab('Settings'); setIsProfileOpen(false); } },
+                    { icon: 'fa-lock',        label: 'Change Password',  action: () => { setActiveTab('Settings'); setSettingsSubTab('security'); setIsProfileOpen(false); } },
                   ].map(item => (
                     <button key={item.label} onClick={item.action}
                       className="flex items-center space-x-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors text-left">
@@ -1038,6 +1214,255 @@ export default function StudentDashboard({ user, onLogout }) {
             </div>
           )}
 
+          {activeTab === 'Settings' && (
+            <div className="space-y-6 animate-fadeIn">
+              <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Account Settings</h2>
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                
+                {/* Settings Sub-navigation */}
+                <div className="w-full md:w-64 shrink-0 space-y-1 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-left">
+                  {[
+                    { id: 'profile', label: 'Profile Details', icon: 'fa-user' },
+                    { id: 'parent', label: 'Parent & Guardian', icon: 'fa-user-friends' },
+                    { id: 'security', label: 'Sign in & Security', icon: 'fa-shield-alt' },
+                    { id: 'notifications', label: 'Notification Preferences', icon: 'fa-bell' },
+                    { id: 'privacy', label: 'Privacy Settings', icon: 'fa-lock' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setSettingsSubTab(tab.id)}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-semibold transition-all ${
+                        settingsSubTab === tab.id
+                          ? 'bg-primary text-white shadow-sm font-bold'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <i className={`fas ${tab.icon} w-5 text-center text-sm`} />
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sub-tab Content Area */}
+                <div className="flex-1 bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm space-y-6 w-full text-left">
+                  {settingsSubTab === 'profile' && (
+                    <form onSubmit={saveStudentProfile} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-user text-primary" />
+                        <span>Profile Details</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Full Name</label>
+                          <input type="text" value={profileForm.fullName} onChange={e => setProfileForm({...profileForm, fullName: e.target.value})} className={inp} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Phone Number</label>
+                          <input type="text" value={profileForm.phoneNumber} onChange={e => setProfileForm({...profileForm, phoneNumber: e.target.value})} className={inp} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Department (Read Only)</label>
+                          <input type="text" value={user?.department} className={`${inp} opacity-60 cursor-not-allowed`} disabled />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Academic Year (Read Only)</label>
+                          <input type="text" value={user?.year} className={`${inp} opacity-60 cursor-not-allowed`} disabled />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Permanent Address</label>
+                          <textarea value={profileForm.address} onChange={e => setProfileForm({...profileForm, address: e.target.value})} className={`${inp} h-24 resize-none`} placeholder="Enter your full address" />
+                        </div>
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Changes</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {settingsSubTab === 'parent' && (
+                    <form onSubmit={saveStudentProfile} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-user-friends text-primary" />
+                        <span>Parent & Guardian Information</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Father/Guardian Name</label>
+                          <input type="text" value={profileForm.parentName} onChange={e => setProfileForm({...profileForm, parentName: e.target.value})} className={inp} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Parent Contact Number</label>
+                          <input type="text" value={profileForm.parentContact} onChange={e => setProfileForm({...profileForm, parentContact: e.target.value})} className={inp} required />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Emergency Contact Number</label>
+                          <input type="text" value={profileForm.emergencyContact} onChange={e => setProfileForm({...profileForm, emergencyContact: e.target.value})} className={inp} required />
+                        </div>
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Changes</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {settingsSubTab === 'security' && (
+                    <div className="space-y-8">
+                      {/* Password reset form */}
+                      <form onSubmit={triggerChangePassword} className="space-y-6">
+                        <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                          <i className="fas fa-lock text-primary" />
+                          <span>Change Password</span>
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 max-w-md">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Current Password</label>
+                            <input type="password" value={pwdForm.currentPassword} onChange={e => setPwdForm({...pwdForm, currentPassword: e.target.value})} className={inp} required />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">New Password</label>
+                            <input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({...pwdForm, newPassword: e.target.value})} className={inp} required />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Confirm New Password</label>
+                            <input type="password" value={pwdForm.confirmPassword} onChange={e => setPwdForm({...pwdForm, confirmPassword: e.target.value})} className={inp} required />
+                          </div>
+                        </div>
+                        <div className="pt-4 flex justify-end border-t">
+                          <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                            <i className="fas fa-key" />
+                            <span>Update Password</span>
+                          </button>
+                        </div>
+                      </form>
+
+                      {/* Security options (2FA, logins) */}
+                      <div className="border-t pt-8 space-y-6">
+                        <h3 className="text-base font-bold text-gray-900 pb-2 flex items-center space-x-2">
+                          <i className="fas fa-shield-alt text-primary" />
+                          <span>Security Configuration</span>
+                        </h3>
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                          <div className="text-left">
+                            <h4 className="text-xs font-bold text-gray-800">Two-Factor Authentication (2FA)</h4>
+                            <p className="text-[11px] text-gray-400 mt-1">Require an email OTP code whenever you log in.</p>
+                          </div>
+                          <button onClick={toggle2FA} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none shrink-0 ${twoFactorEnabled ? 'bg-primary' : 'bg-gray-200'}`}>
+                            <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${twoFactorEnabled ? 'translate-x-5' : ''}`} />
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider text-left">Active Device Sessions</h4>
+                          <div className="space-y-3">
+                            {activeSessions.map((session, sIdx) => (
+                              <div key={sIdx} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <div className="flex items-center space-x-3 text-left">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+                                    <i className="fas fa-desktop text-sm" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-800">{session}</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Last Login: {new Date(lastLogin).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                {sIdx === 0 && <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>}
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={triggerLogoutAll} className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-5 py-3 rounded-xl transition flex items-center space-x-2 border border-rose-100">
+                            <i className="fas fa-sign-out-alt" />
+                            <span>Sign out from all other devices</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsSubTab === 'notifications' && (
+                    <form onSubmit={saveNotifications} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-bell text-primary" />
+                        <span>Notification Preferences</span>
+                      </h3>
+                      <div className="space-y-5">
+                        {[
+                          { key: 'emailNotifications', label: 'Email Notifications', sub: 'Receive announcements and requests directly to your primary email.' },
+                          { key: 'inAppNotifications', label: 'In-App Alerts', sub: 'Enable sound and slide banner popups inside the portal.' },
+                          { key: 'leaveUpdates', label: 'Leave Status Triggers', sub: 'Get instantly notified when your leave request is approved or rejected.' },
+                          { key: 'complaintUpdates', label: 'Complaint Resolutions', sub: 'Get updates when your complaints change status to In Progress or Resolved.' },
+                          { key: 'visitorUpdates', label: 'Visitor Invites', sub: 'Receive notifications when warden reviews your visitor registrations.' },
+                          { key: 'announcementNotifications', label: 'System Announcements', sub: 'Get alerts when warden or administration pins new warnings/notices.' },
+                        ].map(n => (
+                          <div key={n.key} className="flex items-center justify-between p-3 hover:bg-gray-50/50 rounded-xl transition">
+                            <div className="text-left pr-4">
+                              <p className="text-xs font-bold text-gray-800">{n.label}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{n.sub}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setNotifPrefs({...notifPrefs, [n.key]: !notifPrefs[n.key]})}
+                              className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none shrink-0 ${notifPrefs[n.key] ? 'bg-primary' : 'bg-gray-200'}`}
+                            >
+                              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifPrefs[n.key] ? 'translate-x-5' : ''}`} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Preferences</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {settingsSubTab === 'privacy' && (
+                    <form onSubmit={savePrivacy} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-lock text-primary" />
+                        <span>Privacy Configuration</span>
+                      </h3>
+                      <div className="space-y-5">
+                        {[
+                          { key: 'shareProfile', label: 'Share Profile with Roommates', sub: 'Allow other students assigned to your room to view your contact information.' },
+                          { key: 'showContactDetails', label: 'Show Email publicly to Wardens', sub: 'Let wardens query your contact email outside of automated leave/complaint triggers.' }
+                        ].map(p => (
+                          <div key={p.key} className="flex items-center justify-between p-3 hover:bg-gray-50/50 rounded-xl transition">
+                            <div className="text-left pr-4">
+                              <p className="text-xs font-bold text-gray-800">{p.label}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{p.sub}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPrivacyPrefs({...privacyPrefs, [p.key]: !privacyPrefs[p.key]})}
+                              className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none shrink-0 ${privacyPrefs[p.key] ? 'bg-primary' : 'bg-gray-200'}`}
+                            >
+                              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${privacyPrefs[p.key] ? 'translate-x-5' : ''}`} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Privacy</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
 
           </div>
 
@@ -1062,7 +1487,11 @@ export default function StudentDashboard({ user, onLogout }) {
               <i className="fas fa-times" />
             </button>
             <div className="flex items-center space-x-4 mb-6">
-              <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">{initials}</div>
+              {user?.profilePhoto ? (
+                <img src={user.profilePhoto} alt="Profile" className="w-14 h-14 rounded-full object-cover shadow-sm" />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold">{initials}</div>
+              )}
               <div>
                 <h3 className="text-lg font-bold text-gray-900">{name}</h3>
                 <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-semibold uppercase rounded-full">{role}</span>
@@ -1120,47 +1549,25 @@ export default function StudentDashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* Settings */}
-      {showSettingsModal && (
+      {/* Reusable Confirmation Modal */}
+      {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowSettingsModal(false)} />
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-2xl relative z-10 animate-scaleIn text-left">
-            <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times" /></button>
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Account Settings</h3>
-            <div className="space-y-5">
-              {[
-                { label:'Email Notifications', sub:'Approvals & notice alerts', val:emailNotifs, set:setEmailNotifs },
-                { label:'SMS Notifications',   sub:'Emergency leave alerts',    val:smsNotifs,   set:setSmsNotifs   },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between">
-                  <div><p className="text-sm font-semibold text-gray-800">{s.label}</p><p className="text-xs text-gray-400">{s.sub}</p></div>
-                  <button onClick={() => s.set(!s.val)} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none ${s.val ? 'bg-primary' : 'bg-gray-200'}`}>
-                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${s.val ? 'translate-x-5' : ''}`} />
-                  </button>
-                </div>
-              ))}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowConfirmModal(false)} />
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative z-10 animate-scaleIn text-left">
+            <h3 className="text-base font-bold text-gray-900 mb-2">{confirmModalData.title}</h3>
+            <p className="text-xs text-gray-500 mb-6 leading-relaxed">{confirmModalData.message}</p>
+            <div className="flex justify-end space-x-3 text-xs font-semibold">
+              <button onClick={() => setShowConfirmModal(false)} className="px-4 py-2 border rounded-xl hover:bg-gray-50 text-gray-600 transition">Cancel</button>
+              <button
+                onClick={() => {
+                  confirmModalData.action();
+                  setShowConfirmModal(false);
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/95 transition shadow-sm"
+              >
+                Confirm
+              </button>
             </div>
-            <button onClick={() => setShowSettingsModal(false)} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password */}
-      {showPwModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowPwModal(false)} />
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-2xl relative z-10 animate-scaleIn text-left">
-            <button onClick={() => setShowPwModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times" /></button>
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Change Password</h3>
-            <form onSubmit={submitPw} className="space-y-4">
-              {[['Old Password',oldPw,setOldPw],['New Password',newPw,setNewPw],['Confirm Password',confirmPw,setConfirmPw]].map(([label,val,setter]) => (
-                <div key={label}>
-                  <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">{label}</label>
-                  <input type="password" placeholder="••••••••" value={val} onChange={e => setter(e.target.value)} className={inp} />
-                </div>
-              ))}
-              <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors mt-2">Update Password</button>
-            </form>
           </div>
         </div>
       )}

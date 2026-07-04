@@ -20,6 +20,30 @@ export default function WardenDashboard({ user, onLogout }) {
   const [showAnnModal,      setShowAnnModal]      = useState(false);
   const [editAnn,           setEditAnn]           = useState(null);
 
+  // Settings states & custom confirmation modals
+  const [settingsSubTab, setSettingsSubTab] = useState('profile');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalData, setConfirmModalData] = useState({ title: '', message: '', action: null });
+
+  const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileForm, setProfileForm] = useState({
+    fullName: user?.fullName || '',
+    phoneNumber: user?.phoneNumber || '',
+  });
+
+  const [notifPrefs, setNotifPrefs] = useState({
+    emailNotifications: user?.notificationPreferences?.emailNotifications !== false,
+    inAppNotifications: user?.notificationPreferences?.inAppNotifications !== false,
+    leaveUpdates: user?.notificationPreferences?.leaveUpdates !== false,
+    complaintUpdates: user?.notificationPreferences?.complaintUpdates !== false,
+    visitorUpdates: user?.notificationPreferences?.visitorUpdates !== false,
+    announcementNotifications: user?.notificationPreferences?.announcementNotifications !== false,
+  });
+
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.twoFactorEnabled === true);
+  const [activeSessions, setActiveSessions] = useState(user?.activeSessions || ['Chrome on Windows - Bangalore, India (Current Session)']);
+  const [lastLogin, setLastLogin] = useState(user?.lastLogin || new Date());
+
   // ── Form state ────────────────────────────────────────────────────────────
   const [oldPw,           setOldPw]           = useState('');
   const [newPw,           setNewPw]           = useState('');
@@ -127,6 +151,22 @@ export default function WardenDashboard({ user, onLogout }) {
         setProfile(w);
         setWardenName(w.fullName || '');
         setWardenPhone(w.phoneNumber || '');
+
+        setProfileForm({
+          fullName: w.fullName || '',
+          phoneNumber: w.phoneNumber || '',
+        });
+        setNotifPrefs({
+          emailNotifications: w.notificationPreferences?.emailNotifications !== false,
+          inAppNotifications: w.notificationPreferences?.inAppNotifications !== false,
+          leaveUpdates: w.notificationPreferences?.leaveUpdates !== false,
+          complaintUpdates: w.notificationPreferences?.complaintUpdates !== false,
+          visitorUpdates: w.notificationPreferences?.visitorUpdates !== false,
+          announcementNotifications: w.notificationPreferences?.announcementNotifications !== false,
+        });
+        setTwoFactorEnabled(w.twoFactorEnabled === true);
+        if (w.activeSessions) setActiveSessions(w.activeSessions);
+        if (w.lastLogin) setLastLogin(w.lastLogin);
       }
     } catch (error) {
       console.error('Failed to load warden dashboard data:', error.message);
@@ -312,42 +352,111 @@ export default function WardenDashboard({ user, onLogout }) {
     }
   };
 
-  const submitPw = async e => {
+  const saveWardenProfile = async (e) => {
     e.preventDefault();
-    if (!oldPw || !newPw || !confirmPw) { showToast('Please fill all password fields.', 'error'); return; }
-    if (newPw.length < 6) { showToast('New password must be at least 6 characters.', 'error'); return; }
-    if (newPw !== confirmPw) { showToast('Passwords do not match.', 'error'); return; }
     try {
-      await apiFetch('/warden/change-password', {
+      const res = await apiFetch('/warden/profile', {
         method: 'PUT',
-        body: JSON.stringify({ currentPassword: oldPw, newPassword: newPw })
+        body: JSON.stringify(profileForm)
       });
-      showToast('Password updated successfully!');
-      setOldPw(''); setNewPw(''); setConfirmPw('');
-      setShowPwModal(false);
+      if (res.success) {
+        showToast('Profile details updated successfully!');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to update profile', 'error');
+      }
     } catch (err) {
-      console.error(err);
-      showToast('Failed to update password. Please check your current password.', 'error');
+      showToast('Failed to update profile.', 'error');
     }
   };
 
-  const handleProfileUpdate = async e => {
-    e.preventDefault();
-    if (!wardenName.trim()) { showToast('Full name is required.', 'error'); return; }
+  const saveNotifications = async (e) => {
+    e?.preventDefault();
+    try {
+      const res = await apiFetch('/warden/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ notificationPreferences: notifPrefs })
+      });
+      if (res.success) {
+        showToast('Notification settings updated!');
+        await fetchAll();
+      } else {
+        showToast(res.message || 'Failed to update notifications', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to update notification settings.', 'error');
+    }
+  };
+
+  const toggle2FA = async () => {
+    const nextVal = !twoFactorEnabled;
+    setTwoFactorEnabled(nextVal);
     try {
       await apiFetch('/warden/profile', {
         method: 'PUT',
-        body: JSON.stringify({
-          fullName: wardenName,
-          phoneNumber: wardenPhone
-        })
+        body: JSON.stringify({ twoFactorEnabled: nextVal })
       });
-      showToast('Profile updated successfully!');
+      showToast(nextVal ? 'Two-Factor Authentication enabled!' : 'Two-Factor Authentication disabled.');
       await fetchAll();
     } catch (err) {
-      console.error(err);
-      showToast('Failed to update profile.', 'error');
+      showToast('Failed to toggle 2FA', 'error');
     }
+  };
+
+  const triggerChangePassword = (e) => {
+    e.preventDefault();
+    if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+      showToast('New password and confirmation do not match.', 'error');
+      return;
+    }
+    if (pwdForm.newPassword.length < 6) {
+      showToast('New password must be at least 6 characters.', 'error');
+      return;
+    }
+    setConfirmModalData({
+      title: 'Confirm Password Change',
+      message: 'Are you sure you want to update your password? You will need to log in with your new credentials next time.',
+      action: async () => {
+        try {
+          const res = await apiFetch('/warden/change-password', {
+            method: 'PUT',
+            body: JSON.stringify({
+              currentPassword: pwdForm.currentPassword,
+              newPassword: pwdForm.newPassword
+            })
+          });
+          if (res.success) {
+            showToast('Password updated successfully!');
+            setPwdForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+          } else {
+            showToast(res.message || 'Failed to change password', 'error');
+          }
+        } catch (err) {
+          showToast('Failed to update password. Please check your current password.', 'error');
+        }
+      }
+    });
+    setShowConfirmModal(true);
+  };
+
+  const triggerLogoutAll = () => {
+    setConfirmModalData({
+      title: 'Sign Out from All Devices',
+      message: 'This will terminate your login sessions on all other browsers and mobile devices. Do you want to continue?',
+      action: async () => {
+        try {
+          await apiFetch('/warden/profile', {
+            method: 'PUT',
+            body: JSON.stringify({ activeSessions: ['Chrome on Windows - Bangalore, India (Current Session)'] })
+          });
+          setActiveSessions(['Chrome on Windows - Bangalore, India (Current Session)']);
+          showToast('Signed out from all other devices successfully.');
+        } catch (err) {
+          showToast('Failed to sign out from all devices.', 'error');
+        }
+      }
+    });
+    setShowConfirmModal(true);
   };
 
   const handleRoomAllocate = async e => {
@@ -1204,8 +1313,8 @@ export default function WardenDashboard({ user, onLogout }) {
                   </div>
                   {[
                     { icon: 'fa-user-circle', label: 'My Profile',      action: () => { setShowProfileModal(true);  setIsProfileOpen(false); } },
-                    { icon: 'fa-lock',        label: 'Change Password', action: () => { setShowPwModal(true);       setIsProfileOpen(false); } },
-                    { icon: 'fa-cog',         label: 'Settings',        action: () => { setShowSettingsModal(true); setIsProfileOpen(false); } },
+                    { icon: 'fa-lock',        label: 'Change Password', action: () => { setActiveTab('Settings'); setSettingsSubTab('security'); setIsProfileOpen(false); } },
+                    { icon: 'fa-cog',         label: 'Settings',        action: () => { setActiveTab('Settings'); setSettingsSubTab('profile'); setIsProfileOpen(false); } },
                   ].map(item => (
                     <button key={item.label} onClick={item.action}
                       className="flex items-center space-x-2.5 w-full px-3 py-2.5 rounded-xl text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors text-left">
@@ -1287,7 +1396,7 @@ export default function WardenDashboard({ user, onLogout }) {
               </div>
 
               {/* Bottom grid: Recent Leaves + Recent Complaints */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Recent Leave Requests */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -1335,6 +1444,93 @@ export default function WardenDashboard({ user, onLogout }) {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* On-the-spot Registration Form */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 h-fit text-left">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <i className="fas fa-user-plus text-primary text-sm" />
+                      </div>
+                      <h3 className="font-semibold text-[#1F2937]" style={{ fontSize: '18px' }}>On-the-Spot Registration</h3>
+                    </div>
+                  </div>
+                  <form onSubmit={handleRegisterVisitorOnSpot} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Register No</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 731520104001"
+                        value={onSpotStudentId}
+                        onChange={e => setOnSpotStudentId(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Visitor Name</label>
+                      <input
+                        type="text"
+                        placeholder="Full Name"
+                        value={onSpotVisitorName}
+                        onChange={e => setOnSpotVisitorName(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Relationship</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Parent, Friend"
+                          value={onSpotRelationship}
+                          onChange={e => setOnSpotRelationship(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">Phone Number</label>
+                        <input
+                          type="text"
+                          placeholder="10-digit number"
+                          value={onSpotPhoneNumber}
+                          onChange={e => setOnSpotPhoneNumber(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Visit Date</label>
+                      <input
+                        type="date"
+                        value={onSpotVisitDate}
+                        onChange={e => setOnSpotVisitDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Purpose of Visit</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Delivery, Query, Meet"
+                        value={onSpotPurpose}
+                        onChange={e => setOnSpotPurpose(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center space-x-1"
+                    >
+                      <i className="fas fa-plus" />
+                      <span>Register Visitor</span>
+                    </button>
+                  </form>
                 </div>
 
               </div>
@@ -2011,94 +2207,196 @@ export default function WardenDashboard({ user, onLogout }) {
 
           {/* ══ SETTINGS ════════════════════════════════════════════════════ */}
           {activeTab === 'Settings' && (
-            <div className="space-y-6 animate-fadeIn">
+            <div className="space-y-6 animate-fadeIn text-left">
               <h2 className="font-bold text-[#111827]" style={{ fontSize: '24px' }}>Settings</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Update Profile */}
-                <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                  <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Update Profile</h3>
-                  <div className="flex items-center space-x-4 mb-6">
-                    <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white font-bold" style={{ fontSize: '24px' }}>
-                      {initials.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-[#1F2937]" style={{ fontSize: '18px' }}>{name}</p>
-                      <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-bold uppercase rounded-full">Warden</span>
-                    </div>
-                  </div>
-                  <form onSubmit={handleProfileUpdate} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Full Name</label>
-                        <input type="text" value={wardenName} onChange={e => setWardenName(e.target.value)} placeholder="Full name" className={inp} />
-                      </div>
-                      <div>
-                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Email (Read Only)</label>
-                        <input type="text" value={email} disabled className={`${inp} opacity-60 cursor-not-allowed`} />
-                      </div>
-                      <div>
-                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Phone Number</label>
-                        <input type="text" value={wardenPhone} onChange={e => setWardenPhone(e.target.value)} placeholder="Phone number" className={inp} />
-                      </div>
-                      <div>
-                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>Employee ID (Read Only)</label>
-                        <input type="text" value={profile?.employeeId || user?.employeeId || 'W-2024-001'} disabled className={`${inp} opacity-60 cursor-not-allowed`} />
-                      </div>
-                    </div>
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                
+                {/* Settings Sub-navigation */}
+                <div className="w-full md:w-64 shrink-0 space-y-1 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-left">
+                  {[
+                    { id: 'profile', label: 'Profile Details', icon: 'fa-user' },
+                    { id: 'security', label: 'Sign in & Security', icon: 'fa-shield-alt' },
+                    { id: 'notifications', label: 'Notification Preferences', icon: 'fa-bell' }
+                  ].map(tab => (
                     <button
-                      type="submit"
-                      className="mt-5 bg-primary hover:bg-primary-light text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-sm hover:shadow"
-                      style={{ fontSize: '17px' }}
+                      key={tab.id}
+                      onClick={() => setSettingsSubTab(tab.id)}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-xs font-semibold transition-all ${
+                        settingsSubTab === tab.id
+                          ? 'bg-primary text-white shadow-sm font-bold'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
                     >
-                      Save Changes
+                      <i className={`fas ${tab.icon} w-5 text-center text-sm`} />
+                      <span>{tab.label}</span>
                     </button>
-                  </form>
+                  ))}
                 </div>
 
-                {/* Notification Preferences */}
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit">
-                  <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Notification Preferences</h3>
-                  <div className="space-y-5">
-                    {[
-                      { label: 'Email Notifications', sub: 'Leave & complaint alerts',    val: emailNotifs, set: setEmailNotifs },
-                      { label: 'SMS Notifications',   sub: 'Urgent leave requests',       val: smsNotifs,   set: setSmsNotifs   },
-                    ].map(s => (
-                      <div key={s.label} className="flex items-center justify-between">
+                {/* Sub-tab Content Area */}
+                <div className="flex-1 bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-sm space-y-6 w-full text-left">
+                  {settingsSubTab === 'profile' && (
+                    <form onSubmit={saveWardenProfile} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-user text-primary" />
+                        <span>Profile Details</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <p className="text-sm font-semibold text-gray-800">{s.label}</p>
-                          <p className="text-xs text-gray-400">{s.sub}</p>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Full Name</label>
+                          <input type="text" value={profileForm.fullName} onChange={e => setProfileForm({...profileForm, fullName: e.target.value})} className={inp} required />
                         </div>
-                        <button onClick={() => s.set(!s.val)} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none ${s.val ? 'bg-primary' : 'bg-gray-200'}`}>
-                          <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${s.val ? 'translate-x-5' : ''}`} />
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Phone Number</label>
+                          <input type="text" value={profileForm.phoneNumber} onChange={e => setProfileForm({...profileForm, phoneNumber: e.target.value})} className={inp} required />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Employee ID (Read Only)</label>
+                          <input type="text" value={profile?.employeeId || 'W-2024-001'} className={`${inp} opacity-60 cursor-not-allowed`} disabled />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assigned Hostel (Read Only)</label>
+                          <div className="px-4 py-3 bg-gray-50 border border-gray-150 rounded-xl text-sm font-semibold text-gray-700">
+                            {profile?.assignedHostel || 'N/A'}
+                          </div>
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assigned Blocks (Read Only)</label>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {profile?.assignedBlocks && profile.assignedBlocks.length > 0 ? (
+                              profile.assignedBlocks.map(blk => (
+                                <span key={blk} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-100">
+                                  {blk}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 text-xs font-medium">None assigned</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Changes</span>
                         </button>
                       </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => showToast('Preferences saved!')}
-                    className="mt-5 w-full bg-primary hover:bg-primary-light text-white font-semibold py-3 rounded-xl transition-all shadow-sm hover:shadow"
-                    style={{ fontSize: '14px' }}
-                  >
-                    Save Preferences
-                  </button>
+                    </form>
+                  )}
+
+                  {settingsSubTab === 'security' && (
+                    <div className="space-y-8">
+                      {/* Password reset form */}
+                      <form onSubmit={triggerChangePassword} className="space-y-6">
+                        <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                          <i className="fas fa-lock text-primary" />
+                          <span>Change Password</span>
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 max-w-md">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Current Password</label>
+                            <input type="password" value={pwdForm.currentPassword} onChange={e => setPwdForm({...pwdForm, currentPassword: e.target.value})} className={inp} required />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">New Password</label>
+                            <input type="password" value={pwdForm.newPassword} onChange={e => setPwdForm({...pwdForm, newPassword: e.target.value})} className={inp} required />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Confirm New Password</label>
+                            <input type="password" value={pwdForm.confirmPassword} onChange={e => setPwdForm({...pwdForm, confirmPassword: e.target.value})} className={inp} required />
+                          </div>
+                        </div>
+                        <div className="pt-4 flex justify-end border-t">
+                          <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                            <i className="fas fa-key" />
+                            <span>Update Password</span>
+                          </button>
+                        </div>
+                      </form>
+
+                      {/* Security options (2FA, logins) */}
+                      <div className="border-t pt-8 space-y-6">
+                        <h3 className="text-base font-bold text-gray-900 pb-2 flex items-center space-x-2">
+                          <i className="fas fa-shield-alt text-primary" />
+                          <span>Security Configuration</span>
+                        </h3>
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                          <div className="text-left">
+                            <h4 className="text-xs font-bold text-gray-800">Two-Factor Authentication (2FA)</h4>
+                            <p className="text-[11px] text-gray-400 mt-1">Require an email OTP code whenever you log in.</p>
+                          </div>
+                          <button onClick={toggle2FA} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none shrink-0 ${twoFactorEnabled ? 'bg-primary' : 'bg-gray-200'}`}>
+                            <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${twoFactorEnabled ? 'translate-x-5' : ''}`} />
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider text-left">Active Device Sessions</h4>
+                          <div className="space-y-3">
+                            {activeSessions.map((session, sIdx) => (
+                              <div key={sIdx} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <div className="flex items-center space-x-3 text-left">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+                                    <i className="fas fa-desktop text-sm" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-800">{session}</p>
+                                    <p className="text-[10px] text-gray-400 mt-0.5">Last Login: {new Date(lastLogin).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                {sIdx === 0 && <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Current</span>}
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={triggerLogoutAll} className="bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-5 py-3 rounded-xl transition flex items-center space-x-2 border border-rose-100">
+                            <i className="fas fa-sign-out-alt" />
+                            <span>Sign out from all other devices</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {settingsSubTab === 'notifications' && (
+                    <form onSubmit={saveNotifications} className="space-y-6">
+                      <h3 className="text-base font-bold text-gray-900 border-b pb-3 mb-4 flex items-center space-x-2">
+                        <i className="fas fa-bell text-primary" />
+                        <span>Notification Preferences</span>
+                      </h3>
+                      <div className="space-y-5">
+                        {[
+                          { key: 'emailNotifications', label: 'Email Notifications', sub: 'Receive student requests and system reports directly to your email.' },
+                          { key: 'inAppNotifications', label: 'In-App Alerts', sub: 'Enable sound and slide banner notifications inside the portal.' },
+                          { key: 'leaveUpdates', label: 'Student Leave Requests', sub: 'Get notified when students in your assigned blocks submit new leave applications.' },
+                          { key: 'complaintUpdates', label: 'Student Complaints', sub: 'Receive updates when students file maintenance or discipline complaints.' },
+                          { key: 'visitorUpdates', label: 'Visitor Logs', sub: 'Get alerts when visitor requests require your validation.' },
+                          { key: 'announcementNotifications', label: 'Admin Announcements', sub: 'Get alerts when the administration pins general notices.' },
+                        ].map(n => (
+                          <div key={n.key} className="flex items-center justify-between p-3 hover:bg-gray-50/50 rounded-xl transition">
+                            <div className="text-left pr-4">
+                              <p className="text-xs font-bold text-gray-800">{n.label}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{n.sub}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setNotifPrefs({...notifPrefs, [n.key]: !notifPrefs[n.key]})}
+                              className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none shrink-0 ${notifPrefs[n.key] ? 'bg-primary' : 'bg-gray-200'}`}
+                            >
+                              <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${notifPrefs[n.key] ? 'translate-x-5' : ''}`} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="pt-4 flex justify-end border-t">
+                        <button type="submit" className="bg-primary hover:bg-primary-light text-white text-xs font-bold px-6 py-3 rounded-xl transition flex items-center space-x-2 shadow-sm">
+                          <i className="fas fa-save" />
+                          <span>Save Preferences</span>
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
 
-                {/* Change Password */}
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit">
-                  <h3 className="font-semibold text-[#1F2937] mb-5" style={{ fontSize: '18px' }}>Change Password</h3>
-                  <form onSubmit={submitPw} className="space-y-4">
-                    {[['Current Password', oldPw, setOldPw], ['New Password', newPw, setNewPw], ['Confirm Password', confirmPw, setConfirmPw]].map(([label, val, setter]) => (
-                      <div key={label}>
-                        <label className="uppercase tracking-wider block mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{label}</label>
-                        <input type="password" placeholder="••••••••" value={val} onChange={e => setter(e.target.value)} className={inp} />
-                      </div>
-                    ))}
-                    <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white font-semibold py-3 rounded-xl transition-all shadow-sm hover:shadow mt-1" style={{ fontSize: '17px' }}>
-                      Update Password
-                    </button>
-                  </form>
-                </div>
               </div>
             </div>
           )}
@@ -2181,47 +2479,25 @@ export default function WardenDashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* ── CHANGE PASSWORD MODAL ─────────────────────────────────────────── */}
-      {showPwModal && (
+      {/* Reusable Confirmation Modal */}
+      {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowPwModal(false)} />
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-2xl relative z-10 animate-scaleIn text-left">
-            <button onClick={() => setShowPwModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times" /></button>
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Change Password</h3>
-            <form onSubmit={submitPw} className="space-y-4">
-              {[['Old Password', oldPw, setOldPw], ['New Password', newPw, setNewPw], ['Confirm Password', confirmPw, setConfirmPw]].map(([label, val, setter]) => (
-                <div key={label}>
-                  <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1.5">{label}</label>
-                  <input type="password" placeholder="••••••••" value={val} onChange={e => setter(e.target.value)} className={inp} />
-                </div>
-              ))}
-              <button type="submit" className="w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors mt-2">Update Password</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── SETTINGS MODAL ───────────────────────────────────────────────── */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowSettingsModal(false)} />
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-2xl relative z-10 animate-scaleIn text-left">
-            <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors"><i className="fas fa-times" /></button>
-            <h3 className="text-lg font-bold text-gray-900 mb-6">Notification Settings</h3>
-            <div className="space-y-5">
-              {[
-                { label: 'Email Notifications', sub: 'Leave & complaint alerts',    val: emailNotifs, set: setEmailNotifs },
-                { label: 'SMS Notifications',   sub: 'Urgent leave requests',       val: smsNotifs,   set: setSmsNotifs   },
-              ].map(s => (
-                <div key={s.label} className="flex items-center justify-between">
-                  <div><p className="text-sm font-semibold text-gray-800">{s.label}</p><p className="text-xs text-gray-400">{s.sub}</p></div>
-                  <button onClick={() => s.set(!s.val)} className={`w-11 h-6 rounded-full relative transition-colors focus:outline-none ${s.val ? 'bg-primary' : 'bg-gray-200'}`}>
-                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${s.val ? 'translate-x-5' : ''}`} />
-                  </button>
-                </div>
-              ))}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowConfirmModal(false)} />
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative z-10 animate-scaleIn text-left">
+            <h3 className="text-base font-bold text-gray-900 mb-2">{confirmModalData.title}</h3>
+            <p className="text-xs text-gray-500 mb-6 leading-relaxed">{confirmModalData.message}</p>
+            <div className="flex justify-end space-x-3 text-xs font-semibold">
+              <button onClick={() => setShowConfirmModal(false)} className="px-4 py-2 border rounded-xl hover:bg-gray-50 text-gray-600 transition">Cancel</button>
+              <button
+                onClick={() => {
+                  confirmModalData.action();
+                  setShowConfirmModal(false);
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/95 transition shadow-sm"
+              >
+                Confirm
+              </button>
             </div>
-            <button onClick={() => { showToast('Preferences saved!'); setShowSettingsModal(false); }} className="mt-7 w-full bg-primary hover:bg-primary-light text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Save Settings</button>
           </div>
         </div>
       )}

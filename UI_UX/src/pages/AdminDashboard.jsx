@@ -164,6 +164,14 @@ export default function AdminDashboard({ user, onLogout }) {
 
   const [createdCredentials, setCreatedCredentials] = useState(null);
 
+  // States for On-the-Spot Visitor Registration
+  const [onSpotStudentId, setOnSpotStudentId] = useState('');
+  const [onSpotVisitorName, setOnSpotVisitorName] = useState('');
+  const [onSpotRelationship, setOnSpotRelationship] = useState('');
+  const [onSpotPhoneNumber, setOnSpotPhoneNumber] = useState('');
+  const [onSpotVisitDate, setOnSpotVisitDate] = useState('');
+  const [onSpotPurpose, setOnSpotPurpose] = useState('');
+
   // ── Realistic Mock Data (Hostels, Leaves, Complaints, Visitors) ───────────
   const [hostels, setHostels] = useState([
     { _id: 'h1', name: 'Boys Hostel', blockCount: 4, floorCount: 2, roomCount: 32, capacity: 128, occupiedBeds: 96, availableBeds: 32, status: 'Active', warden: 'Thayaneshwaran s' },
@@ -878,6 +886,44 @@ export default function AdminDashboard({ user, onLogout }) {
     } catch (err) {
       console.error('Visitor Approval Error:', err);
       showToastMsg('Failed to process visitor approval.', 'error');
+    }
+  };
+
+  const handleRegisterVisitorOnSpot = async (e) => {
+    e.preventDefault();
+    if (!onSpotStudentId || !onSpotVisitorName || !onSpotRelationship || !onSpotPhoneNumber || !onSpotVisitDate) {
+      showToastMsg('Please fill all required fields.', 'error');
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/admin/visitors/on-the-spot', {
+        method: 'POST',
+        body: JSON.stringify({
+          studentIdentifier: onSpotStudentId,
+          visitorName: onSpotVisitorName,
+          relationship: onSpotRelationship,
+          phoneNumber: onSpotPhoneNumber,
+          visitDate: onSpotVisitDate,
+          purpose: onSpotPurpose
+        })
+      });
+
+      if (res.success) {
+        showToastMsg('Visitor registered successfully on the spot!');
+        setOnSpotStudentId('');
+        setOnSpotVisitorName('');
+        setOnSpotRelationship('');
+        setOnSpotPhoneNumber('');
+        setOnSpotVisitDate('');
+        setOnSpotPurpose('');
+        fetchVisitors();
+        fetchStats();
+      } else {
+        showToastMsg(res.message || 'Failed to register visitor.', 'error');
+      }
+    } catch (err) {
+      showToastMsg(err.message || 'Server error', 'error');
     }
   };
 
@@ -2704,7 +2750,95 @@ export default function AdminDashboard({ user, onLogout }) {
               <p className="text-sm text-gray-500 font-medium">Verify guest entries and emergency visits. Review secure QR-coded pre-authorization requests.</p>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start w-full">
+
+              {/* On-the-spot Registration Form */}
+              <div className="lg:col-span-1 bg-white rounded-3xl border border-gray-100 p-6 shadow-sm flex flex-col h-fit">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center space-x-2">
+                    <i className="fas fa-user-plus text-primary text-base" />
+                    <span>On-the-Spot Registration</span>
+                  </h3>
+                </div>
+                <form onSubmit={handleRegisterVisitorOnSpot} className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Register No / Student ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 731520104001"
+                      value={onSpotStudentId}
+                      onChange={e => setOnSpotStudentId(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Visitor Name</label>
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={onSpotVisitorName}
+                      onChange={e => setOnSpotVisitorName(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Relationship</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Parent, Friend"
+                        value={onSpotRelationship}
+                        onChange={e => setOnSpotRelationship(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Phone Number</label>
+                      <input
+                        type="text"
+                        placeholder="10-digit number"
+                        value={onSpotPhoneNumber}
+                        onChange={e => setOnSpotPhoneNumber(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Visit Date</label>
+                    <input
+                      type="date"
+                      value={onSpotVisitDate}
+                      onChange={e => setOnSpotVisitDate(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 mb-0.5">Purpose of Visit</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Delivery, Query, Meet"
+                      value={onSpotPurpose}
+                      onChange={e => setOnSpotPurpose(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-primary transition"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-primary hover:bg-primary/95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center space-x-1 mt-2"
+                  >
+                    <i className="fas fa-plus" />
+                    <span>Register Visitor</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Visitor List */}
+              <div className="lg:col-span-2 bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
               <div className="flex flex-col sm:flex-row gap-3 mb-5">
                 <div className="relative flex-1">
                   <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
@@ -2811,6 +2945,8 @@ export default function AdminDashboard({ user, onLogout }) {
                   </>
                 );
               })()}
+              </div>
+
             </div>
           </div>
         )}
