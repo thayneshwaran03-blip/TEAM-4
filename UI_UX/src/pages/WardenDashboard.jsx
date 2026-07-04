@@ -370,10 +370,36 @@ export default function WardenDashboard({ user, onLogout }) {
 
   const exportOccupancyReportPDF = () => {
     const hostel = profile?.assignedHostel || 'N/A';
-    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
+    const block = profile?.assignedBlocks ? profile.assignedBlocks.join(', ') : 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
 
+    const filteredRooms = rooms.filter(r => {
+      const q = reportSearch.toLowerCase();
+      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
+      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
+      return sMatch && fMatch;
+    });
+
+    const totalBeds = filteredRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
+    const occupiedBedsCount = filteredRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
+    const availableBedsCount = Math.max(0, totalBeds - occupiedBedsCount);
+    const occupancyRate = totalBeds > 0 ? ((occupiedBedsCount / totalBeds) * 100).toFixed(1) : '0.0';
+    const occupiedRoomsCount = filteredRooms.filter(r => r.occupiedBeds > 0).length;
+    const vacantRoomsCount = filteredRooms.filter(r => r.occupiedBeds === 0).length;
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+
+    doc.setFillColor(26, 35, 126);
+    doc.rect(0, 0, doc.internal.pageSize.getWidth(), 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('HostelHub - Occupancy Report', 15, 14);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
     doc.text(`Warden Name: ${warden}`, 15, 35);
     doc.text(`Hostel: ${hostel}`, 15, 41);
     doc.text(`Assigned Block: ${block}`, 15, 47);
@@ -384,12 +410,12 @@ export default function WardenDashboard({ user, onLogout }) {
     doc.text('Dashboard Statistics', 15, 65);
 
     const statLabels = [
-      { label: 'Total Capacity', val: `${occupancyStats.totalCapacity} Beds` },
-      { label: 'Occupied Beds', val: `${occupancyStats.occupiedBeds} Beds` },
-      { label: 'Available Beds', val: `${occupancyStats.availableBeds} Beds` },
-      { label: 'Occupancy Rate', val: `${occupancyStats.occupancyRate}%` },
-      { label: 'Occupied Rooms', val: `${occupancyStats.occupiedRooms} Rooms` },
-      { label: 'Vacant Rooms', val: `${occupancyStats.vacantRooms} Rooms` }
+      { label: 'Total Capacity', val: `${totalBeds} Beds` },
+      { label: 'Occupied Beds', val: `${occupiedBedsCount} Beds` },
+      { label: 'Available Beds', val: `${availableBedsCount} Beds` },
+      { label: 'Occupancy Rate', val: `${occupancyRate}%` },
+      { label: 'Occupied Rooms', val: `${occupiedRoomsCount} Rooms` },
+      { label: 'Vacant Rooms', val: `${vacantRoomsCount} Rooms` }
     ];
 
     let currentX = 15;
@@ -400,7 +426,7 @@ export default function WardenDashboard({ user, onLogout }) {
       doc.setFillColor(240, 244, 255);
       doc.setDrawColor(180, 198, 252);
       doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
-      
+
       doc.setTextColor(55, 65, 81);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'bold');
@@ -420,14 +446,42 @@ export default function WardenDashboard({ user, onLogout }) {
     doc.text('Occupancy Table', 15, 102);
 
     const tableHeaders = [['Room Number', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy Status']];
-    
+
+    const tableRows = filteredRooms.map(r => {
+      const occupied = r.occupiedBeds || 0;
+      const cap = r.capacity || 0;
+      const avail = Math.max(0, cap - occupied);
+
+      let status = 'OPEN';
+      if (occupied >= cap) {
+        status = 'FULL';
+      } else if (occupied > 0) {
+        status = 'PARTIAL';
+      }
+
+      return [r.roomNumber, r.floorNumber, cap, occupied, avail, status];
+    });
+
+    doc.autoTable({
+      head: tableHeaders,
+      body: tableRows,
+      startY: 108,
+      headStyles: { fillColor: [26, 35, 126], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, halign: 'center' },
+    });
+
+    doc.save(`Occupancy_Report_${block}_${Date.now()}.pdf`);
+  };
+
+  const triggerPrintReport = () => {
+    const hostel = profile?.assignedHostel || 'N/A';
     const block = profile?.assignedBlocks ? profile.assignedBlocks.join(', ') : 'N/A';
     const warden = profile?.fullName || 'N/A';
     const dateStr = new Date().toLocaleString();
 
     const filteredRooms = rooms.filter(r => {
       const q = reportSearch.toLowerCase();
-      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
+      const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
       const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
       return sMatch && fMatch;
     });
@@ -436,7 +490,6 @@ export default function WardenDashboard({ user, onLogout }) {
     const occupiedBeds = filteredRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
     const occupancyRate = totalBeds > 0 ? ((occupiedBeds / totalBeds) * 100).toFixed(1) : '0.0';
-    const totalRooms = filteredRooms.length;
     const occupiedRooms = filteredRooms.filter(r => r.occupiedBeds > 0).length;
     const vacantRooms = filteredRooms.filter(r => r.occupiedBeds === 0).length;
 
@@ -444,26 +497,16 @@ export default function WardenDashboard({ user, onLogout }) {
       const occupied = r.occupiedBeds || 0;
       const cap = r.capacity || 0;
       const avail = Math.max(0, cap - occupied);
-      
+
       let status = 'OPEN';
       if (occupied >= cap) {
         status = 'FULL';
       } else if (occupied > 0) {
         status = 'PARTIAL';
       }
-    });
 
-    doc.save(`Occupancy_Report_${block}_${Date.now()}.pdf`);
-  };
-
-  const triggerPrintReport = () => {
-    const hostel = profile?.assignedHostel || 'N/A';
-    const block = profile?.assignedBlocks ? profile.assignedBlocks[0] : 'N/A';
-    const warden = profile?.fullName || 'N/A';
-    const dateStr = new Date().toLocaleString();
-      
       const badgeClass = status.toLowerCase(); // open, full, partial
-      
+
       return `
         <tr>
           <td style="font-weight: 600;">${r.roomNumber}</td>
@@ -480,37 +523,6 @@ export default function WardenDashboard({ user, onLogout }) {
 
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
-      <html>
-        <head>
-          <title>Occupancy Report - ${block}</title>
-          <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 40px; color: #333; }
-            .header-bar { background-color: #1a237e; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-            .header-bar h1 { margin: 0; font-size: 24px; }
-            .meta-info { display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px; background: #f9fafb; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; }
-            .meta-col { flex: 1; }
-            .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px; margin-bottom: 30px; }
-            .stat-card { background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 15px; text-align: center; }
-            .stat-card p.label { margin: 0 0 5px; color: #4b5563; font-size: 11px; font-weight: bold; text-transform: uppercase; }
-            .stat-card p.val { margin: 0; color: #1a237e; font-size: 18px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background-color: #1a237e; color: white; padding: 12px; font-weight: bold; text-align: center; border: 1px solid #ddd; }
-            .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 12px; color: #9ca3af; border-t: 1px solid #e5e7eb; pt-10; }
-          </style>
-        </head>
-        <body>
-          <div class="header-bar">
-            <h1>HostelHub - Occupancy Report</h1>
-            <p style="margin: 5px 0 0; opacity: 0.8;">Centralized Hostel Management System</p>
-          </div>
-          <div class="meta-info">
-            <div class="meta-col">
-              <p><strong>Warden Name:</strong> ${warden}</p>
-              <p><strong>Hostel:</strong> ${hostel}</p>
-            </div>
-            <div class="meta-col" style="text-align: right;">
-              <p><strong>Assigned Block:</strong> ${block}</p>
-              <p><strong>Date & Time:</strong> ${dateStr}</p>
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -537,7 +549,6 @@ export default function WardenDashboard({ user, onLogout }) {
             --gray-600: #475569;
             --gray-900: #0f172a;
           }
-          
           body {
             font-family: 'Inter', sans-serif;
             margin: 0;
@@ -547,7 +558,6 @@ export default function WardenDashboard({ user, onLogout }) {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-
           .report-container {
             width: 100%;
             max-width: 210mm;
@@ -556,8 +566,6 @@ export default function WardenDashboard({ user, onLogout }) {
             box-sizing: border-box;
             position: relative;
           }
-
-          /* Professional Header styling */
           .report-header {
             display: flex;
             justify-content: space-between;
@@ -566,7 +574,6 @@ export default function WardenDashboard({ user, onLogout }) {
             padding-bottom: 12px;
             margin-bottom: 20px;
           }
-
           .header-left h1 {
             margin: 0;
             font-size: 24px;
@@ -574,18 +581,13 @@ export default function WardenDashboard({ user, onLogout }) {
             color: var(--primary-dark);
             letter-spacing: -0.5px;
           }
-
           .header-left p {
             margin: 4px 0 0 0;
             font-size: 12px;
             color: var(--gray-600);
             font-weight: 500;
           }
-
-          .header-right {
-            text-align: right;
-          }
-
+          .header-right { text-align: right; }
           .header-right .generated-date {
             font-size: 11px;
             color: var(--gray-600);
@@ -594,8 +596,6 @@ export default function WardenDashboard({ user, onLogout }) {
             padding: 6px 12px;
             border-radius: 8px;
           }
-
-          /* Report Info Card */
           .info-card {
             background: var(--gray-50);
             border: 1px solid var(--gray-200);
@@ -607,12 +607,7 @@ export default function WardenDashboard({ user, onLogout }) {
             grid-template-columns: repeat(4, 1fr);
             gap: 15px;
           }
-
-          .info-item {
-            display: flex;
-            flex-direction: column;
-          }
-
+          .info-item { display: flex; flex-direction: column; }
           .info-label {
             font-size: 9px;
             font-weight: 700;
@@ -621,21 +616,13 @@ export default function WardenDashboard({ user, onLogout }) {
             letter-spacing: 0.5px;
             margin-bottom: 4px;
           }
-
-          .info-value {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--gray-900);
-          }
-
-          /* KPI Stats Grid - 3 columns */
+          .info-value { font-size: 12px; font-weight: 600; color: var(--gray-900); }
           .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
             margin-bottom: 30px;
           }
-
           .stat-card {
             background: white;
             border: 1px solid var(--gray-200);
@@ -646,25 +633,15 @@ export default function WardenDashboard({ user, onLogout }) {
             overflow: hidden;
             box-sizing: border-box;
           }
-          
           .stat-card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
+            top: 0; left: 0;
+            width: 4px; height: 100%;
             background: var(--primary);
           }
-          
-          .stat-card.available::before {
-            background: var(--success);
-          }
-          
-          .stat-card.rate::before {
-            background: var(--success);
-          }
-
+          .stat-card.available::before { background: var(--success); }
+          .stat-card.rate::before { background: var(--success); }
           .stat-label {
             font-size: 9px;
             font-weight: 700;
@@ -673,20 +650,9 @@ export default function WardenDashboard({ user, onLogout }) {
             letter-spacing: 0.5px;
             margin-bottom: 6px;
           }
-
-          .stat-value {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--primary-dark);
-            margin: 0;
-          }
-
-          .stat-card.available .stat-value, 
-          .stat-card.rate .stat-value {
-            color: var(--success-dark);
-          }
-
-          /* Progress bar for rate */
+          .stat-value { font-size: 18px; font-weight: 800; color: var(--primary-dark); margin: 0; }
+          .stat-card.available .stat-value,
+          .stat-card.rate .stat-value { color: var(--success-dark); }
           .progress-bar-container {
             width: 100%;
             height: 5px;
@@ -695,14 +661,7 @@ export default function WardenDashboard({ user, onLogout }) {
             margin-top: 8px;
             overflow: hidden;
           }
-
-          .progress-bar {
-            height: 100%;
-            background-color: var(--success);
-            border-radius: 9999px;
-          }
-
-          /* Table styling */
+          .progress-bar { height: 100%; background-color: var(--success); border-radius: 9999px; }
           .table-title {
             font-size: 14px;
             font-weight: 700;
@@ -711,14 +670,7 @@ export default function WardenDashboard({ user, onLogout }) {
             text-transform: uppercase;
             letter-spacing: 0.5px;
           }
-
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            font-size: 11px;
-          }
-
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 11px; }
           th {
             background-color: var(--primary);
             color: white;
@@ -730,19 +682,8 @@ export default function WardenDashboard({ user, onLogout }) {
             border: 1px solid var(--primary);
             text-align: center;
           }
-
-          td {
-            padding: 9px 12px;
-            border: 1px solid var(--gray-200);
-            color: var(--gray-900);
-            text-align: center;
-          }
-
-          tr:nth-child(even) {
-            background-color: var(--gray-50);
-          }
-
-          /* Badges */
+          td { padding: 9px 12px; border: 1px solid var(--gray-200); color: var(--gray-900); text-align: center; }
+          tr:nth-child(even) { background-color: var(--gray-50); }
           .status-badge {
             display: inline-block;
             padding: 3px 8px;
@@ -754,32 +695,12 @@ export default function WardenDashboard({ user, onLogout }) {
             text-align: center;
             border: 1px solid transparent;
           }
-
-          .status-badge.open {
-            background-color: var(--success-light);
-            color: var(--success-dark);
-            border-color: #a7f3d0;
-          }
-
-          .status-badge.partial {
-            background-color: var(--warning-light);
-            color: var(--warning-dark);
-            border-color: #fde68a;
-          }
-
-          .status-badge.full {
-            background-color: var(--danger-light);
-            color: var(--danger-dark);
-            border-color: #fecaca;
-          }
-
-          /* Footer styling */
+          .status-badge.open    { background-color: var(--success-light); color: var(--success-dark); border-color: #a7f3d0; }
+          .status-badge.partial { background-color: var(--warning-light); color: var(--warning-dark); border-color: #fde68a; }
+          .status-badge.full    { background-color: var(--danger-light);  color: var(--danger-dark);  border-color: #fecaca; }
           .report-footer {
             position: fixed;
-            bottom: -10mm;
-            left: 0;
-            right: 0;
-            height: 10mm;
+            bottom: -10mm; left: 0; right: 0; height: 10mm;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -789,42 +710,20 @@ export default function WardenDashboard({ user, onLogout }) {
             color: var(--gray-600);
             font-weight: 500;
           }
-
-          .footer-left {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-          }
-          
+          .footer-left { display: flex; align-items: center; gap: 5px; }
           .footer-left::before {
             content: '';
             display: inline-block;
-            width: 6px;
-            height: 6px;
+            width: 6px; height: 6px;
             background-color: var(--primary);
             border-radius: 50%;
           }
-
           @media print {
-            @page {
-              size: A4 portrait;
-              margin: 15mm 15mm 20mm 15mm;
-            }
-            body {
-              background-color: white;
-            }
-            .report-container {
-              width: 100%;
-              margin: 0;
-              padding: 0;
-            }
-            /* Prevent breaks inside critical elements */
-            .info-card, .stats-grid, tr {
-              page-break-inside: avoid;
-            }
-            .page-number::after {
-              content: counter(page);
-            }
+            @page { size: A4 portrait; margin: 15mm 15mm 20mm 15mm; }
+            body { background-color: white; }
+            .report-container { width: 100%; margin: 0; padding: 0; }
+            .info-card, .stats-grid, tr { page-break-inside: avoid; }
+            .page-number::after { content: counter(page); }
           }
         </style>
       </head>
@@ -1486,8 +1385,6 @@ export default function WardenDashboard({ user, onLogout }) {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => {
-                                  setSelectedStudentDetails(s);
-                                  setShowStudentModal(true);
                                   setViewStudent(s);
                                   setShowStudentDetailsModal(true);
                                 }}
@@ -1990,13 +1887,20 @@ export default function WardenDashboard({ user, onLogout }) {
                     return sMatch && fMatch;
                   }).length} Rooms Filtered
                 </span>
-                <div className="flex items-center w-full sm:w-auto">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={triggerPrintReport}
+                    className="flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
+                  >
+                    <i className="fas fa-print" />
+                    <span>Print</span>
+                  </button>
                   <button
                     onClick={exportOccupancyReportPDF}
                     className="flex-1 sm:flex-none bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-sm"
                   >
                     <i className="fas fa-file-pdf" />
-                    <span>Print PDF</span>
+                    <span>Export PDF</span>
                   </button>
                 </div>
               </div>
@@ -2008,6 +1912,16 @@ export default function WardenDashboard({ user, onLogout }) {
                     <tr className="bg-gray-50 border-b border-gray-100 text-gray-400 text-[10px] font-bold uppercase tracking-wider select-none">
                       <th onClick={() => {
                         if (sortField === 'roomNumber') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                        else { setSortField('roomNumber'); setSortOrder('asc'); }
+                      }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
+                        Room Number <i className={`fas fa-sort ml-1 ${sortField === 'roomNumber' ? 'text-primary' : 'text-gray-300'}`} />
+                      </th>
+                      <th className="px-6 py-4 text-left font-bold">Floor</th>
+                      <th className="px-6 py-4 text-center font-bold">Capacity</th>
+                      <th className="px-6 py-4 text-center font-bold">Occupied</th>
+                      <th className="px-6 py-4 text-center font-bold">Available</th>
+                      <th onClick={() => {
+                        if (sortField === 'status') setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                         else { setSortField('status'); setSortOrder('asc'); }
                       }} className="px-6 py-4 text-left cursor-pointer hover:bg-gray-100/50 font-bold">
                         Occupancy Status <i className={`fas fa-sort ml-1 ${sortField === 'status' ? 'text-primary' : 'text-gray-300'}`} />
