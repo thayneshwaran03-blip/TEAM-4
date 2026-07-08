@@ -148,6 +148,30 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters long'],
     },
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    lastLogin: {
+      type: Date,
+      default: Date.now,
+    },
+    activeSessions: {
+      type: [String],
+      default: ['Chrome on Windows - Bangalore, India (Current Session)'],
+    },
+    notificationPreferences: {
+      emailNotifications: { type: Boolean, default: true },
+      inAppNotifications: { type: Boolean, default: true },
+      leaveUpdates: { type: Boolean, default: true },
+      complaintUpdates: { type: Boolean, default: true },
+      visitorUpdates: { type: Boolean, default: true },
+      announcementNotifications: { type: Boolean, default: true }
+    },
+    privacySettings: {
+      shareProfile: { type: Boolean, default: true },
+      showContactDetails: { type: Boolean, default: false }
+    },
     // OTP fields for password reset
     resetOtp: {
       type: String,

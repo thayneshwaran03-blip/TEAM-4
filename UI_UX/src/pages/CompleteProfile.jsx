@@ -11,8 +11,7 @@ export default function CompleteProfile({ user, onLogout, onProfileCompleted }) 
     parentName: user.parentName || '',
     parentContact: user.parentContact || '',
     emergencyContact: user.emergencyContact || '',
-    address: user.address || '',
-    profilePhoto: user.profilePhoto || ''
+    address: user.address || ''
   });
 
   const [errors, setErrors] = useState({});
@@ -275,59 +274,7 @@ export default function CompleteProfile({ user, onLogout, onProfileCompleted }) 
                 />
               </div>
 
-              {/* Profile Photo Upload */}
-              <div className="flex flex-col space-y-2 text-left md:col-span-2">
-                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-1.5">
-                  <i className="fas fa-camera text-primary text-xs" />
-                  <span>Profile Picture (Optional)</span>
-                </label>
-                
-                <div className="flex items-center space-x-5 mt-2">
-                  <div className="w-20 h-20 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 flex-shrink-0 relative group">
-                    {formData.profilePhoto ? (
-                      <img src={formData.profilePhoto} alt="Profile Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <i className="fas fa-user text-gray-300 text-3xl" />
-                    )}
-                  </div>
-                  
-                  <div className="flex flex-col space-y-2">
-                    <label className="cursor-pointer bg-primary hover:bg-primary-light text-white text-[11px] font-bold py-2.5 px-4 rounded-xl shadow transition duration-200 flex items-center space-x-2 w-fit">
-                      <i className="fas fa-cloud-upload-alt" />
-                      <span>Upload Picture</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            if (file.size > 2 * 1024 * 1024) {
-                              showToastMsg('Image size must be less than 2MB', 'error');
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setFormData(prev => ({ ...prev, profilePhoto: reader.result }));
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </label>
-                    {formData.profilePhoto && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, profilePhoto: '' }))}
-                        className="text-xs font-bold text-rose-600 hover:text-rose-700 transition w-fit text-left"
-                      >
-                        Remove Picture
-                      </button>
-                    )}
-                    <span className="text-[10px] text-gray-400">Max size 2MB. JPG, PNG formats supported.</span>
-                  </div>
-                </div>
-              </div>
+
             </div>
 
             {/* Submit Button */}
