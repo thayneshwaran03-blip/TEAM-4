@@ -260,10 +260,12 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch(`/admin/students?${searchParam}${blockParam}${hostelParam}${statusParam}`);
       if (data.success) {
         setStudents(data.students);
+        return data.students;
       }
     } catch (err) {
       console.error('Fetch Students Error:', err);
     }
+    return [];
   };
 
   const fetchWardens = async () => {
@@ -275,10 +277,12 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch(`/admin/wardens?${searchParam}${hostelParam}${statusParam}`);
       if (data.success) {
         setWardens(data.wardens);
+        return data.wardens;
       }
     } catch (err) {
       console.error('Fetch Wardens Error:', err);
     }
+    return [];
   };
 
   const fetchRooms = async () => {
@@ -287,6 +291,7 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch(`/admin/rooms${searchParam}`);
       if (data.success) {
         setRooms(data.rooms);
+        return data.rooms;
       }
     } catch (err) {
       console.error('Fetch Rooms Error:', err);
@@ -298,6 +303,7 @@ export default function AdminDashboard({ user, onLogout }) {
         { _id: 'r4', roomNumber: '105', blockName: 'Block C', floorNumber: '1', capacity: 4, occupiedBeds: 4, status: 'Occupied', assignedStudents: [] }
       ]);
     }
+    return [];
   };
 
   const fetchAnnouncements = async () => {
@@ -305,6 +311,7 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch('/admin/announcements');
       if (data.success) {
         setAnnouncements(data.announcements);
+        return data.announcements;
       }
     } catch (err) {
       console.error('Fetch Announcements Error:', err);
@@ -313,6 +320,7 @@ export default function AdminDashboard({ user, onLogout }) {
         { _id: 'a2', title: 'Curfew Timing Notice', description: 'All students must be inside the hostel gates by 9:00 PM starting tomorrow.', priority: 'Normal', visibleTo: 'student', pinned: false, createdAt: '2026-06-28' }
       ]);
     }
+    return [];
   };
 
   const fetchLeaves = async () => {
@@ -320,10 +328,12 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch('/admin/leaves');
       if (data.success) {
         setLeaves(data.leaveRequests);
+        return data.leaveRequests;
       }
     } catch (err) {
       console.error('Fetch Leaves Error:', err);
     }
+    return [];
   };
 
   const fetchComplaints = async () => {
@@ -331,10 +341,12 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch('/admin/complaints');
       if (data.success) {
         setComplaints(data.complaints);
+        return data.complaints;
       }
     } catch (err) {
       console.error('Fetch Complaints Error:', err);
     }
+    return [];
   };
 
   const fetchVisitors = async () => {
@@ -342,57 +354,66 @@ export default function AdminDashboard({ user, onLogout }) {
       const data = await apiFetch('/admin/visitors');
       if (data.success) {
         setVisitors(data.visitorRequests);
+        return data.visitorRequests;
       }
     } catch (err) {
       console.error('Fetch Visitors Error:', err);
     }
+    return [];
   };
 
-  const fetchStats = async () => {
-    try {
-      const sData = await apiFetch('/admin/students').catch(() => ({ students: [] }));
-      const wData = await apiFetch('/admin/wardens').catch(() => ({ wardens: [] }));
-      const rData = await apiFetch('/admin/rooms').catch(() => ({ rooms: [] }));
-      const lData = await apiFetch('/admin/leaves').catch(() => ({ leaveRequests: [] }));
-      const cData = await apiFetch('/admin/complaints').catch(() => ({ complaints: [] }));
-      const vData = await apiFetch('/admin/visitors').catch(() => ({ visitorRequests: [] }));
-      const aData = await apiFetch('/admin/announcements').catch(() => ({ announcements: [] }));
+  const fetchStats = (
+    studentData = students,
+    wardenData = wardens,
+    roomData = rooms,
+    leaveData = leaves,
+    complaintData = complaints,
+    visitorData = visitors,
+    announcementData = announcements
+  ) => {
+    const studentCount = Array.isArray(studentData) ? studentData.length : 0;
+    const wardenCount = Array.isArray(wardenData) ? wardenData.length : 0;
+    const roomCount = Array.isArray(roomData) ? roomData.length : 0;
+    const pendingLeaves = Array.isArray(leaveData) ? leaveData.filter(l => l.status === 'Pending').length : 0;
+    const pendingComplaints = Array.isArray(complaintData) ? complaintData.filter(c => c.status === 'Pending' || c.status === 'Open').length : 0;
+    const visitorsCount = Array.isArray(visitorData) ? visitorData.length : 0;
+    const activeAnnouncementsCount = Array.isArray(announcementData) ? announcementData.length : 0;
 
-      const studentCount = sData.students ? sData.students.length : 0;
-      const wardenCount = wData.wardens ? wData.wardens.length : 0;
-      const roomCount = rData.rooms ? rData.rooms.length : 0;
-      const pendingLeaves = lData.leaveRequests ? lData.leaveRequests.filter(l => l.status === 'Pending').length : 0;
-      const pendingComplaints = cData.complaints ? cData.complaints.filter(c => c.status === 'Pending' || c.status === 'Open').length : 0;
-      const visitorsCount = vData.visitorRequests ? vData.visitorRequests.length : 0;
-      const activeAnnouncementsCount = aData.announcements ? aData.announcements.length : 0;
-
-      let occupiedBeds = 0;
-      if (rData.rooms && rData.rooms.length > 0) {
-        rData.rooms.forEach(r => occupiedBeds += (r.occupiedBeds || 0));
-      }
-
-      setStats([
-        { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600', tab: 'students' },
-        { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600', tab: 'wardens' },
-        { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: pendingLeaves.toString(), colorBg: 'bg-orange-50 text-orange-600', tab: 'leaves' },
-        { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: pendingComplaints.toString(), colorBg: 'bg-red-50 text-red-600', tab: 'complaints' },
-        { icon: 'fa-address-card', label: 'Visitors Today', value: visitorsCount.toString(), colorBg: 'bg-indigo-50 text-indigo-600', tab: 'visitors' },
-        { icon: 'fa-bullhorn', label: 'Active Announcements', value: activeAnnouncementsCount.toString(), colorBg: 'bg-yellow-50 text-yellow-600', tab: 'announcements' }
-      ]);
-    } catch (err) {
-      console.error('Fetch Stats Error:', err);
+    let occupiedBeds = 0;
+    if (Array.isArray(roomData) && roomData.length > 0) {
+      roomData.forEach(r => occupiedBeds += (r.occupiedBeds || 0));
     }
+
+    setStats([
+      { icon: 'fa-users', label: 'Total Students', value: studentCount.toString(), colorBg: 'bg-blue-50 text-blue-600', tab: 'students' },
+      { icon: 'fa-user-tie', label: 'Total Wardens', value: wardenCount.toString(), colorBg: 'bg-amber-50 text-amber-600', tab: 'wardens' },
+      { icon: 'fa-envelope-open-text', label: 'Pending Leaves', value: pendingLeaves.toString(), colorBg: 'bg-orange-50 text-orange-600', tab: 'leaves' },
+      { icon: 'fa-exclamation-circle', label: 'Active Complaints', value: pendingComplaints.toString(), colorBg: 'bg-red-50 text-red-600', tab: 'complaints' },
+      { icon: 'fa-address-card', label: 'Visitors Today', value: visitorsCount.toString(), colorBg: 'bg-indigo-50 text-indigo-600', tab: 'visitors' },
+      { icon: 'fa-bullhorn', label: 'Active Announcements', value: activeAnnouncementsCount.toString(), colorBg: 'bg-yellow-50 text-yellow-600', tab: 'announcements' }
+    ]);
   };
 
   useEffect(() => {
-    fetchStudents();
-    fetchWardens();
-    fetchRooms();
-    fetchAnnouncements();
-    fetchLeaves();
-    fetchComplaints();
-    fetchVisitors();
-    fetchStats();
+    const loadDashboardData = async () => {
+      try {
+        const [studentsData, wardensData, roomsData, announcementsData, leavesData, complaintsData, visitorsData] = await Promise.all([
+          fetchStudents(),
+          fetchWardens(),
+          fetchRooms(),
+          fetchAnnouncements(),
+          fetchLeaves(),
+          fetchComplaints(),
+          fetchVisitors()
+        ]);
+
+        fetchStats(studentsData, wardensData, roomsData, leavesData, complaintsData, visitorsData, announcementsData);
+      } catch (err) {
+        console.error('Load Dashboard Data Error:', err);
+      }
+    };
+
+    loadDashboardData();
   }, [studentSearch, studentFilterBlock, studentFilterHostel, studentFilterStatus, wardenSearch, wardenFilterHostel, wardenFilterStatus, roomSearch]);
 
   // ── Open Modals Handlers ──────────────────────────────────────────────────
@@ -510,8 +531,8 @@ export default function AdminDashboard({ user, onLogout }) {
           showToastMsg('Student details updated successfully!');
         }
         setShowStudentAddEditModal(false);
-        fetchStudents();
-        fetchStats();
+        const refreshedStudents = await fetchStudents();
+        fetchStats(refreshedStudents, wardens, rooms, leaves, complaints, visitors, announcements);
       } else {
         showToastMsg(data.message || 'Error occurred saving details.', 'error');
       }
@@ -575,8 +596,8 @@ export default function AdminDashboard({ user, onLogout }) {
           showToastMsg('Warden details updated successfully!');
         }
         setShowWardenAddEditModal(false);
-        fetchWardens();
-        fetchStats();
+        const refreshedWardens = await fetchWardens();
+        fetchStats(students, refreshedWardens, rooms, leaves, complaints, visitors, announcements);
       } else {
         showToastMsg(data.message || 'Validation error saving warden.', 'error');
       }
@@ -628,8 +649,8 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg('Student profile permanently deleted.');
         setShowStudentDeleteModal(false);
         setStudentToDelete(null);
-        fetchStudents();
-        fetchStats();
+        const refreshedStudents = await fetchStudents();
+        fetchStats(refreshedStudents, wardens, rooms, leaves, complaints, visitors, announcements);
       } else {
         showToastMsg(data.message || 'Deletion failed.', 'error');
       }
@@ -648,8 +669,8 @@ export default function AdminDashboard({ user, onLogout }) {
         showToastMsg('Warden profile permanently deleted.');
         setShowWardenDeleteModal(false);
         setWardenToDelete(null);
-        fetchWardens();
-        fetchStats();
+        const refreshedWardens = await fetchWardens();
+        fetchStats(students, refreshedWardens, rooms, leaves, complaints, visitors, announcements);
       } else {
         showToastMsg(data.message || 'Deletion failed.', 'error');
       }
@@ -707,8 +728,8 @@ export default function AdminDashboard({ user, onLogout }) {
       if (data.success) {
         showToastMsg('Room added successfully!');
         setShowRoomAddModal(false);
-        fetchRooms();
-        fetchStats();
+        const refreshedRooms = await fetchRooms();
+        fetchStats(students, wardens, refreshedRooms, leaves, complaints, visitors, announcements);
       }
     } catch (err) {
       // Offline fallback
@@ -816,8 +837,8 @@ export default function AdminDashboard({ user, onLogout }) {
         body: JSON.stringify({ action })
       });
       showToastMsg(`Leave request marked as ${status}.`);
-      fetchLeaves();
-      fetchStats();
+      const refreshedLeaves = await fetchLeaves();
+      fetchStats(students, wardens, rooms, refreshedLeaves, complaints, visitors, announcements);
     } catch (err) {
       console.error('Leave Approval Error:', err);
       showToastMsg('Failed to process leave approval.', 'error');
@@ -834,8 +855,8 @@ export default function AdminDashboard({ user, onLogout }) {
         body: JSON.stringify({ action })
       });
       showToastMsg(`Complaint status updated to ${status}.`);
-      fetchComplaints();
-      fetchStats();
+      const refreshedComplaints = await fetchComplaints();
+      fetchStats(students, wardens, rooms, leaves, refreshedComplaints, visitors, announcements);
     } catch (err) {
       console.error('Complaint Status Update Error:', err);
       showToastMsg('Failed to update complaint status.', 'error');
@@ -881,8 +902,8 @@ export default function AdminDashboard({ user, onLogout }) {
         body: JSON.stringify({ action })
       });
       showToastMsg(`Visitor request ${status.toLowerCase()}d.`);
-      fetchVisitors();
-      fetchStats();
+      const refreshedVisitors = await fetchVisitors();
+      fetchStats(students, wardens, rooms, leaves, complaints, refreshedVisitors, announcements);
     } catch (err) {
       console.error('Visitor Approval Error:', err);
       showToastMsg('Failed to process visitor approval.', 'error');
@@ -917,8 +938,8 @@ export default function AdminDashboard({ user, onLogout }) {
         setOnSpotPhoneNumber('');
         setOnSpotVisitDate('');
         setOnSpotPurpose('');
-        fetchVisitors();
-        fetchStats();
+        const refreshedVisitors = await fetchVisitors();
+        fetchStats(students, wardens, rooms, leaves, complaints, refreshedVisitors, announcements);
       } else {
         showToastMsg(res.message || 'Failed to register visitor.', 'error');
       }
