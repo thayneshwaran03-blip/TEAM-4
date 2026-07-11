@@ -348,7 +348,8 @@ const listStudents = async (req, res) => {
     }
 
     const students = await User.find(query)
-      .populate('room')
+      .select('_id fullName registerNumber rollNumber email phoneNumber department year gender parentName parentContact hostelName block floor roomNumber bedNumber emergencyContact address isActive room')
+      .populate('room', 'roomNumber blockName')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, students });
