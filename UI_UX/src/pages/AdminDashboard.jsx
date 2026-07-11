@@ -1906,31 +1906,50 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* Expanded Stats Grid (3 columns, student card size) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stats.map((stat, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    if (stat.tab) {
-                      setActiveTab(stat.tab);
-                    }
-                  }}
-                  className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-primary/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 cursor-pointer flex flex-col justify-between h-full group"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className={`w-9 h-9 ${stat.colorBg.split(' ')[0]} rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
-                      <i className={`fas ${stat.icon} ${stat.colorBg.split(' ')[1]} text-base`} />
+              {stats.length === 0 ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col justify-between h-full"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-9 h-9 bg-gray-100 rounded-xl animate-pulse" />
+                      <div className="w-6 h-6 rounded-full bg-gray-100 animate-pulse" />
                     </div>
-                    <span className="w-6 h-6 rounded-full bg-gray-55 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
-                      <i className="fas fa-chevron-right text-gray-400 group-hover:text-primary text-[9px] transition-transform duration-300 group-hover:translate-x-0.5" />
-                    </span>
+                    <div className="space-y-2">
+                      <div className="h-2.5 w-20 bg-gray-100 rounded animate-pulse" />
+                      <div className="h-6 w-20 bg-gray-100 rounded animate-pulse" />
+                      <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="uppercase tracking-wider mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{stat.label}</p>
-                    <p className="font-semibold text-[#111827] mb-1 leading-tight" style={{ fontSize: '22px' }}>{stat.value}</p>
-                    <p className="text-[#6B7280]" style={{ fontSize: '13px', fontWeight: 500 }}>{stat.sub}</p>
+                ))
+              ) : (
+                stats.map((stat, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (stat.tab) {
+                        setActiveTab(stat.tab);
+                      }
+                    }}
+                    className="bg-white rounded-2xl p-4 border border-gray-100 hover:border-primary/20 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 cursor-pointer flex flex-col justify-between h-full group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`w-9 h-9 ${stat.colorBg.split(' ')[0]} rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
+                        <i className={`fas ${stat.icon} ${stat.colorBg.split(' ')[1]} text-base`} />
+                      </div>
+                      <span className="w-6 h-6 rounded-full bg-gray-55 flex items-center justify-center group-hover:bg-primary/5 transition-colors">
+                        <i className="fas fa-chevron-right text-gray-400 group-hover:text-primary text-[9px] transition-transform duration-300 group-hover:translate-x-0.5" />
+                      </span>
+                    </div>
+                    <div>
+                      <p className="uppercase tracking-wider mb-1.5 text-[#4B5563]" style={{ fontSize: '11px', fontWeight: 500 }}>{stat.label}</p>
+                      <p className="font-semibold text-[#111827] mb-1 leading-tight" style={{ fontSize: '22px' }}>{stat.value}</p>
+                      <p className="text-[#6B7280]" style={{ fontSize: '13px', fontWeight: 500 }}>{stat.sub}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* Quick Actions Row */}
@@ -1975,34 +1994,51 @@ export default function AdminDashboard({ user, onLogout }) {
                   <button onClick={() => setActiveTab('students')} className="text-xs font-bold text-primary hover:underline">View All</button>
                 </div>
                 <div className="flex-1 divide-y divide-gray-55 overflow-y-auto pr-1 custom-scrollbar">
-                  {students.slice(0, 3).map(student => (
-                    <div key={student._id} className="py-3 flex items-center justify-between">
-                      <div className="flex items-center space-x-3 text-left">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          {student.fullName[0]}
+                  {students.length === 0 && wardens.length === 0 ? (
+                    [0, 1, 2].map((_, idx) => (
+                      <div key={idx} className="py-3 flex items-center justify-between">
+                        <div className="flex items-center space-x-3 text-left">
+                          <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse shrink-0" />
+                          <div className="space-y-1.5">
+                            <div className="h-3 w-24 bg-gray-100 rounded animate-pulse" />
+                            <div className="h-2.5 w-28 bg-gray-100 rounded animate-pulse" />
+                          </div>
                         </div>
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-gray-900 truncate">{student.fullName}</p>
-                          <p className="text-[10px] text-gray-405 font-semibold">{student.registerNumber} · {student.department}</p>
-                        </div>
+                        <div className="h-5 w-14 bg-gray-100 rounded-full animate-pulse" />
                       </div>
-                      <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Student</span>
-                    </div>
-                  ))}
-                  {wardens.slice(0, 2).map(warden => (
-                    <div key={warden._id} className="py-3 flex items-center justify-between">
-                      <div className="flex items-center space-x-3 text-left">
-                        <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
-                          {warden.fullName[0]}
+                    ))
+                  ) : (
+                    <>
+                      {students.slice(0, 3).map(student => (
+                        <div key={student._id} className="py-3 flex items-center justify-between">
+                          <div className="flex items-center space-x-3 text-left">
+                            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+                              {student.fullName[0]}
+                            </div>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-gray-900 truncate">{student.fullName}</p>
+                              <p className="text-[10px] text-gray-405 font-semibold">{student.registerNumber} · {student.department}</p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Student</span>
                         </div>
-                        <div className="truncate">
-                          <p className="text-xs font-bold text-gray-900 truncate">{warden.fullName}</p>
-                          <p className="text-[10px] text-gray-405 font-semibold">{warden.employeeId} · {warden.assignedHostel || 'No Hostel'}</p>
+                      ))}
+                      {wardens.slice(0, 2).map(warden => (
+                        <div key={warden._id} className="py-3 flex items-center justify-between">
+                          <div className="flex items-center space-x-3 text-left">
+                            <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-xs shrink-0">
+                              {warden.fullName[0]}
+                            </div>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-gray-900 truncate">{warden.fullName}</p>
+                              <p className="text-[10px] text-gray-405 font-semibold">{warden.employeeId} · {warden.assignedHostel || 'No Hostel'}</p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Warden</span>
                         </div>
-                      </div>
-                      <span className="text-[9px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Warden</span>
-                    </div>
-                  ))}
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2018,26 +2054,40 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                 </div>
                 <div className="flex-1 divide-y divide-gray-55 overflow-y-auto pr-1 custom-scrollbar">
-                  {leaves.slice(0, 2).map(l => (
-                    <div key={l._id} className="py-3 flex items-center justify-between">
-                      <div className="text-left max-w-[70%]">
-                        <p className="text-xs font-bold text-gray-800 truncate">Leave Request: {l.student?.fullName}</p>
-                        <p className="text-[10px] text-gray-450 truncate mt-0.5">{l.reason}</p>
+                  {leaves.length === 0 && complaints.length === 0 ? (
+                    [0, 1, 2].map((_, idx) => (
+                      <div key={idx} className="py-3 flex items-center justify-between">
+                        <div className="space-y-1.5">
+                          <div className="h-3 w-32 bg-gray-100 rounded animate-pulse" />
+                          <div className="h-2.5 w-40 bg-gray-100 rounded animate-pulse" />
+                        </div>
+                        <div className="h-5 w-16 bg-gray-100 rounded-full animate-pulse" />
                       </div>
-                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${l.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-700'
-                        }`}>{l.status}</span>
-                    </div>
-                  ))}
-                  {complaints.slice(0, 2).map(c => (
-                    <div key={c._id} className="py-3 flex items-center justify-between border-t border-gray-50">
-                      <div className="text-left max-w-[70%]">
-                        <p className="text-xs font-bold text-gray-800 truncate">Complaint: {c.title}</p>
-                        <p className="text-[10px] text-gray-450 truncate mt-0.5">{c.description}</p>
-                      </div>
-                      <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${c.status === 'Pending' ? 'bg-red-50 text-red-600' : c.status === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
-                        }`}>{c.status}</span>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <>
+                      {leaves.slice(0, 2).map(l => (
+                        <div key={l._id} className="py-3 flex items-center justify-between">
+                          <div className="text-left max-w-[70%]">
+                            <p className="text-xs font-bold text-gray-800 truncate">Leave Request: {l.student?.fullName}</p>
+                            <p className="text-[10px] text-gray-450 truncate mt-0.5">{l.reason}</p>
+                          </div>
+                          <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${l.status === 'Pending' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-700'
+                            }`}>{l.status}</span>
+                        </div>
+                      ))}
+                      {complaints.slice(0, 2).map(c => (
+                        <div key={c._id} className="py-3 flex items-center justify-between border-t border-gray-50">
+                          <div className="text-left max-w-[70%]">
+                            <p className="text-xs font-bold text-gray-800 truncate">Complaint: {c.title}</p>
+                            <p className="text-[10px] text-gray-450 truncate mt-0.5">{c.description}</p>
+                          </div>
+                          <span className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${c.status === 'Pending' ? 'bg-red-50 text-red-600' : c.status === 'In Progress' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                            }`}>{c.status}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
 
