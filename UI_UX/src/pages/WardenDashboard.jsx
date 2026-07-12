@@ -104,13 +104,15 @@ export default function WardenDashboard({ user, onLogout }) {
   const email    = profile?.email    || user?.email    || 'keerthana.warden@hostel.com';
   const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
   const apiFetch = async (path, opts = {}) => {
     const token = localStorage.getItem('token');
     const headers = {};
     if (opts.body) headers['Content-Type'] = 'application/json';
     Object.assign(headers, opts.headers || {});
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`/api${path}`, Object.assign({}, opts, { headers }));
+    const res = await fetch(`${API}/api${path}`, Object.assign({}, opts, { headers }));
     if (!res.ok) {
       const text = await res.text();
       if (res.status === 401 || res.status === 403) {
