@@ -95,6 +95,11 @@ export default function AdminDashboard({ user, onLogout }) {
   const [roomFilterBlock, setRoomFilterBlock] = useState('');
   const [roomFilterStatus, setRoomFilterStatus] = useState('');
 
+  // Derived state for dynamic dropdowns
+  const uniqueHostels = [...new Set(rooms.map(r => r.hostelName).filter(Boolean))].sort();
+  const uniqueBlocks = [...new Set(rooms.map(r => r.blockName).filter(Boolean))].sort();
+  const uniqueFloors = [...new Set(rooms.map(r => r.floorNumber).filter(Boolean))].sort();
+
   // Leaves / Complaints / Visitors / Announcements UI States
   const [leaveSearch, setLeaveSearch] = useState('');
   const [complaintSearch, setComplaintSearch] = useState('');
@@ -2200,7 +2205,7 @@ export default function AdminDashboard({ user, onLogout }) {
                           {(student.room?.roomNumber || student.roomNumber) ? (
                             <span>
                               {(student.room?.hostelName || student.hostelName) ? `${student.room?.hostelName || student.hostelName} - ` : ''}
-                              {student.room?.blockName || student.block} {student.room?.roomNumber || student.roomNumber} {student.bedNumber ? `(${student.bedNumber})` : ''}
+                              {student.room?.blockName || student.block} {student.room?.roomNumber || student.roomNumber}
                             </span>
                           ) : (
                             <span className="text-gray-400 text-xs italic font-normal">Unallocated</span>
@@ -3204,9 +3209,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Hostels</option>
-                    <option value="Boys Hostel">Boys Hostel</option>
-                    <option value="Girls Hostel">Girls Hostel</option>
-                    <option value="PG Hostel">PG Hostel</option>
+                    {uniqueHostels.map(hostel => (
+                      <option key={hostel} value={hostel}>{hostel}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -3218,11 +3223,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Blocks</option>
-                    <option value="Block A">Block A</option>
-                    <option value="Block B">Block B</option>
-                    <option value="Block C">Block C</option>
-                    <option value="Block D">Block D</option>
-                    <option value="Block E">Block E</option>
+                    {uniqueBlocks.map(block => (
+                      <option key={block} value={block}>{block}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -3234,9 +3237,11 @@ export default function AdminDashboard({ user, onLogout }) {
                     className="px-3 py-2 border border-gray-200 rounded-xl text-xs bg-white focus:border-primary outline-none"
                   >
                     <option value="">All Floors</option>
-                    <option value="1">1st Floor</option>
-                    <option value="2">2nd Floor</option>
-                    <option value="3">3rd Floor</option>
+                    {uniqueFloors.map(floor => (
+                      <option key={floor} value={floor}>
+                        {floor === '1' ? '1st' : floor === '2' ? '2nd' : floor === '3' ? '3rd' : `${floor}th`} Floor
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -3712,14 +3717,18 @@ export default function AdminDashboard({ user, onLogout }) {
                       className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
                     >
                       <option value="">Select Room</option>
-                      <option value="101">101</option>
-                      <option value="102">102</option>
-                      <option value="103">103</option>
-                      <option value="104">104</option>
-                      <option value="201">201</option>
-                      <option value="202">202</option>
-                      <option value="203">203</option>
-                      <option value="204">204</option>
+                      {rooms
+                        .filter(r => 
+                          r.hostelName === studentForm.hostelName && 
+                          r.blockName === studentForm.block && 
+                          r.floorNumber === studentForm.floor &&
+                          (r.occupiedBeds < r.capacity || r.roomNumber === studentForm.roomNumber)
+                        )
+                        .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
+                        .map(r => (
+                          <option key={r._id} value={r.roomNumber}>{r.roomNumber}</option>
+                        ))
+                      }
                     </select>
                   </div>
                 </div>
