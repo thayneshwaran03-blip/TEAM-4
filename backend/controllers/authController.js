@@ -15,13 +15,25 @@ const generateOtp = () => {
 
 // ── Helper: Send OTP email via nodemailer ─────────────────────────────────────
 const sendOtpEmail = async (toEmail, otp, userName) => {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  const transporter = nodemailer.createTransport(
+    process.env.SMTP_HOST
+      ? {
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        }
+      : {
+          service: 'gmail',
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        }
+  );
 
   const mailOptions = {
     from: `"HostelHub Security" <${process.env.EMAIL_USER}>`,
@@ -181,7 +193,12 @@ const forgotPassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Send OTP email
-    await sendOtpEmail(user.email, otp, user.fullName);
+    try {
+      await sendOtpEmail(user.email, otp, user.fullName);
+    } catch (mailError) {
+      console.error('Failed to send OTP email. Falling back to console logging:', mailError);
+      console.log(`\n==========================================\n[DEVELOPMENT OTP] For ${user.email} (${user.fullName}): OTP is ${otp}\n==========================================\n`);
+    }
 
     return res.status(200).json({
       success: true,

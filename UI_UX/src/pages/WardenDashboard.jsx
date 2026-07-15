@@ -487,111 +487,6 @@ export default function WardenDashboard({ user, onLogout }) {
 
     const filteredRooms = rooms.filter(r => {
       const q = reportSearch.toLowerCase();
-      const sMatch = q ? (r.roomNumber || '').includes(q) : true;
-      const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
-      return sMatch && fMatch;
-    });
-
-    const totalBeds = filteredRooms.reduce((acc, r) => acc + (r.capacity || 0), 0);
-    const occupiedBedsCount = filteredRooms.reduce((acc, r) => acc + (r.occupiedBeds || 0), 0);
-    const availableBedsCount = Math.max(0, totalBeds - occupiedBedsCount);
-    const occupancyRate = totalBeds > 0 ? ((occupiedBedsCount / totalBeds) * 100).toFixed(1) : '0.0';
-    const occupiedRoomsCount = filteredRooms.filter(r => r.occupiedBeds > 0).length;
-    const vacantRoomsCount = filteredRooms.filter(r => r.occupiedBeds === 0).length;
-
-    const doc = new jsPDF({ orientation: 'landscape' });
-
-    doc.setFillColor(26, 35, 126);
-    doc.rect(0, 0, doc.internal.pageSize.getWidth(), 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('HostelHub - Occupancy Report', 15, 14);
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Warden Name: ${warden}`, 15, 35);
-    doc.text(`Hostel: ${hostel}`, 15, 41);
-    doc.text(`Assigned Block: ${block}`, 15, 47);
-    doc.text(`Date & Time: ${dateStr}`, 15, 53);
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Dashboard Statistics', 15, 65);
-
-    const statLabels = [
-      { label: 'Total Capacity', val: `${totalBeds} Beds` },
-      { label: 'Occupied Beds', val: `${occupiedBedsCount} Beds` },
-      { label: 'Available Beds', val: `${availableBedsCount} Beds` },
-      { label: 'Occupancy Rate', val: `${occupancyRate}%` },
-      { label: 'Occupied Rooms', val: `${occupiedRoomsCount} Rooms` },
-      { label: 'Vacant Rooms', val: `${vacantRoomsCount} Rooms` }
-    ];
-
-    let currentX = 15;
-    const cardWidth = 42;
-    const cardHeight = 18;
-
-    statLabels.forEach((stat) => {
-      doc.setFillColor(240, 244, 255);
-      doc.setDrawColor(180, 198, 252);
-      doc.roundedRect(currentX, 72, cardWidth, cardHeight, 1.5, 1.5, 'FD');
-
-      doc.setTextColor(55, 65, 81);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(stat.label, currentX + 4, 77);
-
-      doc.setTextColor(26, 35, 126);
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(stat.val, currentX + 4, 85);
-
-      currentX += cardWidth + 5;
-    });
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Occupancy Table', 15, 102);
-
-    const tableHeaders = [['Room Number', 'Floor', 'Capacity', 'Occupied Beds', 'Available Beds', 'Occupancy Status']];
-
-    const tableRows = filteredRooms.map(r => {
-      const occupied = r.occupiedBeds || 0;
-      const cap = r.capacity || 0;
-      const avail = Math.max(0, cap - occupied);
-
-      let status = 'OPEN';
-      if (occupied >= cap) {
-        status = 'FULL';
-      } else if (occupied > 0) {
-        status = 'PARTIAL';
-      }
-
-      return [r.roomNumber, r.floorNumber, cap, occupied, avail, status];
-    });
-
-    doc.autoTable({
-      head: tableHeaders,
-      body: tableRows,
-      startY: 108,
-      headStyles: { fillColor: [26, 35, 126], textColor: 255, fontStyle: 'bold' },
-      styles: { fontSize: 9, halign: 'center' },
-    });
-
-    doc.save(`Occupancy_Report_${block}_${Date.now()}.pdf`);
-  };
-
-  const triggerPrintReport = () => {
-    const hostel = profile?.assignedHostel || 'N/A';
-    const block = profile?.assignedBlocks ? profile.assignedBlocks.join(', ') : 'N/A';
-    const warden = profile?.fullName || 'N/A';
-    const dateStr = new Date().toLocaleString();
-
-    const filteredRooms = rooms.filter(r => {
-      const q = reportSearch.toLowerCase();
       const sMatch = q ? (r.roomNumber || '').toLowerCase().includes(q) : true;
       const fMatch = reportFloor ? String(r.floorNumber) === reportFloor : true;
       return sMatch && fMatch;
@@ -2085,20 +1980,13 @@ export default function WardenDashboard({ user, onLogout }) {
                     return sMatch && fMatch;
                   }).length} Rooms Filtered
                 </span>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={triggerPrintReport}
-                    className="flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition"
-                  >
-                    <i className="fas fa-print" />
-                    <span>Print</span>
-                  </button>
+                <div className="flex items-center w-full sm:w-auto">
                   <button
                     onClick={exportOccupancyReportPDF}
                     className="flex-1 sm:flex-none bg-[#1e3a8a] hover:bg-[#172554] text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-sm"
                   >
                     <i className="fas fa-file-pdf" />
-                    <span>Export PDF</span>
+                    <span>Print PDF</span>
                   </button>
                 </div>
               </div>
