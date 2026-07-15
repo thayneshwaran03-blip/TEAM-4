@@ -18,13 +18,25 @@ const sendCredentialsEmail = async (toEmail, tempPassword, userName, role, userI
   const loginUrl = 'http://localhost:5173/login';
 
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const transporter = nodemailer.createTransport(
+      process.env.SMTP_HOST
+        ? {
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT || '587'),
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: {
+              user: process.env.EMAIL_USER,
+              pass: process.env.EMAIL_PASS,
+            },
+          }
+        : {
+            service: 'gmail',
+            auth: {
+              user: process.env.EMAIL_USER,
+              pass: process.env.EMAIL_PASS,
+            },
+          }
+    );
 
     const mailOptions = {
       from: `"HostelHub Administration" <${process.env.EMAIL_USER}>`,
@@ -235,9 +247,13 @@ const createStudent = async (req, res) => {
     }
 
     let studentRoomId = null;
+    let inferredFloor = floor;
     if (roomNumber) {
-      if (!block || !floor) {
-        return res.status(400).json({ success: false, message: 'Block and Floor are required when Room Number is provided' });
+      if (!block) {
+        return res.status(400).json({ success: false, message: 'Block is required when Room Number is provided' });
+      }
+      if (!inferredFloor || inferredFloor.trim() === '') {
+        inferredFloor = roomNumber.match(/^\d/) ? roomNumber[0] : '1';
       }
       const blockLetter = block.replace('Block ', '').trim();
       const formattedRoomNum = roomNumber.trim().startsWith(blockLetter) ? roomNumber.trim() : `${blockLetter}${roomNumber.trim()}`;
@@ -252,7 +268,7 @@ const createStudent = async (req, res) => {
         targetRoom = await Room.create({
           roomNumber: formattedRoomNum,
           blockName: block.trim(),
-          floorNumber: floor.trim(),
+          floorNumber: inferredFloor.trim(),
           capacity: 4,
           hostelName,
           status: 'VACANT',
@@ -284,7 +300,7 @@ const createStudent = async (req, res) => {
       parentContact,
       hostelName,
       block,
-      floor,
+      floor: inferredFloor,
       roomNumber,
       bedNumber,
       emergencyContact,
@@ -304,15 +320,19 @@ const createStudent = async (req, res) => {
       await syncRoomStats(studentRoomId);
     }
 
+    let emailSent = true;
     try {
       await sendCredentialsEmail(student.email, tempPassword, student.fullName, 'student', registerNumber);
     } catch (mailErr) {
       console.error('Failed to send credentials email to student:', mailErr);
+      emailSent = false;
     }
 
     return res.status(201).json({ 
       success: true, 
-      message: 'Student created successfully', 
+      message: emailSent 
+        ? 'Student created successfully and credentials email sent!' 
+        : 'Student created successfully! (Credentials email delivery failed due to provider/quota limit)', 
       student,
       temporaryPassword: tempPassword 
     });
@@ -419,6 +439,11 @@ const updateStudent = async (req, res) => {
     const oldRoomNumber = student.roomNumber;
     const oldRoomId = student.room;
 
+    let inferredFloor = floor;
+    if (roomNumber && (!inferredFloor || inferredFloor.trim() === '')) {
+      inferredFloor = roomNumber.match(/^\d/) ? roomNumber[0] : '1';
+    }
+
     student.fullName = fullName || student.fullName;
     student.rollNumber = rollNumber !== undefined ? rollNumber : student.rollNumber;
     student.phoneNumber = phoneNumber || student.phoneNumber;
@@ -429,7 +454,7 @@ const updateStudent = async (req, res) => {
     student.parentContact = parentContact !== undefined ? parentContact : student.parentContact;
     student.hostelName = hostelName !== undefined ? hostelName : student.hostelName;
     student.block = block !== undefined ? block : student.block;
-    student.floor = floor !== undefined ? floor : student.floor;
+    student.floor = inferredFloor !== undefined ? inferredFloor : student.floor;
     student.roomNumber = roomNumber !== undefined ? roomNumber : student.roomNumber;
     student.bedNumber = bedNumber !== undefined ? bedNumber : student.bedNumber;
     student.emergencyContact = emergencyContact !== undefined ? emergencyContact : student.emergencyContact;
@@ -437,7 +462,7 @@ const updateStudent = async (req, res) => {
       student.isActive = status === 'Active';
     }
 
-    if (roomNumber !== oldRoomNumber || block !== student.block || floor !== student.floor) {
+    if (roomNumber !== oldRoomNumber || block !== student.block || inferredFloor !== student.floor) {
       // Deallocate from old room
       if (oldRoomId) {
         const oldRoom = await Room.findById(oldRoomId);
@@ -448,8 +473,8 @@ const updateStudent = async (req, res) => {
       }
 
       if (roomNumber) {
-        if (!block || !floor) {
-          return res.status(400).json({ success: false, message: 'Block and Floor are required to assign a room' });
+        if (!block) {
+          return res.status(400).json({ success: false, message: 'Block is required to assign a room' });
         }
         const blockLetter = block.replace('Block ', '').trim();
         const formattedRoomNum = roomNumber.trim().startsWith(blockLetter) ? roomNumber.trim() : `${blockLetter}${roomNumber.trim()}`;
@@ -464,7 +489,7 @@ const updateStudent = async (req, res) => {
           newRoom = await Room.create({
             roomNumber: formattedRoomNum,
             blockName: block.trim(),
-            floorNumber: floor.trim(),
+            floorNumber: inferredFloor.trim(),
             capacity: 4,
             hostelName,
             status: 'VACANT',
@@ -613,15 +638,19 @@ const createWarden = async (req, res) => {
 
     await warden.save();
 
+    let emailSent = true;
     try {
       await sendCredentialsEmail(warden.email, tempPassword, warden.fullName, 'warden');
     } catch (mailErr) {
       console.error('Failed to send credentials email to warden:', mailErr);
+      emailSent = false;
     }
 
     return res.status(201).json({ 
       success: true, 
-      message: 'Warden created successfully', 
+      message: emailSent 
+        ? 'Warden created successfully and credentials email sent!' 
+        : 'Warden created successfully! (Credentials email delivery failed due to provider/quota limit)', 
       warden,
       temporaryPassword: tempPassword
     });
