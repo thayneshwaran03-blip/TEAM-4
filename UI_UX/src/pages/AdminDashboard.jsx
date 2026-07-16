@@ -531,7 +531,7 @@ export default function AdminDashboard({ user, onLogout }) {
             email: data.student.email,
             password: data.temporaryPassword
           });
-          showToastMsg('Student profile created successfully!');
+          showToastMsg(data.message || 'Student profile created successfully!');
         } else {
           showToastMsg('Student details updated successfully!');
         }
@@ -596,7 +596,7 @@ export default function AdminDashboard({ user, onLogout }) {
             email: data.warden.email,
             password: data.temporaryPassword
           });
-          showToastMsg('Warden profile created successfully!');
+          showToastMsg(data.message || 'Warden profile created successfully!');
         } else {
           showToastMsg('Warden details updated successfully!');
         }
@@ -2963,7 +2963,7 @@ export default function AdminDashboard({ user, onLogout }) {
                               </td>
                               <td className="py-4 text-gray-600">{v.relationship}</td>
                               <td className="py-4 text-gray-600">
-                                {v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'} ({v.expectedArrivalTime || 'Anytime'})
+                                {v.visitDate ? new Date(v.visitDate).toLocaleDateString() : 'N/A'}
                               </td>
                               <td className="py-4"><StatusBadge status={v.status} /></td>
                               <td className="py-4">
@@ -3698,22 +3698,14 @@ export default function AdminDashboard({ user, onLogout }) {
                     </select>
                   </div>
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-bold text-gray-600">Floor</label>
-                    <select
-                      value={studentForm.floor}
-                      onChange={(e) => setStudentForm({ ...studentForm, floor: e.target.value })}
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
-                    >
-                      <option value="">Select Floor</option>
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                    </select>
-                  </div>
-                  <div className="flex flex-col space-y-1">
                     <label className="text-xs font-bold text-gray-600">Room Number</label>
                     <select
                       value={studentForm.roomNumber}
-                      onChange={(e) => setStudentForm({ ...studentForm, roomNumber: e.target.value })}
+                      onChange={(e) => {
+                        const selectedRoom = e.target.value;
+                        const inferredFloor = selectedRoom ? (selectedRoom.match(/^\d/) ? selectedRoom[0] : '1') : '';
+                        setStudentForm({ ...studentForm, roomNumber: selectedRoom, floor: inferredFloor });
+                      }}
                       className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
                     >
                       <option value="">Select Room</option>
