@@ -436,6 +436,9 @@ export default function AdminDashboard({ user, onLogout }) {
 
   const openStudentEditModal = (student) => {
     setSelectedStudent(student);
+    const rawRoom = student.room?.roomNumber || student.roomNumber || '';
+    const plainRoom = rawRoom.replace(/^\D+/, '');
+    const inferredFloor = plainRoom ? (plainRoom.match(/^\d/) ? plainRoom[0] : '1') : '';
     setStudentForm({
       fullName: student.fullName,
       registerNumber: student.registerNumber,
@@ -449,8 +452,8 @@ export default function AdminDashboard({ user, onLogout }) {
       parentContact: student.parentContact || '',
       hostelName: student.hostelName || '',
       block: student.block || '',
-      floor: student.floor || '',
-      roomNumber: student.roomNumber || '',
+      floor: student.floor || inferredFloor,
+      roomNumber: plainRoom,
       bedNumber: student.bedNumber || '',
       emergencyContact: student.emergencyContact || '',
       status: student.isActive ? 'Active' : 'Inactive',
@@ -3703,7 +3706,8 @@ export default function AdminDashboard({ user, onLogout }) {
                       value={studentForm.roomNumber}
                       onChange={(e) => {
                         const selectedRoom = e.target.value;
-                        const inferredFloor = selectedRoom ? (selectedRoom.match(/^\d/) ? selectedRoom[0] : '1') : '';
+                        const digitsOnly = selectedRoom.replace(/^\D+/, '');
+                        const inferredFloor = digitsOnly ? digitsOnly[0] : '1';
                         setStudentForm({ ...studentForm, roomNumber: selectedRoom, floor: inferredFloor });
                       }}
                       className="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none bg-white"
